@@ -55,10 +55,12 @@ export const TUNELES = [          // {x0, x1, techo} — muerte si toca el techo
   { x0: 19.5, x1: 23.5, techo: 0.19 }
 ];
 
-// La musica del prototipo: bombo en el beat, hat en la contra. Nada mas —
-// justo lo necesario para que driblar tenga con que conversar.
+// La musica del prototipo: bombo en los beats PARES, hat en la contra. La caja
+// no esta -- a proposito. La caja sos VOS: el drible lleno suena a caja, y
+// recien cuando dribleas al beat la bateria esta completa. La cancion no te
+// acompaña: te necesita.
 export function golpesEn (b) {
-  return { bombo: b % 1 === 0, hat: b % 1 === 0.5 };
+  return { bombo: b % 2 === 0, hat: b % 1 === 0.5 };
 }
 
 export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
@@ -203,12 +205,26 @@ function arrancarNavegador () {
     }
   }
 
+  // El drible lleno es LA CAJA de la cancion (el instrumento que falta en el
+  // arreglo). El flojo suena moribundo a proposito: grave, corto y cada vez
+  // mas apagado -- se OYE que te estas muriendo antes de que el hueco lo cobre.
   function sonarContactos () {
     for (const c of s.contactos) {
       const cuando = ac.currentTime;
-      if (c.tipo === 'lleno') golpe(cuando, 330, 0.12, 0.35, 'triangle');
-      else if (c.tipo === 'flojo') golpe(cuando, 330 * (s.vy / V_LLENO + 0.3), 0.08, 0.18, 'triangle');
-      else ruido(cuando, 0.04, 0.10);
+      if (c.tipo === 'lleno') {
+        ruido(cuando, 0.09, 0.45);                       // el cuerpo de la caja
+        golpe(cuando, 190, 0.10, 0.30, 'triangle');      // el golpe seco
+      } else if (c.tipo === 'flojo') {
+        const energia = s.vy / V_LLENO;                  // 0..1, ya con restitucion
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(70 + 200 * energia, cuando);
+        o.frequency.exponentialRampToValueAtTime(55, cuando + 0.12);
+        g.gain.setValueAtTime(0.08 + 0.20 * energia, cuando);
+        g.gain.exponentialRampToValueAtTime(0.001, cuando + 0.12);
+        o.connect(g).connect(ac.destination);
+        o.start(cuando); o.stop(cuando + 0.12);
+      } else ruido(cuando, 0.04, 0.10);
     }
     s.contactos.length = 0;
   }
