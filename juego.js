@@ -55,13 +55,41 @@ export const TUNELES = [          // {x0, x1, techo} — muerte si toca el techo
   { x0: 19.5, x1: 23.5, techo: 0.19 }
 ];
 
-// La musica del prototipo: bombo en los beats PARES, hat en la contra. La caja
-// no esta -- a proposito. La caja sos VOS: el drible lleno suena a caja, y
-// recien cuando dribleas al beat la bateria esta completa. La cancion no te
-// acompaña: te necesita.
+// La esfera ES un instrumento -- pero no siempre el mismo. El nivel se divide
+// en zonas y en cada una el arreglo deja de tocar UN instrumento: ese sos vos.
+// La cancion te necesita distinto en cada tramo:
+//
+//   bombo   -> lo mas pelota que hay: tu drible es el pulso
+//   bajo    -> tu drible camina la linea de bajo; palmar en el tunel la corta
+//              y ese silencio es el break de la cancion
+//   melodia -> cada drible lleno toca la nota que sigue: rematas la cancion
+export const ZONAS = [
+  { x0: 0, x1: 14, instr: 'bombo' },
+  { x0: 14, x1: 27, instr: 'bajo' },
+  { x0: 27, x1: 41, instr: 'melodia' }
+];
+export const instrumentoEn = x => (ZONAS.find(z => x >= z.x0 && x < z.x1) || ZONAS[0]).instr;
+
+// La base del arreglo: bombo en pares, caja en impares, hat en la contra y el
+// bajo caminando en corcheas. MENOS el instrumento de la zona, que es tuyo.
+// La base nunca se calla como castigo: jugar mal suena incompleto, nunca roto.
 export function golpesEn (b) {
-  return { bombo: b % 2 === 0, hat: b % 1 === 0.5 };
+  const tuyo = instrumentoEn(b);
+  return {
+    bombo: b % 2 === 0 && tuyo !== 'bombo',
+    caja: b % 2 === 1,
+    hat: b % 1 === 0.5,
+    bajo: b % 0.5 === 0 && tuyo !== 'bajo'
+  };
 }
+
+// La linea de bajo y la melodia son secuencias fijas: la MISMA nota suena en el
+// MISMO beat, la toque el arreglo o la toques vos. Por eso driblar la completa
+// en vez de ensuciarla. (La pentatonica perdona: no hay nota que suene mal.)
+export const BAJO = [110, 110, 82.4, 98];            // por beat, A-A-E-G
+export const MELODIA = [220, 262, 294, 330, 392, 330, 294, 262];
+export const bajoEn = b => BAJO[Math.floor(b / 2) % BAJO.length];
+export const melodiaEn = b => MELODIA[Math.round(b) % MELODIA.length];
 
 export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
 export const tunelEn = x => TUNELES.find(t => x > t.x0 && x < t.x1) || null;
@@ -199,8 +227,11 @@ function arrancarNavegador () {
     const b = ahora();
     while (proxBeat < b + 2) {
       const cuando = t0 + proxBeat * SPB;
-      if (golpesEn(proxBeat).bombo) { golpe(cuando, 150, 0.18, 0.5); golpe(cuando, 60, 0.22, 0.4); }
-      if (golpesEn(proxBeat + 0.5).hat) ruido(cuando + 0.5 * SPB, 0.05, 0.12);
+      const g = golpesEn(proxBeat);
+      if (g.bombo) { golpe(cuando, 150, 0.18, 0.5); golpe(cuando, 60, 0.22, 0.4); }
+      if (g.caja) { ruido(cuando, 0.09, 0.35); golpe(cuando, 190, 0.08, 0.18, 'triangle'); }
+      if (g.hat) ruido(cuando, 0.05, 0.12);
+      if (g.bajo) golpe(cuando, bajoEn(proxBeat), 0.24, 0.25, 'triangle');
       proxBeat += 0.5;
     }
   }
@@ -212,8 +243,11 @@ function arrancarNavegador () {
     for (const c of s.contactos) {
       const cuando = ac.currentTime;
       if (c.tipo === 'lleno') {
-        ruido(cuando, 0.09, 0.45);                       // el cuerpo de la caja
-        golpe(cuando, 190, 0.10, 0.30, 'triangle');      // el golpe seco
+        // tu drible toca el instrumento de la zona, con SU nota de ese beat
+        const instr = instrumentoEn(c.b);
+        if (instr === 'bombo') { golpe(cuando, 150, 0.18, 0.6); golpe(cuando, 60, 0.22, 0.5); }
+        else if (instr === 'bajo') golpe(cuando, bajoEn(c.b), 0.30, 0.40, 'triangle');
+        else golpe(cuando, melodiaEn(c.b), 0.28, 0.40, 'square');
       } else if (c.tipo === 'flojo') {
         const energia = s.vy / V_LLENO;                  // 0..1, ya con restitucion
         const o = ac.createOscillator(), g = ac.createGain();
@@ -311,6 +345,15 @@ function arrancarNavegador () {
     for (let bb = Math.ceil(s.x - 3); bb < s.x + 6; bb++) {
       if (enHueco(bb)) continue;
       cx.beginPath(); cx.moveTo(px(bb), py(0)); cx.lineTo(px(bb), py(0) + 6); cx.stroke();
+    }
+    // el nombre de la zona, escrito en el piso: QUE instrumento sos aca
+    cx.fillStyle = C.tenue; cx.font = '12px system-ui'; cx.textAlign = 'left';
+    for (const z of ZONAS) {
+      cx.fillText('sos el ' + z.instr, px(z.x0) + 8, py(0) + 24);
+      if (z.x0 > 0) {
+        cx.strokeStyle = C.tenue; cx.lineWidth = 1;
+        cx.beginPath(); cx.moveTo(px(z.x0), py(0)); cx.lineTo(px(z.x0), py(0.35)); cx.stroke();
+      }
     }
     // pinchos
     cx.fillStyle = C.peligro;
