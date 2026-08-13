@@ -22,7 +22,7 @@
 // Corre en node (solo simulacion) y en el navegador (render + audio).
 // ---------------------------------------------------------------------------
 
-export const BPM = 100;
+export const BPM = 112;
 export const SPB = 60 / BPM;
 export const G = 1.24;              // gravedad, en unidades de beat
 export const R = 0.055;             // radio de la esfera
@@ -35,29 +35,30 @@ export const CAIDA_MUERTE = -0.35;
 // Un compas por linea, "nota:figura" separados por espacio. "-" es silencio.
 // Am F C G. El compas 0 es la entrada: cuatro tiempos de bateria sola.
 
-// El gancho es un solo gesto repetido subiendo: SALTO a una nota larga, y de
-// ahi se cae ligado. Tres veces, cada una mas alta. Eso es lo que se pega.
+// AURORA 2.0 — la composicion aprobada del estudio (estudio/, 6-jul), portada
+// a una sola voz. Primero el TEMA en notas largas (se aprende escuchando y
+// sosteniendo), despues el CORO dos veces (el gancho de verdad, con el galope
+// corchea-con-puntillo del synthwave), y el final que resuelve en La.
 
 export const CANCION = [
-  '-:4',                                                             //  0  entrada
-  // El riff: corchea-corchea-negra, la misma celula cuatro veces con distinto
-  // techo. Se reconoce a la segunda vuelta, que es lo que le faltaba antes.
-  'A4:.5 C5:.5 D5:1 E5:.5 D5:.5 C5:1',                               //  1  Am
-  'A4:.5 C5:.5 F5:1 E5:.5 D5:.5 C5:1',                               //  2  F   mismo dibujo, mas alto
-  'C5:.5 E5:.5 G5:1 E5:.5 D5:.5 C5:1',                               //  3  C
-  'B4:.5 D5:.5 G5:1 F5:.5 D5:.5 B4:1',                               //  4  G   el fa es el b7: muerde
-  'A4:.5 C5:.5 E5:1 A5:2',                                           //  5  Am  primera altura: se sostiene
-  'G5:.5 F5:.5 E5:1 D5:2',                                           //  6  F   y baja
-  '-:4',                                                             //  7  C   SILENCIO: rodar
-  'D5:.5 D5:.5 B4:.5 D5:.5 E5:1 D5:1',                               //  8  G   puro ritmo
-  'A4:.5 C5:.5 E5:1 D5:.5 C5:.5 B4:1',                               //  9  Am  el riff, contestado
-  'A4:.5 C5:.5 F5:1 A5:2',                                           // 10  F   y se cuelga arriba
-  'C5:.25 D5:.25 E5:.25 F5:.25 G5:.25 A5:.25 B5:.25 C6:.25 G5:1 E5:1', // 11 C escalera que trepa
-  'B5:.25 A5:.25 G5:.25 F5:.25 E5:.25 D5:.25 C5:.25 B4:.25 G4:1 D5:1', // 12 G  cascada que baja
-  'E5:.5 A5:.5 G5:1 A5:2',                                           // 13  Am  la cima
-  'A5:.5 G5:.5 F5:1 E5:2',                                           // 14  F
-  'G5:.5 E5:.5 C5:1 D5:.5 E5:.5 G5:1',                               // 15  C   el riff dado vuelta
-  'B4:.5 D5:.5 G5:1 A4:2'                                            // 16  G   resuelve en la
+  '-:4',                                              //  0  entrada
+  'E5:2 C5:1 A4:1',                                   //  1  Am  el tema, a lo grande
+  'C5:4',                                             //  2  F   y se sostiene
+  'E5:2 G5:1 E5:1',                                   //  3  C
+  'D5:4',                                             //  4  G   pregunta sin resolver
+  'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             //  5  Am  EL CORO: el galope
+  'E5:.75 D5:.75 C5:.5 D5:1.5 C5:.25 D5:.25',         //  6  F
+  'E5:.75 E5:.75 G5:.5 E5:1 D5:.5 C5:.5',             //  7  C
+  'D5:1.5 B4:.5 D5:2',                                //  8  G   respiro colgado del re
+  'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             //  9  Am  el coro otra vez
+  'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 10  F   ahora sube
+  'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 11  C   la cima del coro
+  'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 12  G
+  '-:4',                                              // 13  Am  SILENCIO: rodar
+  'C5:1 D5:1 E5:1 G5:1',                              // 14  F   el final trepa
+  'D5:.5 B4:.5 D5:3',                                 // 15  C
+  'A5:4',                                             // 16  G   la nota mas alta del mapa
+  'E5:1 C5:1 A4:2'                                    // 17  Am  y resuelve en la
 ];
 
 export const LARGO = CANCION.length * 4;
@@ -89,7 +90,10 @@ export const EN_COLA = 2;       // toques guardados a la vez: dos notas adelanta
 // decide COMO suena. El toque se juzga donde lo diste, no donde se cobro: si
 // no, adelantarse y que la esfera aterrice sola sonaria perfecto -- que es
 // justo la trampa de martillar el boton.
-export const AFINADO = 0.11;    // +-66 ms: la nota sale limpia. Mas lejos, chueca.
+// Calibrada contra Guitar Hero (+-100 ms de ventana total): el chueco marca lo
+// claramente corrido, no lo humanamente impreciso. Con +-66 ms una mano decente
+// escuchaba chueco un tercio de las veces -- eso se siente injusto, no dificil.
+export const AFINADO = 0.18;    // +-96 ms: la nota sale limpia. Mas lejos, chueca.
 // La firma de la trampa no es adelantarse, es la RAFAGA: dos toques pegados que
 // no suenan. Nadie toca dos veces en 60 ms queriendo; el que martilla, si.
 export const MARTILLO = 0.1;    // toques mas juntos que esto, y en falso, castigan
@@ -261,10 +265,9 @@ function resortes () {
 export const RESORTES = resortes();
 
 export const SECCIONES = [
-  { x0: 0, n: 'salida' }, { x0: 4, n: 'el riff' }, { x0: 20, n: 'lo alto' },
-  { x0: 28, n: 'silencio · no toques' }, { x0: 32, n: 'ritmo' },
-  { x0: 36, n: 'el riff otra vez' }, { x0: 44, n: 'la escalera' },
-  { x0: 52, n: 'la cima' }, { x0: 60, n: 'el final' }
+  { x0: 0, n: 'salida' }, { x0: 4, n: 'el tema' }, { x0: 20, n: 'el coro' },
+  { x0: 36, n: 'el coro, mas arriba' }, { x0: 52, n: 'silencio · no toques' },
+  { x0: 56, n: 'el final' }
 ];
 
 // --- simulacion --------------------------------------------------------------
@@ -326,7 +329,12 @@ function queSuena (s, k) {
   let n = k;
   while (NOTAS[n.i - 1] && NOTAS[n.i - 1].escalera) n = NOTAS[n.i - 1];   // al inicio
   while (n && enCarrera(n) && s.tocadas.has(n.i)) n = NOTAS[n.i + 1];
-  return n && enCarrera(n) ? n : null;
+  if (!n || !enCarrera(n)) return null;
+  // La nota de SALIDA de la carrera (la primera que no es escalon) solo suena
+  // pisandola: su toque es tambien su salto. Sonarla desde un escalon anterior
+  // la consumia sin lanzar, y el toque siguiente llegaba despues del borde.
+  if (!n.escalera && n.i !== k.i) return null;
+  return n;
 }
 
 // Cobra una nota y decide si salio afinada. La nota SIEMPRE suena --  callarla
@@ -402,7 +410,7 @@ export function paso (s, dt) {
         if (k.riel) s.eventos.push({ tipo: 'rielCorta' });
         lanzar(s, k);
       }
-      else if (k.escalera) { s.tecla = k.i + 1; s.y = NOTAS[s.tecla].y; }
+      else if (k.escalera) { s.tecla = k.i + 1; s.y = NOTAS[s.tecla].y; drenar(s); }
       else despegar(s, k);
     }
   } else if (s.estado === 'apoyada') {
@@ -735,14 +743,15 @@ function arrancarNavegador () {
     if (c < 0 || c >= CANCION.length) return null;
     const base = { kick: [], snare: [], clap: [], hats: CONTRA, abierto: [], bajo: 'ochos', pad: true, fill: false };
     if (c === 0) return { ...base, kick: [0, 1, 2, 3], hats: [], bajo: 'nada', pad: false, fill: true };
-    if (c <= 2) return { ...base, kick: [0, 2], snare: [3], hats: [], bajo: 'empuje' };
+    if (c <= 2) return { ...base, kick: [0, 2], snare: [3], hats: [], bajo: 'empuje' };       // el tema
     if (c <= 4) return { ...base, kick: [0, 2], snare: [1, 3], bajo: 'empuje', fill: c === 4 };
-    if (c <= 6) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: OCHOS, abierto: [3.5], fill: c === 6 };
-    if (c === 7) return { ...base, kick: [0], hats: [], abierto: [2], bajo: 'sus' };          // el silencio
-    if (c === 8) return { ...base, kick: [0, 0.5, 2], clap: [1, 3], bajo: 'empuje' };
-    if (c <= 10) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], hats: OCHOS, fill: c === 10 };
+    if (c <= 6) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: OCHOS, abierto: [3.5] };  // el coro
+    if (c <= 8) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], hats: OCHOS, fill: c === 8 };
+    if (c <= 10) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS };
     if (c <= 12) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], hats: DIECISEIS, fill: c === 12 };
-    if (c <= 14) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS, abierto: [3.5], bajo: 'octava', fill: c === 14 };
+    if (c === 13) return { ...base, kick: [0], hats: [], abierto: [2], bajo: 'sus' };         // el silencio
+    if (c === 14) return { ...base, kick: [0, 0.5, 2], clap: [1, 3], bajo: 'empuje' };
+    if (c <= 16) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS, abierto: [3.5], bajo: 'octava', fill: c === 16 };
     return { ...base, kick: [0, 2, 2.5], snare: [1, 3], clap: [1, 3], hats: OCHOS, bajo: 'octava' };
   }
 

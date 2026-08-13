@@ -6,8 +6,11 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, AFINADO, PISO, G
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, AFINADO, PISO, G, SPB
 } from './juego.js';
+
+// de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
+const enBeats = ms => ms / 1000 / SPB;
 
 const DT = 1 / 240;
 
@@ -56,7 +59,7 @@ function humana (amplitud) {
 
 // el principiante todavia no siente el mapa: toca sistematicamente corrido
 const corrida = ms => {
-  const objetivos = NOTAS.filter(k => !k.silencio && !k.riel).map(k => k.xm + ms / 600);
+  const objetivos = NOTAS.filter(k => !k.silencio && !k.riel).map(k => k.xm + enBeats(ms));
   let j = 0;
   return (s, b) => {
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
@@ -91,7 +94,7 @@ const rp = jugar(perfecta);
 const rSpam = jugar(martillo(0.04));
 const rSpam2 = jugar(martillo(0.12));
 const rPrep = jugar(prepara);
-const rh = jugar(humana(0.15));   // +-90 ms
+const rh = jugar(humana(enBeats(90)));   // +-90 ms
 const rAd = jugar(corrida(-150));  // siempre adelantado
 const rAt = jugar(corrida(150));   // siempre atrasado
 const rm = jugar(muerta);
