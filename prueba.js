@@ -41,7 +41,34 @@ const floja = (s, b) => {
   if (k && !k.riel && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
+// la mano humana: apunta a cada nota con un error de +-90 ms, muchas veces
+// tocando en el aire antes de posarse. Es la que decide si el juego es jugable.
+function humana (amplitud) {
+  const objetivos = NOTAS.filter(k => !k.silencio && !k.riel)
+    .map((k, n) => k.x0 + (((n * 7919) % 31) / 30 - 0.5) * 2 * amplitud);
+  let j = 0;
+  return (s, b) => {
+    const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+    s.sostiene = !!(k && k.riel);
+    while (j < objetivos.length && s.x >= objetivos[j]) { tocar(s, b); j++; }
+  };
+}
+
+// el principiante todavia no siente el mapa: toca sistematicamente corrido
+const corrida = ms => {
+  const objetivos = NOTAS.filter(k => !k.silencio && !k.riel).map(k => k.x0 + ms / 600);
+  let j = 0;
+  return (s, b) => {
+    const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+    s.sostiene = !!(k && k.riel);
+    while (j < objetivos.length && s.x >= objetivos[j]) { tocar(s, b); j++; }
+  };
+};
+
 const rp = jugar(perfecta);
+const rh = jugar(humana(0.15));   // +-90 ms
+const rAd = jugar(corrida(-150));  // siempre adelantado
+const rAt = jugar(corrida(150));   // siempre atrasado
 const rm = jugar(muerta);
 const rt = jugar(terca);
 const rf = jugar(floja);
@@ -83,6 +110,17 @@ const pruebas = [
     `x ${rp.x.toFixed(2)} causa ${rp.causa || '-'}`],
   ['...y suena la melodia COMPLETA', rp.tocadas.size === TOTAL_NOTAS,
     `${rp.tocadas.size}/${TOTAL_NOTAS}`],
+  ['una mano humana (+-90 ms) llega a la meta', rh.meta,
+    `x ${rh.x.toFixed(2)} causa ${rh.causa || '-'}`],
+  ['...y suena al menos 9 de cada 10 notas', rh.tocadas.size >= TOTAL_NOTAS * 0.9,
+    `${rh.tocadas.size}/${TOTAL_NOTAS}`],
+  ['adelantarse 150 ms en TODO sigue sonando la melodia', rAd.meta && rAd.tocadas.size === TOTAL_NOTAS,
+    `${rAd.tocadas.size}/${TOTAL_NOTAS} ${rAd.meta ? 'meta' : 'murio en ' + rAd.x.toFixed(1)}`],
+  // atrasado una semicorchea entera, la carrera se corta antes de terminarla:
+  // eso es correcto, es lo que pasa en un instrumento. No mas de una por carrera.
+  ['atrasarse 150 ms cuesta a lo sumo el final de cada carrera',
+    rAt.meta && rAt.tocadas.size >= TOTAL_NOTAS - 2,
+    `${rAt.tocadas.size}/${TOTAL_NOTAS} ${rAt.meta ? 'meta' : 'murio en ' + rAt.x.toFixed(1)}`],
   ['no tocar nada no suena ninguna nota', rm.tocadas.size === 0,
     `${rm.tocadas.size} notas, x ${rm.x.toFixed(2)}`],
   ['tocar de mas mata bajo el techo del silencio',

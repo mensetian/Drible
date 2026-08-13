@@ -67,8 +67,14 @@ const alturaDe = n => Y_GRAVE + (semitono(n) - semitono('E4')) * PASO_TONO;
 // Tiempo minimo de vuelo para llegar a +dy CAYENDO (no subiendo): si llegas
 // todavia subiendo atravesas la tecla por abajo y la perdes.
 export function vueloMinimo (dy) {
-  return dy > 0 ? Math.sqrt(2 * dy / G) * 1.15 + 0.03 : 0.06;
+  return dy > 0 ? Math.sqrt(2 * dy / G) * 1.08 + 0.02 : 0.05;
 }
+
+// Las tres gracias. Sin ellas hay que ser un robot: el toque humano llega
+// antes o despues del contacto, casi nunca justo encima.
+export const ANTICIPO = 0.7;    // cuanto vive un toque guardado esperando contacto
+export const COYOTE = 0.18;     // tocaste apenas te fuiste del borde: vale igual
+export const EN_COLA = 2;       // toques guardados a la vez: dos notas adelantadas
 
 function compilar () {
   const notas = [];
@@ -98,7 +104,7 @@ function compilar () {
     const tope = sig ? sig.x0 - tv : n.b + n.dur;
     if (n.escalera) n.x1 = sig.x0;                       // pegadas: se rueda
     else if (n.riel) n.x1 = Math.max(n.b + 0.4, tope);   // se suelta al final
-    else n.x1 = Math.min(n.b + Math.min(0.34, n.dur * 0.6), tope);
+    else n.x1 = Math.min(n.b + Math.min(0.42, n.dur * 0.7), tope);
   }
   return notas;
 }
@@ -152,6 +158,9 @@ export function crearSim () {
     tecla: -1,              // indice en NOTAS, o -1 = la red
     viva: true, meta: false, causa: null,
     sostiene: false,
+    saliendoDe: -1,         // tecla recien lanzada: no se puede volver a posar en ella
+    anticipos: [],          // toques que todavia no encontraron tecla
+    coyote: null,           // tecla recien abandonada, todavia tocable
     tocadas: new Set(),
     resortesUsados: new Set(),
     eventos: []
@@ -163,25 +172,67 @@ export function crearSim () {
 const MIRA = 0.05;
 const TOL_BORDE = 0.03;
 
-function despegar (s) { s.estado = 'aire'; s.tecla = -1; }
+function despegar (s, dejando = null) {
+  s.estado = 'aire'; s.tecla = -1;
+  s.coyote = dejando && !dejando.riel && !s.tocadas.has(dejando.i)
+    ? { i: dejando.i, hasta: s.x + COYOTE } : null;
+}
 
 function lanzar (s, desde) {
   const sig = NOTAS[desde.i + 1];
-  s.estado = 'aire'; s.tecla = -1;
+  s.estado = 'aire'; s.tecla = -1; s.saliendoDe = desde.i;
+  // si saltaste sin haber sonado esta tecla, todavia la podes cobrar un ratito
+  s.coyote = !desde.riel && !s.tocadas.has(desde.i)
+    ? { i: desde.i, hasta: s.x + COYOTE } : null;
   if (!sig || sig.silencio) { s.vy = 0; return; }        // al silencio se cae solo
-  const T = Math.max(0.06, sig.x0 + MIRA - s.x);
+  // Se apunta al principio de la tecla siguiente; si se toco tarde y ya no da
+  // el tiempo de vuelo, se apunta mas adentro: llegar tarde, no fallar.
+  const tv = vueloMinimo(sig.y - s.y);
+  let objetivo = sig.x0 + MIRA;
+  if (objetivo - s.x < tv) objetivo = Math.min(sig.x1 - 0.02, s.x + tv);
+  const T = Math.max(0.06, objetivo - s.x);
   s.vy = Math.min(1.9, (sig.y - s.y) / T + G * T / 2);
+}
+
+// Una carrera es un grupo de escalones pegados (las semicorcheas).
+const enCarrera = k => k.escalera || !!(NOTAS[k.i - 1] && NOTAS[k.i - 1].escalera);
+
+// Que nota suena al tocar parado sobre k. En una carrera los escalones son mas
+// angostos que la mano: se tocan EN ORDEN, como en un instrumento de verdad,
+// no segun el peldaño exacto donde caiste.
+function queSuena (s, k) {
+  if (!enCarrera(k)) return s.tocadas.has(k.i) ? null : k;
+  let n = k;
+  while (NOTAS[n.i - 1] && NOTAS[n.i - 1].escalera) n = NOTAS[n.i - 1];   // al inicio
+  while (n && enCarrera(n) && s.tocadas.has(n.i)) n = NOTAS[n.i + 1];
+  return n && enCarrera(n) ? n : null;
+}
+
+// El toque efectivo sobre una tecla: suena una nota y, si corresponde, lanza.
+// Sonar y saltar son cosas separadas: el salto depende de DONDE estas parado.
+function pulsar (s, k) {
+  if (k.riel) return false;               // el riel se toca sosteniendo
+  const obj = queSuena(s, k);
+  if (obj) {
+    s.tocadas.add(obj.i);
+    s.eventos.push({ tipo: 'nota', f: obj.f, x: s.x, y: s.y, i: obj.i, tarde: s.x - obj.x0 });
+  }
+  if (!k.escalera) lanzar(s, k);
+  return !!obj;
 }
 
 function posarse (s, yAntes) {
   let mejor = null, mejorY = -Infinity;
   for (const k of NOTAS) {
-    if (k.silencio || s.x < k.x0 - TOL_BORDE || s.x > k.x1) continue;
+    if (k.silencio || k.i === s.saliendoDe) continue;
+    if (s.x < k.x0 - TOL_BORDE || s.x > k.x1) continue;
     if (yAntes >= k.y - 1e-9 && s.y <= k.y && k.y > mejorY) { mejor = k; mejorY = k.y; }
   }
   if (mejor) {
     s.estado = 'apoyada'; s.tecla = mejor.i; s.y = mejor.y; s.vy = 0;
+    s.coyote = null; s.saliendoDe = -1;
     s.eventos.push({ tipo: 'posar', x: s.x, y: mejor.y, riel: !!mejor.riel });
+    drenar(s);                                   // los toques adelantados entran aca
     return;
   }
   if (!enHueco(s.x) && yAntes >= -1e-9 && s.y <= 0) {
@@ -208,7 +259,7 @@ export function paso (s, dt) {
     } else if (s.x > k.x1) {
       if (k.riel) { s.eventos.push({ tipo: 'rielCorta' }); lanzar(s, k); }
       else if (k.escalera) { s.tecla = k.i + 1; s.y = NOTAS[s.tecla].y; }
-      else despegar(s);
+      else despegar(s, k);
     }
   } else if (s.estado === 'apoyada') {
     s.y = 0;
@@ -240,21 +291,41 @@ export function paso (s, dt) {
   if (s.x >= LARGO) s.meta = true;
 }
 
-export function tocar (s, b) {
-  if (!s.viva || s.meta) return;
-  if (s.estado !== 'apoyada') { s.eventos.push({ tipo: 'aire' }); return; }
+// Gasta un toque en el estado actual. Devuelve si sono una nota; si no sono,
+// el toque no se pierde: se guarda para el proximo contacto.
+function aplicar (s) {
+  if (s.estado !== 'apoyada') {
+    if (s.coyote && s.x <= s.coyote.hasta) {      // te fuiste del borde hace nada
+      const k = NOTAS[s.coyote.i];
+      s.coyote = null;
+      return pulsar(s, k);
+    }
+    return false;
+  }
   if (s.tecla < 0) {                      // en la red: un saltito que no suena
     s.estado = 'aire'; s.vy = 0.62;
     s.eventos.push({ tipo: 'saltoRed' });
-    return;
+    return false;
   }
-  const k = NOTAS[s.tecla];
-  if (k.riel) return;                     // el riel se toca sosteniendo
-  if (!s.tocadas.has(k.i)) {
-    s.tocadas.add(k.i);
-    s.eventos.push({ tipo: 'nota', f: k.f, x: s.x, y: k.y, i: k.i, tarde: s.x - k.x0 });
+  return pulsar(s, NOTAS[s.tecla]);       // los rieles devuelven false: se sostienen
+}
+
+// Al posarse se cobran los toques guardados, en orden. Si el primero ademas
+// lanza, el que sobra espera el proximo contacto: un toque, una nota.
+function drenar (s) {
+  while (s.anticipos.length && s.estado === 'apoyada' && s.tecla >= 0) {
+    if (s.x - s.anticipos[0] > ANTICIPO) { s.anticipos.shift(); continue; }
+    if (!aplicar(s)) break;               // no sono: el toque sigue esperando
+    s.anticipos.shift();
   }
-  if (!k.escalera) lanzar(s, k);
+}
+
+export function tocar (s, b) {
+  if (!s.viva || s.meta) return;
+  if (aplicar(s)) return;
+  // Adelantarse es el error humano normal y no puede costar la cadena entera.
+  if (s.anticipos.length < EN_COLA) s.anticipos.push(s.x);
+  s.eventos.push({ tipo: 'aire' });
 }
 
 if (typeof document !== 'undefined') arrancarNavegador();
@@ -284,7 +355,7 @@ function arrancarNavegador () {
   let ac = null, master = null, t0 = 0, proxBeat = 0;
   let corriendo = false, finSonado = false;
 
-  const estela = [], particulas = [], destellos = [];
+  const estela = [], particulas = [], destellos = [], desvios = [];
   let squash = 0, flash = 0, rielVoz = null;
 
   const ahora = () => ac ? (ac.currentTime - t0) / SPB : 0;
@@ -459,6 +530,7 @@ function arrancarNavegador () {
   function procesar () {
     for (const e of s.eventos) {
       if (e.tipo === 'nota') {
+        desvios.push(Math.abs(e.tarde) * 600);
         lead(ac.currentTime, e.f, Math.max(0.22, 0.44 - Math.abs(e.tarde) * 0.4));
         destellos.push({ x: e.x, y: e.y, t: performance.now() });
         chispas(e.x, e.y, 7, true, C.teclaRGB);
@@ -493,6 +565,7 @@ function arrancarNavegador () {
     t0 = ac.currentTime + 0.7;
     proxBeat = 0;
     estela.length = 0;
+    desvios.length = 0;
     flash = 1;
   }
 
@@ -588,11 +661,16 @@ function arrancarNavegador () {
     for (const k of NOTAS) {
       if (k.silencio || k.x1 < s.x - 3 || k.x0 > s.x + 7) continue;
       const sono = s.tocadas.has(k.i);
+      const aqui = s.tecla === k.i;               // estas parado en esta: toca YA
       const alto = k.riel ? 7 : 5;
       cx.fillStyle = sono ? C.esfera : C.tecla;
-      if (sono) { cx.shadowColor = C.esfera; cx.shadowBlur = 12; }
+      if (sono || aqui) { cx.shadowColor = sono ? C.esfera : C.tecla; cx.shadowBlur = 12; }
       cx.fillRect(px(k.x0), py(k.y), Math.max(4, (k.x1 - k.x0) * esc), alto);
       cx.shadowBlur = 0;
+      if (aqui && !sono) {                        // la ventana abierta, bien visible
+        cx.strokeStyle = `rgba(${C.teclaRGB},0.9)`; cx.lineWidth = 2;
+        cx.strokeRect(px(k.x0) - 2, py(k.y) - 9, Math.max(4, (k.x1 - k.x0) * esc) + 4, alto + 11);
+      }
       if (k.riel) {                                  // el riel se agarra: se marca
         cx.strokeStyle = sono ? C.esfera : C.tecla;
         cx.lineWidth = 1;
@@ -665,6 +743,10 @@ function arrancarNavegador () {
       cx.fillText(`intento ${intento}${mejor ? `   mejor ${mejor}` : ''}`, 12, 22);
       cx.fillStyle = C.esfera; cx.font = '15px system-ui';
       cx.fillText(`♪ ${s.tocadas.size}/${TOTAL_NOTAS}`, 12, 44);
+      if (desvios.length) {                        // que tan al ritmo, no solo cuantas
+        cx.fillStyle = C.red; cx.font = '13px system-ui';
+        cx.fillText(`±${(desvios.reduce((a, d) => a + d, 0) / desvios.length).toFixed(0)} ms`, 12, 64);
+      }
       cx.fillStyle = C.tenue; cx.fillRect(w - 132, 16, 120, 4);
       cx.fillStyle = C.esfera; cx.fillRect(w - 132, 16, 120 * Math.min(1, s.x / LARGO), 4);
       if (s.meta) {
