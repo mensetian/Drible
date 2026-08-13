@@ -3,20 +3,20 @@
 //
 // ¿Se siente bien driblar una pelota al ritmo de la musica?
 //
-// La esfera rueda y rebota libre, como una pelota real: cada rebote pierde
-// energia (restitucion < 1). Nadie juzga el ritmo con un reloj: lo juzga la
-// geometria. Los verbos:
+// La esfera rebota SOLA al beat: es tu metronomo, gratis. La primera version
+// cobraba un toque por cada rebote y eso apilaba dos habilidades (mantenerla
+// viva + apuntar a los elementos): era muy dificil. Ahora el jugador toca los
+// ACENTOS, no el mantenimiento:
 //
-//   TOQUE en el contacto  -> devuelve toda la energia (rebote de 1 beat)
+//   nada                  -> rebote de 1 beat, eterno (el pulso)
+//   TOQUE en el contacto  -> rebote GRANDE de 2 beats (huecos anchos, campanas)
 //   MANTENER              -> palmea la pelota: mata el rebote, pasa a rodar
-//   nada                  -> el rebote se apaga solo, en 3-4 pisos ya rueda
 //
-// Como el rebote lleno dura exactamente 1 beat, driblar bien ES ir al ritmo,
-// sin que ninguna ventana lo exija. Los obstaculos (esos si en la grilla):
+// Nadie juzga el ritmo con un reloj: lo juzga la geometria.
 //
-//   hueco  -> solo se pasa con rebote vivo (el apagado cae adentro)
-//   pincho -> solo se pasa por ARRIBA, cerca del apex
-//   tunel  -> techo bajo: hay que DEJAR morir el rebote y pasar rodando
+//   hueco  -> mas ancho que el pulso: solo se cruza con el rebote grande
+//   pincho -> solo se pasa por ARRIBA
+//   tunel  -> techo bajo: hay que palmar y pasar rodando
 //
 // Fisica en unidades del juego grande: x en beats, y en altos de pasillo,
 // misma gravedad (g = 8*0.62/4 = 1.24). Morir reinicia el tramo, como siempre.
@@ -27,10 +27,9 @@ export const SPB = 60 / BPM;
 
 export const G = 1.24;            // la misma gravedad del juego grande
 export const V_LLENO = G / 2;     // rebote de 1 beat exacto: apex 0.155
-export const REST = 0.68;         // restitucion: cuanto queda si no tocas
+export const V_BOOST = G;         // el toque: rebote de 2 beats, apex 0.62
 export const R = 0.055;           // radio de la esfera
 export const VENTANA = 0.22;      // beats: cuan antes puede llegar el toque
-export const V_MIN = 0.10;        // debajo de esto el rebote ya es rodar
 export const CAIDA_MUERTE = -0.45;
 
 // --- el tramo de juguete ----------------------------------------------------
@@ -39,10 +38,10 @@ export const CAIDA_MUERTE = -0.45;
 
 export const LARGO = 40;
 
-export const HUECOS = [           // {x0, x1} — sin piso
-  { x0: 8.08, x1: 8.92 },
-  { x0: 26.08, x1: 26.92 },
-  { x0: 36.08, x1: 36.92 }
+export const HUECOS = [           // {x0, x1} — mas anchos que el pulso: piden boost
+  { x0: 8.08, x1: 9.92 },
+  { x0: 26.08, x1: 27.92 },
+  { x0: 36.08, x1: 37.92 }
 ];
 
 export const PINCHOS = [          // {x, w, h} — muerte si el cuerpo pasa bajo
@@ -68,10 +67,10 @@ export const RESORTES = [         // resortes: te lanzan 2 beats Y tocan el bajo
 ];
 export const V_RESORTE = G;       // vuelo de 2 beats exactos: apex 0.62
 
-export const CAMPANAS = [         // campanas al aire: se tocan pasando en apex
-  { x: 28.5, y: 0.13, f: 330 },
-  { x: 30.5, y: 0.13, f: 392 },
-  { x: 32.5, y: 0.13, f: 440 }
+export const CAMPANAS = [         // campanas ALTAS: solo el apex del boost llega
+  { x: 29, y: 0.62, f: 330 },
+  { x: 31, y: 0.62, f: 392 },
+  { x: 33, y: 0.62, f: 440 }
 ];
 
 // La esfera ES un instrumento -- pero no siempre el mismo. El nivel se divide
@@ -133,10 +132,10 @@ export function crearSim () {
 export function tocar (s, b) {
   s.toqueEn = b;
   // Toque apenas DESPUES del contacto: si la pelota acaba de salir del piso
-  // con rebote flojo, el toque la llena igual. Una mano real dribla asi --
-  // el contacto y el toque no son simultaneos, conversan.
-  if (!s.sostiene && s.y < 0.05 && s.vy > 0 && s.vy < V_LLENO) {
-    s.vy = V_LLENO; s.rodando = false; s.toqueEn = -Infinity;
+  // con el rebote de pulso, el toque lo agranda igual. Una mano real dribla
+  // asi -- el contacto y el toque no son simultaneos, conversan.
+  if (!s.sostiene && s.y < 0.05 && s.vy > 0 && s.vy <= V_LLENO + 1e-9) {
+    s.vy = V_BOOST; s.rodando = false; s.toqueEn = -Infinity;
     s.contactos.push({ b, tipo: 'lleno' });
   }
 }
@@ -153,21 +152,24 @@ export function paso (s, dt) {
   // aterrizar: es chocar. Sin esto la esfera trepaba la pared del hueco.
   if (piso && s.y < -R) { s.viva = false; s.causa = 'hueco'; return; }
 
-  // contacto con el piso
-  if (piso && s.y <= 0 && s.vy < 0) {
+  // rodando: pegada al piso, estable, hasta que un toque la levante o el piso
+  // se acabe. Antes pasaba por la logica de contacto y el rebote automatico la
+  // despegaba solo -- adentro del tunel eso era saltar contra el techo.
+  if (s.rodando) {
+    if (piso) { s.y = 0; s.vy = 0; }
+    else s.rodando = false;
+  } else if (piso && s.y <= 0 && s.vy < 0) {   // contacto con el piso
     s.y = 0;
-    const rapidez = -s.vy;
     if (s.sostiene) {
       s.vy = 0; s.rodando = true;
       s.contactos.push({ b: s.x, tipo: 'palma' });
     } else if (s.x - s.toqueEn <= VENTANA) {
-      s.vy = V_LLENO; s.rodando = false;
-      s.toqueEn = -Infinity;      // un toque energiza UN contacto
+      s.vy = V_BOOST; s.rodando = false;
+      s.toqueEn = -Infinity;      // un toque agranda UN contacto
       s.contactos.push({ b: s.x, tipo: 'lleno' });
     } else {
-      s.vy = rapidez * REST;
-      if (s.vy < V_MIN) { s.vy = 0; s.rodando = true; }
-      else s.contactos.push({ b: s.x, tipo: 'flojo' });
+      s.vy = V_LLENO;             // el pulso es gratis: rebota solo, al beat
+      s.contactos.push({ b: s.x, tipo: 'auto' });
     }
     // los elementos del piso suenan al ser tocados: el instrumento es el MAPA
     if (PADS.some(p => Math.abs(s.x - p.x) < 0.18)) {
@@ -179,14 +181,9 @@ export function paso (s, dt) {
       s.contactos.push({ b: s.x, tipo: 'resorte' });
     }
   }
-  // rodando: pegada al piso mientras haya piso; si se acaba, cae libre
-  if (s.rodando) {
-    if (piso && s.vy <= 0) { s.y = 0; s.vy = 0; }
-    else s.rodando = false;
-  }
-  // soltar un toque estando rodando: la levanta del piso (re-arranca el drible)
+  // tocar estando rodando: la levanta del piso con boost (re-arranca a lo grande)
   if (piso && s.y === 0 && s.vy === 0 && !s.sostiene && s.x - s.toqueEn <= VENTANA) {
-    s.vy = V_LLENO; s.rodando = false; s.toqueEn = -Infinity;
+    s.vy = V_BOOST; s.rodando = false; s.toqueEn = -Infinity;
     s.contactos.push({ b: s.x, tipo: 'lleno' });
   }
 
@@ -290,17 +287,9 @@ function arrancarNavegador () {
         golpe(cuando, c.f, 0.5, 0.40, 'square');                            // melodia
         golpe(cuando, c.f * 2.02, 0.25, 0.10, 'sine');                      // brillo
       } else if (c.tipo === 'lleno') {
-        ruido(cuando, 0.03, 0.09);   // la bola casi muda: es la mano, no la cuerda
-      } else if (c.tipo === 'flojo') {
-        const energia = s.vy / V_LLENO;                  // 0..1, ya con restitucion
-        const o = ac.createOscillator(), g = ac.createGain();
-        o.type = 'sine';
-        o.frequency.setValueAtTime(70 + 200 * energia, cuando);
-        o.frequency.exponentialRampToValueAtTime(55, cuando + 0.12);
-        g.gain.setValueAtTime(0.08 + 0.20 * energia, cuando);
-        g.gain.exponentialRampToValueAtTime(0.001, cuando + 0.12);
-        o.connect(g).connect(ac.destination);
-        o.start(cuando); o.stop(cuando + 0.12);
+        ruido(cuando, 0.06, 0.15);   // el boost: un soplido, mas aire que nota
+      } else if (c.tipo === 'auto') {
+        ruido(cuando, 0.03, 0.07);   // el pulso casi mudo: es la mano, no la cuerda
       } else ruido(cuando, 0.04, 0.10);
     }
     s.contactos.length = 0;
