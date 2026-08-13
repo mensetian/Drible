@@ -6,7 +6,7 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, G
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, AFINADO, G
 } from './juego.js';
 
 const DT = 1 / 240;
@@ -75,7 +75,21 @@ const prepara = (s, b) => {
   if (k && !k.riel && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
+// el tramposo: martilla el boton sin mirar el ritmo (sostiene los rieles, que es
+// lo unico que no se puede martillar). Si esto saca buen puntaje, el juego no es
+// un juego de ritmo: es un boton que se aprieta rapido.
+function martillo (cada) {
+  let ultimo = -Infinity;
+  return (s, b) => {
+    const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+    s.sostiene = !!(k && k.riel);
+    if (s.x - ultimo >= cada) { ultimo = s.x; tocar(s, b); }
+  };
+}
+
 const rp = jugar(perfecta);
+const rSpam = jugar(martillo(0.04));
+const rSpam2 = jugar(martillo(0.12));
 const rPrep = jugar(prepara);
 const rh = jugar(humana(0.15));   // +-90 ms
 const rAd = jugar(corrida(-150));  // siempre adelantado
@@ -128,12 +142,30 @@ const pruebas = [
     `x ${rp.x.toFixed(2)} causa ${rp.causa || '-'}`],
   ['...y suena la melodia COMPLETA', rp.tocadas.size === TOTAL_NOTAS,
     `${rp.tocadas.size}/${TOTAL_NOTAS}`],
+  ['...y le sale TODA limpia: tocar bien tiene que sonar bien',
+    rp.limpias.size === TOTAL_NOTAS, `${rp.limpias.size}/${TOTAL_NOTAS} limpias`],
+
+  // --- no se puede hacer trampa martillando ---------------------------------
+  ['martillar el boton no saca puntaje (rapido)',
+    rSpam.limpias.size <= TOTAL_NOTAS * 0.45,
+    `${rSpam.limpias.size}/${TOTAL_NOTAS} limpias · ${rSpam.tocadas.size} sonadas · ${rSpam.falsos} en falso`],
+  ['martillar el boton no saca puntaje (a media velocidad)',
+    rSpam2.limpias.size <= TOTAL_NOTAS * 0.45,
+    `${rSpam2.limpias.size}/${TOTAL_NOTAS} limpias · ${rSpam2.tocadas.size} sonadas · ${rSpam2.falsos} en falso`],
+  ['...y la mano perfecta nunca toca en falso', rp.falsos === 0, `${rp.falsos}`],
   ['una mano humana (+-90 ms) llega a la meta', rh.meta,
     `x ${rh.x.toFixed(2)} causa ${rh.causa || '-'}`],
   ['...y suena al menos 9 de cada 10 notas', rh.tocadas.size >= TOTAL_NOTAS * 0.9,
     `${rh.tocadas.size}/${TOTAL_NOTAS}`],
   ['adelantarse 150 ms en TODO sigue sonando la melodia', rAd.meta && rAd.tocadas.size === TOTAL_NOTAS,
     `${rAd.tocadas.size}/${TOTAL_NOTAS} ${rAd.meta ? 'meta' : 'murio en ' + rAd.x.toFixed(1)}`],
+  // ...pero suena chueca: la nota no se calla nunca, se ensucia. Asi el oido
+  // avisa que vas corrido sin que haya que mirar el HUD.
+  ['...pero corrido 150 ms suena chueco casi siempre',
+    rAd.limpias.size <= TOTAL_NOTAS * 0.35, `${rAd.limpias.size}/${TOTAL_NOTAS} limpias`],
+  ['una mano humana afina la mayoria, no todas',
+    rh.limpias.size >= TOTAL_NOTAS * 0.4 && rh.limpias.size < TOTAL_NOTAS,
+    `${rh.limpias.size}/${TOTAL_NOTAS} limpias`],
   // atrasado una semicorchea entera, la carrera se corta antes de terminarla:
   // eso es correcto, es lo que pasa en un instrumento. No mas de una por carrera.
   ['atrasarse 150 ms cuesta a lo sumo el final de cada carrera',
@@ -152,6 +184,10 @@ const pruebas = [
     !rf.viva && rf.causa === 'hueco' && HUECOS.some(h => rf.x > h.x0 && rf.x < h.x1 + 1),
     `x ${rf.x.toFixed(2)} causa ${rf.causa || 'sigue viva'}`],
   ['la red rescata: hay resortes repartidos', RESORTES.length >= 8, `${RESORTES.length}`],
+  // un punto exacto se esquiva sin querer, o se salta creyendo que es obstaculo
+  ['los trampolines son una zona pisable, no un punto',
+    RESORTES.every(r => r.x1 - r.x0 >= 0.6),
+    `${Math.min(...RESORTES.map(r => r.x1 - r.x0)).toFixed(2)} de ancho el mas angosto`],
   ['ningun resorte queda bajo un techo o sobre un abismo',
     RESORTES.every(r => !HUECOS.some(h => r.x > h.x0 && r.x < h.x1) &&
       !TECHOS.some(t => r.x > t.x0 && r.x < t.x1)), '']
