@@ -711,10 +711,33 @@ function arrancarNavegador () {
   }
   function subir () { soltar(s); }
 
-  addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) bajar(); } });
-  addEventListener('keyup', e => { if (e.code === 'Space') subir(); });
+  // Es un juego de UN boton: cualquier tecla normal vale. Se dejan pasar los
+  // atajos con Ctrl/Alt/Meta y las de funcion para no romper recargar ni F12.
+  const esBoton = e => !e.ctrlKey && !e.altKey && !e.metaKey &&
+    (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter' ||
+     e.code === 'ArrowUp' || e.key.length === 1);
+
+  // En captura y sobre window: asi ningun elemento con foco se come la tecla,
+  // que es lo que pasa cuando la pagina se abre embebida o se hizo clic afuera.
+  addEventListener('keydown', e => {
+    if (!esBoton(e)) return;
+    e.preventDefault();
+    if (!e.repeat) bajar();
+  }, { capture: true });
+  addEventListener('keyup', e => { if (esBoton(e)) subir(); }, { capture: true });
+
+  // El lienzo toma el foco: sin esto, en un iframe las teclas no llegan nunca.
+  cv.tabIndex = 0;
+  cv.style.outline = 'none';
+  const enfocar = () => { try { cv.focus({ preventScroll: true }); } catch (_) {} };
+  enfocar();
+  addEventListener('load', enfocar);
+  addEventListener('pointerdown', enfocar, { capture: true });
+
   cv.addEventListener('pointerdown', e => { e.preventDefault(); bajar(); });
   addEventListener('pointerup', subir);
+  // si el juego pierde el foco con el boton hundido, se suelta: no queda trabado
+  addEventListener('blur', subir);
 
   // --- lazo ---------------------------------------------------------------------
 
@@ -952,7 +975,7 @@ function arrancarNavegador () {
     if (!corriendo) {
       cx.textAlign = 'center';
       cx.fillStyle = C.peligro; cx.font = '17px system-ui';
-      cx.fillText('DRIBLE — toca para empezar', w / 2, h * 0.24);
+      cx.fillText('DRIBLE — ESPACIO o toca para empezar', w / 2, h * 0.24);
       cx.fillStyle = C.tenue; cx.font = '13px system-ui';
       [
         'cada tecla azul es una nota: tocala al pisarla',
