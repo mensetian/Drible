@@ -3,7 +3,7 @@
 //
 //   node drible/prueba.js
 
-import { crearSim, paso, tocar, LARGO, HUECOS, PINCHOS, TUNELES } from './juego.js';
+import { crearSim, paso, tocar, LARGO, HUECOS, PINCHOS, TUNELES, CAMPANAS } from './juego.js';
 
 const DT = 1 / 240;
 
@@ -41,6 +41,8 @@ const pruebas = [
   ['driblar dentro del tunel mata', !r3.viva && r3.causa === 'tunel',
     `x ${r3.x.toFixed(2)} causa ${r3.causa || 'sigue viva'}`],
   ['los pinchos estan a medio beat (apex del drible)', PINCHOS.every(p => Math.abs(p.x % 1 - 0.5) < 1e-9), ''],
+  ['driblar al beat toca TODAS las campanas', r1.tocadas.size === CAMPANAS.length,
+    `${r1.tocadas.size}/${CAMPANAS.length}`],
   ['la meta queda despues del ultimo obstaculo',
     LARGO > Math.max(...HUECOS.map(h => h.x1), ...PINCHOS.map(p => p.x), ...TUNELES.map(t => t.x1)), '']
 ];

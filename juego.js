@@ -55,6 +55,25 @@ export const TUNELES = [          // {x0, x1, techo} — muerte si toca el techo
   { x0: 19.5, x1: 23.5, techo: 0.19 }
 ];
 
+// --- los instrumentos estan en el MAPA, no en la bola -----------------------
+// La bola es la mano; los elementos son las cuerdas. Tocar un elemento en el
+// momento justo hace sonar SU nota. El rebote propio de la bola es casi mudo.
+
+export const PADS = [             // parches en el piso: pisarlos suena a bombo
+  { x: 2 }, { x: 4 }, { x: 6 }, { x: 10 }, { x: 12 }
+];
+
+export const RESORTES = [         // resortes: te lanzan 2 beats Y tocan el bajo
+  { x: 14 }, { x: 16 }
+];
+export const V_RESORTE = G;       // vuelo de 2 beats exactos: apex 0.62
+
+export const CAMPANAS = [         // campanas al aire: se tocan pasando en apex
+  { x: 28.5, y: 0.13, f: 330 },
+  { x: 30.5, y: 0.13, f: 392 },
+  { x: 32.5, y: 0.13, f: 440 }
+];
+
 // La esfera ES un instrumento -- pero no siempre el mismo. El nivel se divide
 // en zonas y en cada una el arreglo deja de tocar UN instrumento: ese sos vos.
 // La cancion te necesita distinto en cada tramo:
@@ -104,6 +123,7 @@ export function crearSim () {
     x: 0, y: 0, vy: V_LLENO,
     viva: true, meta: false, causa: '',
     rodando: false,
+    tocadas: new Set(),           // campanas ya sonadas en este intento
     toqueEn: -Infinity,           // beat del ultimo toque (flanco de bajada)
     sostiene: false,
     contactos: []                 // {b, tipo: 'lleno'|'flojo'|'palma'} p/ audio y fx
@@ -149,6 +169,15 @@ export function paso (s, dt) {
       if (s.vy < V_MIN) { s.vy = 0; s.rodando = true; }
       else s.contactos.push({ b: s.x, tipo: 'flojo' });
     }
+    // los elementos del piso suenan al ser tocados: el instrumento es el MAPA
+    if (PADS.some(p => Math.abs(s.x - p.x) < 0.18)) {
+      s.contactos.push({ b: s.x, tipo: 'pad' });
+    }
+    const rs = RESORTES.find(r => Math.abs(s.x - r.x) < 0.18);
+    if (rs && !s.sostiene) {
+      s.vy = V_RESORTE; s.rodando = false;   // el resorte manda sobre el rebote
+      s.contactos.push({ b: s.x, tipo: 'resorte' });
+    }
   }
   // rodando: pegada al piso mientras haya piso; si se acaba, cae libre
   if (s.rodando) {
@@ -159,6 +188,16 @@ export function paso (s, dt) {
   if (piso && s.y === 0 && s.vy === 0 && !s.sostiene && s.x - s.toqueEn <= VENTANA) {
     s.vy = V_LLENO; s.rodando = false; s.toqueEn = -Infinity;
     s.contactos.push({ b: s.x, tipo: 'lleno' });
+  }
+
+  // campanas: se tocan pasando por el aire, una vez por intento
+  for (const c of CAMPANAS) {
+    if (s.tocadas.has(c.x)) continue;
+    const dx = s.x - c.x, dy = (s.y + R) - c.y;
+    if (dx * dx + dy * dy < (R + 0.09) ** 2) {
+      s.tocadas.add(c.x);
+      s.contactos.push({ b: s.x, tipo: 'campana', f: c.f });
+    }
   }
 
   // muertes: la geometria juzga, no el reloj
@@ -242,12 +281,16 @@ function arrancarNavegador () {
   function sonarContactos () {
     for (const c of s.contactos) {
       const cuando = ac.currentTime;
-      if (c.tipo === 'lleno') {
-        // tu drible toca el instrumento de la zona, con SU nota de ese beat
-        const instr = instrumentoEn(c.b);
-        if (instr === 'bombo') { golpe(cuando, 150, 0.18, 0.6); golpe(cuando, 60, 0.22, 0.5); }
-        else if (instr === 'bajo') golpe(cuando, bajoEn(c.b), 0.30, 0.40, 'triangle');
-        else golpe(cuando, melodiaEn(c.b), 0.28, 0.40, 'square');
+      if (c.tipo === 'pad') {
+        golpe(cuando, 150, 0.18, 0.6); golpe(cuando, 60, 0.22, 0.5);        // bombo
+      } else if (c.tipo === 'resorte') {
+        golpe(cuando, bajoEn(c.b), 0.30, 0.45, 'triangle');                 // bajo
+        golpe(cuando, bajoEn(c.b) * 2, 0.12, 0.15, 'triangle');             // el "boing"
+      } else if (c.tipo === 'campana') {
+        golpe(cuando, c.f, 0.5, 0.40, 'square');                            // melodia
+        golpe(cuando, c.f * 2.02, 0.25, 0.10, 'sine');                      // brillo
+      } else if (c.tipo === 'lleno') {
+        ruido(cuando, 0.03, 0.09);   // la bola casi muda: es la mano, no la cuerda
       } else if (c.tipo === 'flojo') {
         const energia = s.vy / V_LLENO;                  // 0..1, ya con restitucion
         const o = ac.createOscillator(), g = ac.createGain();
@@ -348,8 +391,9 @@ function arrancarNavegador () {
     }
     // el nombre de la zona, escrito en el piso: QUE instrumento sos aca
     cx.fillStyle = C.tenue; cx.font = '12px system-ui'; cx.textAlign = 'left';
+    const rotulo = { bombo: 'pads: bombo', bajo: 'resortes: bajo', melodia: 'campanas: melodia' };
     for (const z of ZONAS) {
-      cx.fillText('sos el ' + z.instr, px(z.x0) + 8, py(0) + 24);
+      cx.fillText(rotulo[z.instr], px(z.x0) + 8, py(0) + 24);
       if (z.x0 > 0) {
         cx.strokeStyle = C.tenue; cx.lineWidth = 1;
         cx.beginPath(); cx.moveTo(px(z.x0), py(0)); cx.lineTo(px(z.x0), py(0.35)); cx.stroke();
@@ -371,6 +415,28 @@ function arrancarNavegador () {
       cx.moveTo(px(tt.x0), py(tt.techo));
       cx.lineTo(px(tt.x1), py(tt.techo));
       cx.stroke();
+    }
+    // pads de bombo: parches en el piso
+    cx.fillStyle = 'rgba(255,179,71,0.45)';
+    for (const p of PADS) cx.fillRect(px(p.x - 0.16), py(0) - 3, 0.32 * esc, 3);
+    // resortes: doble chevron
+    cx.strokeStyle = C.esfera; cx.lineWidth = 2;
+    for (const r of RESORTES) {
+      for (const d of [0, 5]) {
+        cx.beginPath();
+        cx.moveTo(px(r.x - 0.12), py(0) - d);
+        cx.lineTo(px(r.x), py(0) - 8 - d);
+        cx.lineTo(px(r.x + 0.12), py(0) - d);
+        cx.stroke();
+      }
+    }
+    // campanas: huecas hasta que suenan
+    for (const c of CAMPANAS) {
+      const sono = s.tocadas.has(c.x);
+      cx.beginPath();
+      cx.arc(px(c.x), py(c.y), 0.09 * esc, 0, Math.PI * 2);
+      if (sono) { cx.fillStyle = C.esfera; cx.fill(); }
+      else { cx.strokeStyle = C.esfera; cx.lineWidth = 1.5; cx.stroke(); }
     }
     // meta
     cx.strokeStyle = C.esfera; cx.lineWidth = 2;
