@@ -764,6 +764,21 @@ function arrancarNavegador () {
         const suelta = Math.max(k.x0, k.x1 - SUELTA);
         cx.fillStyle = `rgba(${C.esferaRGB},${sono ? 0.85 : 0.35})`;
         cx.fillRect(px(suelta), py(k.y) - 4, (k.x1 - suelta) * esc, 3);
+        // y al final te lanza solo: la flecha lo dice, no hay que saltar
+        if (!k.ligada && NOTAS[k.i + 1] && !NOTAS[k.i + 1].silencio) {
+          const sig = NOTAS[k.i + 1];
+          const ang = Math.atan2(py(sig.y) - py(k.y) - 26, (sig.x0 - k.x1) * esc);
+          cx.strokeStyle = `rgba(${C.esferaRGB},0.8)`; cx.lineWidth = 2;
+          cx.beginPath();
+          cx.moveTo(px(k.x1), py(k.y) - 4);
+          cx.lineTo(px(k.x1) + Math.cos(ang) * 16, py(k.y) - 4 + Math.sin(ang) * 16);
+          for (const g of [2.5, -2.5]) {
+            cx.moveTo(px(k.x1) + Math.cos(ang) * 16, py(k.y) - 4 + Math.sin(ang) * 16);
+            cx.lineTo(px(k.x1) + Math.cos(ang + g) * 7 + Math.cos(ang) * 16,
+              py(k.y) - 4 + Math.sin(ang + g) * 7 + Math.sin(ang) * 16);
+          }
+          cx.stroke();
+        }
       }
     }
     // destellos de nota
@@ -823,8 +838,9 @@ function arrancarNavegador () {
       cx.fillText('DRIBLE — toca para empezar', w / 2, h * 0.30);
       cx.fillStyle = C.tenue; cx.font = '13px system-ui';
       cx.fillText('cada tecla azul es una nota: tocala al pisarla', w / 2, h * 0.30 + 26);
-      cx.fillText('las largas se MANTIENEN · bajo el techo NO se toca', w / 2, h * 0.30 + 46);
+      cx.fillText('las largas se MANTIENEN: el riel te lanza solo al final', w / 2, h * 0.30 + 46);
       cx.fillText('las que cuelgan de un arco no se tocan: dejate caer', w / 2, h * 0.30 + 66);
+      cx.fillText('bajo el techo NO se toca', w / 2, h * 0.30 + 86);
     } else {
       cx.textAlign = 'left';
       cx.fillStyle = C.red; cx.font = '14px system-ui';
