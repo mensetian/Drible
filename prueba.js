@@ -5,8 +5,8 @@
 //   node drible/prueba.js
 
 import {
-  crearSim, paso, tocar, vueloMinimo,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, G
+  crearSim, paso, tocar, soltar, vueloMinimo,
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, G
 } from './juego.js';
 
 const DT = 1 / 240;
@@ -65,7 +65,18 @@ const corrida = ms => {
   };
 };
 
+// la mano que suelta el riel antes de tiempo para poder apretar de nuevo:
+// es el gesto natural para atacar la nota que sigue, y no puede matarte.
+const prepara = (s, b) => {
+  const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+  const suelta = k && k.riel && s.x > k.x1 - SUELTA + 0.05;
+  if (suelta && s.sostiene) soltar(s);
+  else s.sostiene = !!(k && k.riel) && !suelta;
+  if (k && !k.riel && !s.tocadas.has(k.i)) tocar(s, b);
+};
+
 const rp = jugar(perfecta);
+const rPrep = jugar(prepara);
 const rh = jugar(humana(0.15));   // +-90 ms
 const rAd = jugar(corrida(-150));  // siempre adelantado
 const rAt = jugar(corrida(150));   // siempre atrasado
@@ -128,6 +139,11 @@ const pruebas = [
   ['atrasarse 150 ms cuesta a lo sumo el final de cada carrera',
     rAt.meta && rAt.tocadas.size >= TOTAL_NOTAS - 2,
     `${rAt.tocadas.size}/${TOTAL_NOTAS} ${rAt.meta ? 'meta' : 'murio en ' + rAt.x.toFixed(1)}`],
+  ['soltar el riel sobre el final para poder saltar NO te tira',
+    rPrep.meta && rPrep.tocadas.size === TOTAL_NOTAS,
+    `${rPrep.tocadas.size}/${TOTAL_NOTAS} ${rPrep.meta ? 'meta' : 'murio en ' + rPrep.x.toFixed(1) + ' ' + rPrep.causa}`],
+  ['todo riel tiene tramo de suelta usable', NOTAS.filter(k => k.riel)
+    .every(k => k.x1 - k.x0 > SUELTA + 0.2), ''],
   ['no tocar nada no suena ninguna nota', rm.tocadas.size === 0,
     `${rm.tocadas.size} notas, x ${rm.x.toFixed(2)}`],
   ['tocar de mas mata bajo el techo del silencio',

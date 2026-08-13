@@ -75,8 +75,12 @@ export function vueloMinimo (dy) {
 
 // Las tres gracias. Sin ellas hay que ser un robot: el toque humano llega
 // antes o despues del contacto, casi nunca justo encima.
-export const ANTICIPO = 0.7;    // cuanto vive un toque guardado esperando contacto
+export const ANTICIPO = 0.8;    // cuanto vive un toque guardado esperando contacto
 export const COYOTE = 0.18;     // tocaste apenas te fuiste del borde: vale igual
+// Para atacar la nota que sigue a un riel hay que soltar y volver a apretar:
+// con el boton hundido no hay toque nuevo. Asi que soltar sobre el final del
+// riel no te tira -- la nota ya esta tocada, te deja salir como corresponde.
+export const SUELTA = 0.4;
 export const EN_COLA = 2;       // toques guardados a la vez: dos notas adelantadas
 
 // Se apunta un poco adentro de la tecla, no al borde: cayendo justo sobre el
@@ -182,6 +186,7 @@ export function crearSim () {
     saliendoDe: -1,         // tecla recien lanzada: no se puede volver a posar en ella
     ligadaDe: -1,           // te dejaste caer desde esta: la caida cobra la nota
     anticipos: [],          // toques que todavia no encontraron tecla
+    apretadoEn: -Infinity,  // donde empezo el apriete: distingue toque de sostenido
     coyote: null,           // tecla recien abandonada, todavia tocable
     tocadas: new Set(),
     resortesUsados: new Set(),
@@ -283,7 +288,7 @@ export function paso (s, dt) {
       s.tocadas.add(k.i);
       s.eventos.push({ tipo: 'riel', f: k.f, x: s.x, y: k.y, i: k.i, hasta: k.x1 });
     }
-    if (k.riel && !s.sostiene && s.x > k.x0 + GRACIA_RIEL) {
+    if (k.riel && !s.sostiene && s.x > k.x0 + GRACIA_RIEL && s.x < k.x1 - SUELTA) {
       if (s.tocadas.has(k.i)) s.eventos.push({ tipo: 'rielCorta' });
       despegar(s, k);
     } else if (s.x > k.x1) {
@@ -354,8 +359,21 @@ function drenar (s) {
   }
 }
 
+// Soltar un sostenido tambien articula. Sin esto, salir de un riel es
+// imposible: el boton ya esta hundido y no hay toque nuevo que dar.
+export function soltar (s) {
+  s.sostiene = false;
+  if (!s.viva || s.meta) return;
+  if (s.x - s.apretadoEn < GRACIA_RIEL) return;      // fue un toque, no un sostenido
+  if (s.estado !== 'apoyada' || s.tecla < 0) return;
+  const k = NOTAS[s.tecla];
+  if (k.riel || s.tocadas.has(k.i)) return;
+  pulsar(s, k);
+}
+
 export function tocar (s, b) {
   if (!s.viva || s.meta) return;
+  s.apretadoEn = s.x;
   if (aplicar(s)) return;
   // Adelantarse es el error humano normal y no puede costar la cadena entera.
   if (s.anticipos.length < EN_COLA) s.anticipos.push(s.x);
@@ -632,7 +650,7 @@ function arrancarNavegador () {
     s.sostiene = true;
     tocar(s, ahora());
   }
-  function subir () { s.sostiene = false; }
+  function subir () { soltar(s); }
 
   addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) bajar(); } });
   addEventListener('keyup', e => { if (e.code === 'Space') subir(); });
@@ -742,6 +760,10 @@ function arrancarNavegador () {
         for (let x = k.x0; x < k.x1; x += 0.25) {
           cx.beginPath(); cx.moveTo(px(x), py(k.y)); cx.lineTo(px(x) - 5, py(k.y) + 9); cx.stroke();
         }
+        // el tramo final: aca ya podes soltar sin caerte
+        const suelta = Math.max(k.x0, k.x1 - SUELTA);
+        cx.fillStyle = `rgba(${C.esferaRGB},${sono ? 0.85 : 0.35})`;
+        cx.fillRect(px(suelta), py(k.y) - 4, (k.x1 - suelta) * esc, 3);
       }
     }
     // destellos de nota
