@@ -25,7 +25,7 @@ const dentroBajo = x => x > TUNEL_BAJO.x0 - 1.7 && x < TUNEL_BAJO.x1 - 0.3;
 // la mano sabia: palma el tunel bajo, deja el pulso trabajar bajo el techo
 // medio y sobre la plataforma, y toca SOLO los acentos que piden boost.
 // El resorte de la subida toca solo: no necesita tap.
-const ACENTOS = [8, 24, 26, 36];
+const ACENTOS = [8, 30, 40, 56];
 const enBeat = (b, a) => Math.abs(b - a) < DT / 2;
 const sabia = (s, b) => {
   s.sostiene = dentroBajo(s.x);
@@ -41,7 +41,7 @@ const terca = (s, b) => { if (enBeat(b, Math.round(b))) tocar(s, b); };
 // la mano apurada: juega bien pero boostea entrando al techo medio
 const apurada = (s, b) => {
   sabia(s, b);
-  if (enBeat(b, 28)) tocar(s, b);
+  if (enBeat(b, 32)) tocar(s, b);
 };
 
 const r1 = jugar(sabia);
