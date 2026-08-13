@@ -141,11 +141,20 @@ function compilar () {
     n.ligada = true; n.x1 = borde;
     sig.porCaida = true; sig.desde = n.f;
   }
+  // La entrada no empieza abajo en la red: empieza ARRIBA, en una plataforma a
+  // la altura de la primera nota, que al terminarse te lanza directo a ella. El
+  // primer gesto del juego pasa a ser tocar una nota, no trepar desde el piso.
+  const primera = notas.find(n => !n.silencio);
+  if (primera && notas[0].silencio && notas[0].i === 0) {
+    const p = notas[0];
+    p.piso = true; p.y = primera.y; p.x1 = primera.x0 - 0.6;
+  }
   return notas;
 }
 
 export const NOTAS = compilar();
 export const TOTAL_NOTAS = NOTAS.filter(n => !n.silencio).length;
+export const PISO = NOTAS[0] && NOTAS[0].piso ? NOTAS[0] : null;   // la plataforma de salida
 
 // --- el terreno, deducido de la cancion -------------------------------------
 
@@ -198,9 +207,9 @@ export const SECCIONES = [
 
 export function crearSim () {
   return {
-    x: 0, y: 0, vy: 0,
+    x: 0, y: PISO ? PISO.y : 0, vy: 0,
     estado: 'apoyada',      // 'apoyada' | 'aire'
-    tecla: -1,              // indice en NOTAS, o -1 = la red
+    tecla: PISO ? PISO.i : -1,   // indice en NOTAS, o -1 = la red
     viva: true, meta: false, causa: null,
     sostiene: false,
     saliendoDe: -1,         // tecla recien lanzada: no se puede volver a posar en ella
@@ -222,7 +231,7 @@ function despegar (s, dejando = null) {
   s.estado = 'aire'; s.tecla = -1;
   // sin esto, soltar un riel por el medio vuelve a posarse en el mismo riel
   if (dejando) s.saliendoDe = dejando.i;
-  s.coyote = dejando && !dejando.riel && !s.tocadas.has(dejando.i)
+  s.coyote = dejando && !dejando.riel && !dejando.silencio && !s.tocadas.has(dejando.i)
     ? { i: dejando.i, hasta: s.x + COYOTE } : null;
 }
 
@@ -230,7 +239,7 @@ function lanzar (s, desde) {
   const sig = NOTAS[desde.i + 1];
   s.estado = 'aire'; s.tecla = -1; s.saliendoDe = desde.i;
   // si saltaste sin haber sonado esta tecla, todavia la podes cobrar un ratito
-  s.coyote = !desde.riel && !s.tocadas.has(desde.i)
+  s.coyote = !desde.riel && !desde.silencio && !s.tocadas.has(desde.i)
     ? { i: desde.i, hasta: s.x + COYOTE } : null;
   if (!sig || sig.silencio) { s.vy = 0; return; }        // al silencio se cae solo
   // Se apunta al principio de la tecla siguiente; si se toco tarde y ya no da
@@ -271,7 +280,7 @@ function anotar (s, obj, dev, tipo, extra = {}) {
 // siempre es donde se cobra: un toque adelantado espera en la cola y se paga al
 // posarse, pero se juzga por el momento en que lo diste.
 function pulsar (s, k, xt = s.x) {
-  if (k.riel) return false;               // el riel se toca sosteniendo
+  if (k.riel || k.silencio) return false; // el riel se sostiene; la salida no suena
   const obj = queSuena(s, k);
   if (obj) anotar(s, obj, xt - obj.x0, 'nota');
   if (!k.escalera && !k.ligada) lanzar(s, k);   // de una ligada se sale cayendo
@@ -281,7 +290,7 @@ function pulsar (s, k, xt = s.x) {
 function posarse (s, yAntes) {
   let mejor = null, mejorY = -Infinity;
   for (const k of NOTAS) {
-    if (k.silencio || k.i === s.saliendoDe) continue;
+    if ((k.silencio && !k.piso) || k.i === s.saliendoDe) continue;
     if (s.x < k.x0 - TOL_BORDE || s.x > k.x1) continue;
     if (yAntes >= k.y - 1e-9 && s.y <= k.y && k.y > mejorY) { mejor = k; mejorY = k.y; }
   }
@@ -324,7 +333,10 @@ export function paso (s, dt) {
         if (k.riel) s.eventos.push({ tipo: 'rielCorta' });
         if (s.tocadas.has(k.i)) s.ligadaDe = k.i;   // solo se liga lo que sonaste
         s.vy = 0; despegar(s, k);
-      } else if (k.riel) { s.eventos.push({ tipo: 'rielCorta' }); lanzar(s, k); }
+      } else if (k.riel || k.piso) {          // el riel y la salida lanzan solos
+        if (k.riel) s.eventos.push({ tipo: 'rielCorta' });
+        lanzar(s, k);
+      }
       else if (k.escalera) { s.tecla = k.i + 1; s.y = NOTAS[s.tecla].y; }
       else despegar(s, k);
     }
@@ -405,6 +417,9 @@ export function tocar (s, b) {
   if (s.x < s.bloqueo) { s.eventos.push({ tipo: 'sordo' }); return; }
   const rafaga = s.x - s.ultimoToque < MARTILLO;
   s.ultimoToque = s.x;
+  // la plataforma de salida no es una nota: tocar ahi no suena ni cuenta
+  const bajo = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+  if (bajo && bajo.piso) { s.eventos.push({ tipo: 'aire' }); return; }
   if (aplicar(s)) return;
   // Martillar no es adelantarse. Un toque en falso pegado al anterior corta la
   // racha y deja el boton sordo. Sin esto se termina el nivel a puro spam: la
@@ -453,6 +468,7 @@ function arrancarNavegador () {
   let corriendo = false, finSonado = false;
 
   const estela = [], particulas = [], destellos = [], desvios = [];
+  const avisos = [], marcas = [];     // cuanto te corriste, dicho y dibujado
   let squash = 0, flash = 0, rielVoz = null;
 
   const ahora = () => ac ? (ac.currentTime - t0) / SPB : 0;
@@ -647,10 +663,24 @@ function arrancarNavegador () {
     });
   }
 
+  // Cada nota dice en el acto cuanto te corriste. Sin esto se juega a ciegas:
+  // suena mal, se ve bien, y no hay forma de saber para que lado corregir.
+  function aviso (e) {
+    const ms = Math.round(e.tarde * 600);
+    marcas.push({ d: e.tarde, t: performance.now() });
+    if (marcas.length > 16) marcas.shift();
+    const signo = ms > 0 ? '+' : '−';
+    avisos.push({
+      x: e.x, y: e.y, t: performance.now(), chueca: e.chueca,
+      txt: e.chueca ? `${ms > 0 ? 'TARDE' : 'ANTES'} ${signo}${Math.abs(ms)}`
+        : Math.abs(ms) <= 25 ? 'PERFECTO' : `${signo}${Math.abs(ms)}`
+    });
+  }
+
   function procesar () {
     for (const e of s.eventos) {
       if (e.tipo === 'nota') {
-        desvios.push(Math.abs(e.tarde) * 600);
+        desvios.push(Math.abs(e.tarde) * 600); aviso(e);
         lead(ac.currentTime, e.f, Math.max(0.22, 0.44 - Math.abs(e.tarde) * 0.4), 0.26, 0, e.chueca);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 3 : 7, true, e.chueca ? C.suciaRGB : C.teclaRGB);
@@ -661,7 +691,7 @@ function arrancarNavegador () {
         chispas(e.x, e.y, 5, false, e.chueca ? C.suciaRGB : C.teclaRGB);
         squash = 0.8;
       } else if (e.tipo === 'riel') {
-        rielAbrir(e.f, e.chueca);
+        rielAbrir(e.f, e.chueca); aviso(e);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 4 : 10, true, e.chueca ? C.suciaRGB : C.teclaRGB);
       } else if (e.tipo === 'falso') {
@@ -698,6 +728,8 @@ function arrancarNavegador () {
     proxBeat = 0;
     estela.length = 0;
     desvios.length = 0;
+    marcas.length = 0;
+    avisos.length = 0;
     flash = 1;
   }
 
@@ -834,31 +866,34 @@ function arrancarNavegador () {
     // como dos rayitas grises se leian como algo que hay que esquivar.
     for (const r of RESORTES) {
       if (r.x1 < s.x - 3 || r.x0 > s.x + 7) continue;
-      const a = s.resortesUsados.has(r.x) ? 0.22 : 1;
+      const a = s.resortesUsados.has(r.x) ? 0.18 : 0.55;
       const a0 = px(r.x0), a1 = px(r.x1), medio = (a0 + a1) / 2;
-      cx.fillStyle = `rgba(${C.impulsoRGB},${0.13 * a})`;
-      cx.fillRect(a0, py(0) - 7, a1 - a0, 7);
-      cx.strokeStyle = `rgba(${C.impulsoRGB},${0.9 * a})`; cx.lineWidth = 3;
+      cx.strokeStyle = `rgba(${C.impulsoRGB},${a})`; cx.lineWidth = 2.5;
       cx.beginPath(); cx.moveTo(a0, py(0)); cx.lineTo(a1, py(0)); cx.stroke();
-      const fase = (performance.now() / 520) % 1;
-      cx.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
-        const f = (fase + i / 3) % 1, yy = py(0) - 10 - f * 30, ancho = (a1 - a0) * 0.24;
-        cx.strokeStyle = `rgba(${C.impulsoRGB},${(1 - f) * 0.85 * a})`;
+      const fase = (performance.now() / 620) % 1;
+      cx.lineWidth = 1.5;
+      for (let i = 0; i < 2; i++) {
+        const f = (fase + i / 2) % 1, yy = py(0) - 8 - f * 18, ancho = (a1 - a0) * 0.18;
+        cx.strokeStyle = `rgba(${C.impulsoRGB},${(1 - f) * a})`;
         cx.beginPath();
-        cx.moveTo(medio - ancho, yy + 9); cx.lineTo(medio, yy); cx.lineTo(medio + ancho, yy + 9);
+        cx.moveTo(medio - ancho, yy + 7); cx.lineTo(medio, yy); cx.lineTo(medio + ancho, yy + 7);
         cx.stroke();
       }
-      if (a === 1) {                          // adonde te manda, dibujado
-        const k = NOTAS[r.destino];
-        cx.strokeStyle = `rgba(${C.impulsoRGB},0.32)`; cx.lineWidth = 1.5;
-        cx.setLineDash([3, 5]);
-        cx.beginPath();
-        cx.moveTo(px(r.x), py(0));
-        cx.quadraticCurveTo(px((r.x + k.x0) / 2), py(k.y * 1.4 + 0.08), px(k.x0), py(k.y));
-        cx.stroke();
-        cx.setLineDash([]);
-      }
+    }
+
+    // La linea del AHORA. La esfera esta siempre en el mismo punto de la
+    // pantalla, asi que esta linea es el presente: la nota se toca cuando su
+    // marca blanca la cruza. Sin esto no habia forma de saber donde apuntar.
+    cx.strokeStyle = 'rgba(232,230,224,0.20)'; cx.lineWidth = 1;
+    cx.beginPath(); cx.moveTo(px(s.x), 0); cx.lineTo(px(s.x), py(0) + 10); cx.stroke();
+
+    // la plataforma de salida: se empieza arriba, a la altura de la primera nota
+    if (PISO && PISO.x1 > s.x - 3 && PISO.x0 < s.x + 7) {
+      cx.fillStyle = 'rgba(232,230,224,0.22)';
+      cx.fillRect(px(PISO.x0), py(PISO.y), (PISO.x1 - PISO.x0) * esc, 5);
+      cx.fillStyle = C.tenue; cx.font = '12px system-ui'; cx.textAlign = 'right';
+      cx.fillText('salida', px(PISO.x1) - 6, py(PISO.y) - 8);
+      cx.textAlign = 'left';
     }
 
     // las teclas: la partitura
@@ -872,6 +907,15 @@ function arrancarNavegador () {
       if (limpia || aqui) { cx.shadowColor = limpia ? C.esfera : C.tecla; cx.shadowBlur = 12; }
       cx.fillRect(px(k.x0), py(k.y), Math.max(4, (k.x1 - k.x0) * esc), alto);
       cx.shadowBlur = 0;
+      // EL PUNTO EXACTO. La tecla entera es la ventana en la que la nota suena;
+      // esta marca es donde sale afinada. Son cosas distintas y hasta ahora solo
+      // se dibujaba la primera: se jugaba creyendo ir a tiempo y sonaba chueco.
+      if (!sono) {
+        cx.fillStyle = 'rgba(255,255,255,0.30)';
+        cx.fillRect(px(k.x0 - AFINADO), py(k.y) - 4, 2 * AFINADO * esc, 2);
+        cx.fillStyle = 'rgba(255,255,255,0.95)';
+        cx.fillRect(px(k.x0) - 1, py(k.y) - 13, 2, 13);
+      }
       if (k.ligada) {                             // el arco de ligadura: aca se cae
         const sig = NOTAS[k.i + 1];
         cx.strokeStyle = `rgba(${C.teclaRGB},${sono ? 0.75 : 0.4})`;
@@ -921,6 +965,16 @@ function arrancarNavegador () {
       cx.lineWidth = 2.5 * (1 - e);
       cx.beginPath(); cx.arc(px(d.x), py(d.y), (0.05 + e * 0.42) * esc, 0, Math.PI * 2); cx.stroke();
     }
+    // el aviso de cuanto te corriste, sobre la nota misma
+    cx.textAlign = 'center';
+    for (let i = avisos.length - 1; i >= 0; i--) {
+      const a = avisos[i], e = (performance.now() - a.t) / 750;
+      if (e > 1) { avisos.splice(i, 1); continue; }
+      cx.font = a.chueca ? 'bold 12px system-ui' : '12px system-ui';
+      cx.fillStyle = `rgba(${a.chueca ? C.suciaRGB : C.esferaRGB},${1 - e})`;
+      cx.fillText(a.txt, px(a.x), py(a.y) - 22 - e * 26);
+    }
+    cx.textAlign = 'left';
 
     // meta
     cx.strokeStyle = C.esfera; cx.lineWidth = 2;
@@ -979,6 +1033,7 @@ function arrancarNavegador () {
       cx.fillStyle = C.tenue; cx.font = '13px system-ui';
       [
         'cada tecla azul es una nota: tocala al pisarla',
+        'la marca blanca es el punto exacto: toca cuando cruza la linea',
         'a tiempo suena afinada; corrida suena chueca',
         'martillar el boton no sirve: se queda sordo',
         'las largas se MANTIENEN: el riel te lanza solo al final',
@@ -1012,6 +1067,27 @@ function arrancarNavegador () {
       }
       cx.fillStyle = C.tenue; cx.fillRect(w - 132, 16, 120, 4);
       cx.fillStyle = C.esfera; cx.fillRect(w - 132, 16, 120 * Math.min(1, s.x / LARGO), 4);
+
+      // El medidor: donde cayeron tus ultimos toques respecto del punto exacto.
+      // Una nota suelta corrida no se siente; diez marcas todas del mismo lado si.
+      if (!s.meta) {
+        const mw = 160, my = h - 24, RANGO = 0.33;      // el ancho son +-200 ms
+        const banda = (AFINADO / RANGO) * mw;
+        cx.fillStyle = C.tenue; cx.fillRect(w / 2 - mw / 2, my, mw, 2);
+        cx.fillStyle = `rgba(${C.esferaRGB},0.20)`;
+        cx.fillRect(w / 2 - banda / 2, my - 5, banda, 12);
+        cx.fillStyle = 'rgba(255,255,255,0.9)'; cx.fillRect(w / 2 - 1, my - 9, 2, 20);
+        for (const m of marcas) {
+          const v = Math.max(-1, Math.min(1, m.d / RANGO));
+          const vieja = Math.min(1, (performance.now() - m.t) / 4000);
+          cx.fillStyle = `rgba(${Math.abs(m.d) > AFINADO ? C.suciaRGB : C.esferaRGB},${0.9 - vieja * 0.6})`;
+          cx.fillRect(w / 2 + v * mw / 2 - 1, my - 6, 2, 14);
+        }
+        cx.fillStyle = C.tenue; cx.font = '10px system-ui'; cx.textAlign = 'center';
+        cx.fillText('antes', w / 2 - mw / 2 - 20, my + 5);
+        cx.fillText('tarde', w / 2 + mw / 2 + 20, my + 5);
+        cx.textAlign = 'left';
+      }
       if (s.meta) {
         dibujarMapa(w, h);                         // la cancion entera, de una mirada
         cx.textAlign = 'center'; cx.fillStyle = C.peligro; cx.font = '18px system-ui';

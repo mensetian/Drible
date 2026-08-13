@@ -6,7 +6,7 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, AFINADO, G
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, AFINADO, PISO, G
 } from './juego.js';
 
 const DT = 1 / 240;
@@ -24,7 +24,7 @@ function jugar (mano) {
 const perfecta = (s, b) => {
   const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
   s.sostiene = !!(k && k.riel);
-  if (k && !k.riel && !s.tocadas.has(k.i)) tocar(s, b);
+  if (k && !k.riel && !k.silencio && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
 // la mano muerta: nunca toca nada
@@ -38,7 +38,7 @@ const terca = (s, b) => { perfecta(s, b); if (s.x > T0.x0 + 0.3 && s.x < T0.x1 -
 const floja = (s, b) => {
   const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
   s.sostiene = !!(k && k.riel) && !HUECOS.some(h => s.x > h.x0 && s.x < h.x1);
-  if (k && !k.riel && !s.tocadas.has(k.i)) tocar(s, b);
+  if (k && !k.riel && !k.silencio && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
 // la mano humana: apunta a cada nota con un error de +-90 ms, muchas veces
@@ -72,7 +72,7 @@ const prepara = (s, b) => {
   const suelta = k && k.riel && s.x > k.x1 - SUELTA + 0.05;
   if (suelta && s.sostiene) soltar(s);
   else s.sostiene = !!(k && k.riel) && !suelta;
-  if (k && !k.riel && !s.tocadas.has(k.i)) tocar(s, b);
+  if (k && !k.riel && !k.silencio && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
 // el tramposo: martilla el boton sin mirar el ritmo (sostiene los rieles, que es
@@ -138,6 +138,12 @@ const pruebas = [
     Math.min(...NOTAS.filter(k => !k.silencio).map(k => k.y)) > 0.15, ''],
 
   // --- el nivel se puede tocar ---------------------------------------------
+  // se arranca arriba y el primer gesto es tocar una nota, no trepar desde la red
+  ['se empieza en la plataforma de salida, no en la red',
+    !!PISO && crearSim().y === PISO.y && crearSim().tecla === PISO.i,
+    PISO ? `y ${PISO.y.toFixed(3)} hasta x ${PISO.x1}` : 'no hay salida'],
+  ['la salida esta a la altura de la primera nota y la lanza a ella',
+    !!PISO && PISO.y === NOTAS[PISO.i + 1].y && PISO.x1 < NOTAS[PISO.i + 1].x0, ''],
   ['la mano perfecta llega a la meta', rp.meta,
     `x ${rp.x.toFixed(2)} causa ${rp.causa || '-'}`],
   ['...y suena la melodia COMPLETA', rp.tocadas.size === TOTAL_NOTAS,
