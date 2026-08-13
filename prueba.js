@@ -34,10 +34,10 @@ const muerta = () => {};
 const T0 = TECHOS[0];
 const terca = (s, b) => { perfecta(s, b); if (s.x > T0.x0 + 0.3 && s.x < T0.x1 - 0.3) tocar(s, b); };
 
-// la mano floja: juega bien pero suelta los rieles
+// la mano floja: juega bien pero suelta el riel justo sobre el abismo
 const floja = (s, b) => {
   const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
-  s.sostiene = false;
+  s.sostiene = !!(k && k.riel) && !HUECOS.some(h => s.x > h.x0 && s.x < h.x1);
   if (k && !k.riel && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
@@ -98,6 +98,13 @@ const pruebas = [
     estrechas.map(k => `${k.nombre}@${k.b}:${(k.x1 - k.x0).toFixed(3)}`).join(' ')],
   ['todo salto llega cayendo a la tecla siguiente', !inalcanzables.length,
     inalcanzables.map(k => k.nombre + '@' + k.b).join(' ')],
+  ['hay ligaduras: notas que se tocan dejandose caer',
+    NOTAS.filter(k => k.porCaida).length >= 4,
+    NOTAS.filter(k => k.porCaida).map(k => k.nombre + '@' + k.b).join(' ')],
+  ['toda ligadura tiene ventana para atacar la primera nota',
+    NOTAS.filter(k => k.ligada).every(k => k.x1 - k.x0 >= 0.14), ''],
+  ['una ligadura NO suena si no sonaste la nota de la que cuelga',
+    NOTAS.filter(k => k.porCaida).every(k => !rm.tocadas.has(k.i)), ''],
   ['hay rieles, escaleras y saltos (tres figuras, no una)',
     NOTAS.some(k => k.riel) && NOTAS.some(k => k.escalera) && saltos.length > 30,
     `rieles ${NOTAS.filter(k => k.riel).length} · escalones ${NOTAS.filter(k => k.escalera).length} · saltos ${saltos.length}`],
