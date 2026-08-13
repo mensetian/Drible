@@ -24,7 +24,7 @@ function jugar (mano) {
 const perfecta = (s, b) => {
   const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
   s.sostiene = !!(k && k.riel);
-  if (k && !k.riel && !k.silencio && !s.tocadas.has(k.i)) tocar(s, b);
+  if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
 // la mano muerta: nunca toca nada
@@ -38,14 +38,14 @@ const terca = (s, b) => { perfecta(s, b); if (s.x > T0.x0 + 0.3 && s.x < T0.x1 -
 const floja = (s, b) => {
   const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
   s.sostiene = !!(k && k.riel) && !HUECOS.some(h => s.x > h.x0 && s.x < h.x1);
-  if (k && !k.riel && !k.silencio && !s.tocadas.has(k.i)) tocar(s, b);
+  if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
 // la mano humana: apunta a cada nota con un error de +-90 ms, muchas veces
 // tocando en el aire antes de posarse. Es la que decide si el juego es jugable.
 function humana (amplitud) {
   const objetivos = NOTAS.filter(k => !k.silencio && !k.riel)
-    .map((k, n) => k.x0 + (((n * 7919) % 31) / 30 - 0.5) * 2 * amplitud);
+    .map((k, n) => k.xm + (((n * 7919) % 31) / 30 - 0.5) * 2 * amplitud);
   let j = 0;
   return (s, b) => {
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
@@ -56,7 +56,7 @@ function humana (amplitud) {
 
 // el principiante todavia no siente el mapa: toca sistematicamente corrido
 const corrida = ms => {
-  const objetivos = NOTAS.filter(k => !k.silencio && !k.riel).map(k => k.x0 + ms / 600);
+  const objetivos = NOTAS.filter(k => !k.silencio && !k.riel).map(k => k.xm + ms / 600);
   let j = 0;
   return (s, b) => {
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
@@ -72,7 +72,7 @@ const prepara = (s, b) => {
   const suelta = k && k.riel && s.x > k.x1 - SUELTA + 0.05;
   if (suelta && s.sostiene) soltar(s);
   else s.sostiene = !!(k && k.riel) && !suelta;
-  if (k && !k.riel && !k.silencio && !s.tocadas.has(k.i)) tocar(s, b);
+  if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
 // el tramposo: martilla el boton sin mirar el ritmo (sostiene los rieles, que es
@@ -116,6 +116,13 @@ const inalcanzables = saltos.filter(k => {
   return k.x1 + vueloMinimo(sig.y - k.y) > sig.x1 - 0.05 + 1e-9;
 });
 
+const malCentradas = NOTAS.filter(k => !k.silencio &&
+  (k.xm <= k.x0 + 0.03 || k.xm >= k.x1 - 0.03));
+// las que se entran rodando (carreras, y la que sigue a una) no aterrizan: no
+// necesitan tramo de rodada porque nunca dejaron de rodar
+const sinRodada = NOTAS.filter(k => !k.silencio && !k.escalera &&
+  !(NOTAS[k.i - 1] && NOTAS[k.i - 1].dur <= 0.25));
+
 const pruebas = [
   ['cada compas suma exactamente 4 tiempos', !compasesMal.length,
     compasesMal.map(([i, n]) => `c${i}=${n}`).join(' ')],
@@ -125,6 +132,12 @@ const pruebas = [
     estrechas.map(k => `${k.nombre}@${k.b}:${(k.x1 - k.x0).toFixed(3)}`).join(' ')],
   ['todo salto llega cayendo a la tecla siguiente', !inalcanzables.length,
     inalcanzables.map(k => k.nombre + '@' + k.b).join(' ')],
+  // El punto afinado no puede caer en el canto de la plataforma: ahi aterrizar
+  // y golpear son el mismo instante, y eso no es tocar, es adivinar.
+  ['el punto exacto cae adentro de la plataforma, no en el canto',
+    !malCentradas.length, malCentradas.map(k => `${k.nombre}@${k.b}`).join(' ')],
+  ['hay tramo para rodar antes de golpear', sinRodada.every(k => k.xm - k.x0 >= 0.12),
+    `${Math.min(...sinRodada.map(k => k.xm - k.x0)).toFixed(3)} el mas corto`],
   ['hay ligaduras: notas que se tocan dejandose caer',
     NOTAS.filter(k => k.porCaida).length >= 4,
     NOTAS.filter(k => k.porCaida).map(k => k.nombre + '@' + k.b).join(' ')],

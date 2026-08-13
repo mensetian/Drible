@@ -99,6 +99,9 @@ export const CASTIGO = 0.35;    // un toque en falso te deja sordo un rato
 // canto la esfera pasa de largo por medio paso de integracion.
 const MIRA = 0.05;
 const TOL_BORDE = 0.03;
+// Cuanto empieza la plataforma ANTES del pulso: el tramo que se rueda entre
+// aterrizar y golpear. Sin el, aterrizar y tocar son el mismo instante.
+export const ANTES = 0.22;
 
 function compilar () {
   const notas = [];
@@ -112,10 +115,23 @@ function compilar () {
         i: notas.length, b, dur, nombre, silencio,
         f: silencio ? 0 : frecuencia(nombre),
         y: silencio ? 0 : alturaDe(nombre),
+        xm: b,                 // el punto exacto: el pulso. Aca la nota sale afinada.
         x0: b, x1: b + dur
       });
       b += dur;
     }
+  }
+  // LA PLATAFORMA EMPIEZA ANTES DEL PULSO. Si arranca justo en el pulso, se
+  // aterriza sobre el canto y hay que golpear en el mismo instante en que se
+  // toca la tecla: eso no es tocar, es adivinar. Corriendola para atras se
+  // aterriza, se rueda un poco, y se golpea al cruzar la marca -- que es lo que
+  // hace la mano con un instrumento de verdad.
+  for (const n of notas) {
+    const ant = notas[n.i - 1];
+    if (n.silencio || !ant) continue;
+    // despues de un silencio sobra lugar: la rodada entera
+    const hueco = ant.silencio ? Infinity : n.b - ant.b;
+    n.x0 = n.xm - Math.min(ANTES, hueco * 0.35);
   }
   // ancho de cada tecla = ventana de tiempo, recortada para que el vuelo alcance
   for (const n of notas) {
@@ -154,10 +170,18 @@ function compilar () {
     if (n.escalera || sig.escalera) continue;
     if (n.dur < 1 || sig.dur > 0.5 || sig.y >= n.y) continue;
     const caida = Math.sqrt(2 * (n.y - sig.y) / G);
-    const borde = sig.x0 + MIRA - caida;
+    const borde = sig.xm - caida;                        // la caida cae en el pulso
     if (borde < n.x0 + 0.14) continue;                   // sin ventana no hay ligadura
-    n.ligada = true; n.x1 = borde;
+    // nunca mas alla del borde de la que sigue: si la caida es mas corta que el
+    // tramo de rodada, se sale igual al final de la tecla y se cae adentro
+    n.ligada = true; n.x1 = Math.min(borde, sig.x0);
     sig.porCaida = true; sig.desde = n.f;
+  }
+  // Correr las plataformas para atras puede hacer que una tecla pise a la que
+  // sigue: ninguna puede pasar del borde de la proxima.
+  for (const n of notas) {
+    const sig = notas[n.i + 1];
+    if (sig) n.x1 = Math.min(n.x1, sig.x0);
   }
   // La entrada no empieza abajo en la red: empieza ARRIBA, en una plataforma a
   // la altura de la primera nota, que al terminarse te lanza directo a ella. El
@@ -186,16 +210,26 @@ export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
 
 // Techo sobre el silencio largo: ahi tocar mata. Se corta antes del final para
 // que el resorte de reenganche quede libre y se pueda volver a subir.
-// Empieza recien cuando la esfera ya toco la red: si arranca antes, la mata
-// mientras todavia esta cayendo desde la ultima nota, sin haber hecho nada.
+// Donde vuelve a subir despues de un silencio: lo mas tarde posible que todavia
+// alcanza a llegar a la nota que sigue. Sale de la partitura, asi que mover una
+// nota mueve el resorte con ella.
+function reenganche (n) {
+  const sig = NOTAS[n.i + 1];
+  if (!sig || sig.silencio) return null;
+  return +(sig.x0 - vueloMinimo(sig.y) - 0.2).toFixed(3);
+}
+
+// Empieza recien cuando la esfera ya toco la red --antes la mataria mientras
+// todavia cae de la ultima nota, sin haber hecho nada-- y termina antes del
+// reenganche, para que quede lugar para volver a subir.
 export const TECHOS = NOTAS
-  .filter(n => n.silencio && !n.piso && n.dur >= 2)
+  .filter(n => n.silencio && !n.piso && n.dur >= 2 && reenganche(n))
   .map(n => {
     const ant = NOTAS[n.i - 1];
     const caida = ant && !ant.silencio ? Math.sqrt(2 * ant.y / G) : 0.4;
     return {
       x0: +(n.x0 + caida + 0.25).toFixed(3),
-      x1: +(n.x0 + n.dur - 1.4).toFixed(3),
+      x1: +(reenganche(n) - 0.35).toFixed(3),
       y: 0.19
     };
   });
@@ -211,7 +245,7 @@ function resortes () {
   const r = [];
   const enSilencio = x => NOTAS.some(n => n.silencio && x >= n.x0 && x < n.x0 + n.dur);
   const candidatos = [];
-  for (const n of NOTAS) if (n.silencio) candidatos.push(n.x0 + n.dur - 1.1);   // reenganche
+  for (const n of NOTAS) if (n.silencio && reenganche(n)) candidatos.push(reenganche(n));
   for (let x = 4; x < LARGO - 4; x += 4) if (!enSilencio(x)) candidatos.push(x); // rescate
   for (const x of candidatos) {
     if (enHueco(x - RESORTE_ANTES) || enHueco(x + RESORTE_DESPUES)) continue;
@@ -312,7 +346,7 @@ function anotar (s, obj, dev, tipo, extra = {}) {
 function pulsar (s, k, xt = s.x) {
   if (k.riel || k.silencio) return false; // el riel se sostiene; la salida no suena
   const obj = queSuena(s, k);
-  if (obj) anotar(s, obj, xt - obj.x0, 'nota');
+  if (obj) anotar(s, obj, xt - obj.xm, 'nota');
   if (!k.escalera && !k.ligada) lanzar(s, k);   // de una ligada se sale cayendo
   return !!obj;
 }
@@ -332,7 +366,7 @@ function posarse (s, yAntes) {
     if (mejor.porCaida && s.ligadaDe === mejor.i - 1) {
       s.ligadaDe = -1;
       // la ligadura la toca la caida, no la mano: sale afinada por geometria
-      if (!s.tocadas.has(mejor.i)) anotar(s, mejor, s.x - mejor.x0, 'ligada', { desde: mejor.desde });
+      if (!s.tocadas.has(mejor.i)) anotar(s, mejor, s.x - mejor.xm, 'ligada', { desde: mejor.desde });
       lanzar(s, mejor);
       return;
     }
@@ -354,7 +388,8 @@ export function paso (s, dt) {
     const k = NOTAS[s.tecla];
     s.y = k.y;
     // agarrar el riel tarde tambien desafina: la nota larga entra corrida
-    if (k.riel && s.sostiene && !s.tocadas.has(k.i)) anotar(s, k, s.x - k.x0, 'riel', { hasta: k.x1 });
+    if (k.riel && s.sostiene && s.x >= k.xm && !s.tocadas.has(k.i))
+      anotar(s, k, s.x - k.xm, 'riel', { hasta: k.x1 });
     if (k.riel && !s.sostiene && s.x > k.x0 + GRACIA_RIEL && s.x < k.x1 - SUELTA) {
       if (s.tocadas.has(k.i)) s.eventos.push({ tipo: 'rielCorta' });
       despegar(s, k);
@@ -1009,9 +1044,9 @@ function arrancarNavegador () {
       // se dibujaba la primera: se jugaba creyendo ir a tiempo y sonaba chueco.
       if (!sono) {
         cx.fillStyle = 'rgba(255,255,255,0.30)';
-        cx.fillRect(px(k.x0 - AFINADO), py(k.y) - 4, 2 * AFINADO * esc, 2);
+        cx.fillRect(px(k.xm - AFINADO), py(k.y) - 4, 2 * AFINADO * esc, 2);
         cx.fillStyle = 'rgba(255,255,255,0.95)';
-        cx.fillRect(px(k.x0) - 1, py(k.y) - 13, 2, 13);
+        cx.fillRect(px(k.xm) - 1, py(k.y) - 13, 2, 13);
       }
       if (k.ligada) {                             // el arco de ligadura: aca se cae
         const sig = NOTAS[k.i + 1];
@@ -1130,7 +1165,7 @@ function arrancarNavegador () {
       cx.fillStyle = C.tenue; cx.font = '13px system-ui';
       [
         'cada tecla azul es una nota: tocala al pisarla',
-        'la marca blanca es el punto exacto: toca cuando cruza la linea',
+        'caes ANTES de la marca blanca: roda, y golpea al cruzar la linea',
         'a tiempo suena afinada; corrida suena chueca',
         'martillar el boton no sirve: se queda sordo',
         'las largas se MANTIENEN: el riel te lanza solo al final',
