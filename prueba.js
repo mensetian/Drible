@@ -1,69 +1,99 @@
-// Prueba del prototipo: el tramo de juguete tiene que ser superable con los
-// verbos escritos, y cada obstaculo tiene que matar exactamente a quien dice
-// matar -- incluido el techo medio, que castiga TOCAR de mas.
+// El nivel se compila desde la cancion, asi que las pruebas validan DOS cosas:
+// que la partitura este bien escrita (compases de 4, saltos alcanzables) y que
+// el nivel resultante se pueda tocar entero con los verbos que promete.
 //
 //   node drible/prueba.js
 
-import { crearSim, paso, tocar, LARGO, HUECOS, PINCHOS, TUNELES, CAMPANAS, PLATAFORMAS } from './juego.js';
+import {
+  crearSim, paso, tocar, vueloMinimo,
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, G
+} from './juego.js';
 
 const DT = 1 / 240;
 
-// juega con una estrategia: f(sim, beat) puede tocar o sostener
-function jugar (estrategia) {
+function jugar (mano) {
   const s = crearSim();
   for (let b = 0; b < LARGO + 2 && s.viva && !s.meta; b += DT) {
-    estrategia(s, b);
+    mano(s, b);
     paso(s, DT);
   }
   return s;
 }
 
-const TUNEL_BAJO = TUNELES[0];        // 0.19: pide rodar
-const TECHO_MEDIO = TUNELES[1];       // 0.30: pide pulso (no tocar)
-const dentroBajo = x => x > TUNEL_BAJO.x0 - 1.7 && x < TUNEL_BAJO.x1 - 0.3;
-
-// la mano sabia: palma el tunel bajo, deja el pulso trabajar bajo el techo
-// medio y sobre la plataforma, y toca SOLO los acentos que piden boost.
-// El resorte de la subida toca solo: no necesita tap.
-const ACENTOS = [8, 30, 40, 56];
-const enBeat = (b, a) => Math.abs(b - a) < DT / 2;
-const sabia = (s, b) => {
-  s.sostiene = dentroBajo(s.x);
-  if (!s.sostiene && ACENTOS.some(a => enBeat(b, a))) tocar(s, b);
+// la mano perfecta: toca cada tecla apenas la pisa, sostiene los rieles
+const perfecta = (s, b) => {
+  const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+  s.sostiene = !!(k && k.riel);
+  if (k && !k.riel && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
-// la mano muerta: no toca nada nunca
+// la mano muerta: nunca toca nada
 const muerta = () => {};
 
-// la mano terca: toca en TODOS los beats, nunca palmea
-const terca = (s, b) => { if (enBeat(b, Math.round(b))) tocar(s, b); };
+// la mano terca: juega bien pero no aguanta el silencio y toca bajo el techo
+const T0 = TECHOS[0];
+const terca = (s, b) => { perfecta(s, b); if (s.x > T0.x0 + 0.3 && s.x < T0.x1 - 0.3) tocar(s, b); };
 
-// la mano apurada: juega bien pero boostea entrando al techo medio
-const apurada = (s, b) => {
-  sabia(s, b);
-  if (enBeat(b, 32)) tocar(s, b);
+// la mano floja: juega bien pero suelta los rieles
+const floja = (s, b) => {
+  const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+  s.sostiene = false;
+  if (k && !k.riel && !s.tocadas.has(k.i)) tocar(s, b);
 };
 
-const r1 = jugar(sabia);
-const r2 = jugar(muerta);
-const r3 = jugar(terca);
-const r4 = jugar(apurada);
+const rp = jugar(perfecta);
+const rm = jugar(muerta);
+const rt = jugar(terca);
+const rf = jugar(floja);
+
+// --- la partitura ------------------------------------------------------------
+
+const compasesMal = CANCION.map((c, i) => [i, c.trim().split(/\s+/)
+  .reduce((a, t) => a + parseFloat(t.split(':')[1]), 0)]).filter(([, n]) => Math.abs(n - 4) > 1e-9);
+
+const saltos = NOTAS.filter(k => !k.silencio && !k.escalera && !k.riel);
+const estrechas = saltos.filter(k => k.x1 - k.x0 < 0.09);
+const solapadas = NOTAS.filter((k, i) => NOTAS[i + 1] && k.x1 > NOTAS[i + 1].x0 + 1e-9);
+
+// cada salto tiene que llegar CAYENDO a la tecla siguiente, si no la atraviesa
+const inalcanzables = saltos.filter(k => {
+  const sig = NOTAS[k.i + 1];
+  if (!sig || sig.silencio) return false;
+  return sig.x0 - k.x1 < vueloMinimo(sig.y - k.y) - 1e-9;
+});
 
 const pruebas = [
-  ['la mano sabia llega a la meta', r1.meta, `x ${r1.x.toFixed(2)} causa ${r1.causa || '-'}`],
-  ['y toca TODAS las campanas (pulso abajo, pulso en la plataforma)',
-    r1.tocadas.size === CAMPANAS.length, `${r1.tocadas.size}/${CAMPANAS.length}`],
-  ['no hacer nada muere en el primer hueco', !r2.viva && r2.causa === 'hueco' && r2.x < HUECOS[0].x1 + 0.5,
-    `x ${r2.x.toFixed(2)} causa ${r2.causa || 'sigue viva'}`],
-  ['tocar siempre muere en el tunel bajo', !r3.viva && r3.causa === 'tunel' && r3.x < TUNEL_BAJO.x1,
-    `x ${r3.x.toFixed(2)} causa ${r3.causa || 'sigue viva'}`],
-  ['boostear bajo el techo medio mata (a medio tiempo NO se toca)',
-    !r4.viva && r4.causa === 'tunel' && r4.x > TECHO_MEDIO.x0,
-    `x ${r4.x.toFixed(2)} causa ${r4.causa || 'sigue viva'}`],
-  ['los pinchos estan a medio beat (apex del pulso)', PINCHOS.every(p => Math.abs(p.x % 1 - 0.5) < 1e-9), ''],
-  ['la meta queda despues del ultimo obstaculo',
-    LARGO > Math.max(...HUECOS.map(h => h.x1), ...PINCHOS.map(p => p.x),
-      ...TUNELES.map(t => t.x1), ...PLATAFORMAS.map(p => p.x1)), '']
+  ['cada compas suma exactamente 4 tiempos', !compasesMal.length,
+    compasesMal.map(([i, n]) => `c${i}=${n}`).join(' ')],
+  ['ninguna tecla se solapa con la siguiente', !solapadas.length,
+    solapadas.map(k => k.nombre + '@' + k.b).join(' ')],
+  ['toda ventana de salto es jugable (>= 0.09 tiempos)', !estrechas.length,
+    estrechas.map(k => `${k.nombre}@${k.b}:${(k.x1 - k.x0).toFixed(3)}`).join(' ')],
+  ['todo salto llega cayendo a la tecla siguiente', !inalcanzables.length,
+    inalcanzables.map(k => k.nombre + '@' + k.b).join(' ')],
+  ['hay rieles, escaleras y saltos (tres figuras, no una)',
+    NOTAS.some(k => k.riel) && NOTAS.some(k => k.escalera) && saltos.length > 30,
+    `rieles ${NOTAS.filter(k => k.riel).length} · escalones ${NOTAS.filter(k => k.escalera).length} · saltos ${saltos.length}`],
+  ['el mapa sube y baja de verdad (rango > medio octava)',
+    Math.max(...NOTAS.filter(k => !k.silencio).map(k => k.y)) -
+    Math.min(...NOTAS.filter(k => !k.silencio).map(k => k.y)) > 0.15, ''],
+
+  // --- el nivel se puede tocar ---------------------------------------------
+  ['la mano perfecta llega a la meta', rp.meta,
+    `x ${rp.x.toFixed(2)} causa ${rp.causa || '-'}`],
+  ['...y suena la melodia COMPLETA', rp.tocadas.size === TOTAL_NOTAS,
+    `${rp.tocadas.size}/${TOTAL_NOTAS}`],
+  ['no tocar nada no suena ninguna nota', rm.tocadas.size === 0,
+    `${rm.tocadas.size} notas, x ${rm.x.toFixed(2)}`],
+  ['tocar de mas mata bajo el techo del silencio',
+    !rt.viva && rt.causa === 'techo', `x ${rt.x.toFixed(2)} causa ${rt.causa || 'sigue viva'}`],
+  ['soltar el riel sobre el abismo mata',
+    !rf.viva && rf.causa === 'hueco' && HUECOS.some(h => rf.x > h.x0 && rf.x < h.x1 + 1),
+    `x ${rf.x.toFixed(2)} causa ${rf.causa || 'sigue viva'}`],
+  ['la red rescata: hay resortes repartidos', RESORTES.length >= 8, `${RESORTES.length}`],
+  ['ningun resorte queda bajo un techo o sobre un abismo',
+    RESORTES.every(r => !HUECOS.some(h => r.x > h.x0 && r.x < h.x1) &&
+      !TECHOS.some(t => r.x > t.x0 && r.x < t.x1)), '']
 ];
 
 let fallas = 0;
@@ -71,4 +101,5 @@ for (const [n, ok, det] of pruebas) {
   if (!ok) fallas++;
   console.log(`${ok ? '  ok  ' : ' FALLA'}  ${n}${det ? `   (${det})` : ''}`);
 }
+console.log(`\n${TOTAL_NOTAS} notas en ${LARGO} tiempos · ${(LARGO * 60 / 100).toFixed(0)}s`);
 process.exit(fallas ? 1 : 0);

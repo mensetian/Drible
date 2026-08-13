@@ -1,216 +1,267 @@
 // ---------------------------------------------------------------------------
-// DRIBLE — prototipo. La pregunta ahora es: ¿se siente como un JUEGO?
+// DRIBLE — el mapa ES la partitura.
 //
-// La bola rebota SOLA al beat (el pulso, gratis: es tu metronomo). El jugador
-// toca los ACENTOS:
+// Idea, en una linea: la esfera no rebota sola nunca. Cada nota de la melodia
+// es una TECLA fisica flotando a la altura de su tono; pisarla y tocar hace
+// sonar la nota Y te lanza exactamente hasta la siguiente. Vos elegis CUANDO,
+// nunca CUANTO: el impulso lo calcula la geometria.
 //
-//   nada                  -> rebote de 1 beat, eterno (el pulso)
-//   TOQUE en el contacto  -> rebote GRANDE de 2 beats (huecos anchos, subidas)
-//   MANTENER              -> palmea la pelota: mata el rebote, pasa a rodar
+//   altura de la tecla   = tono de la nota
+//   distancia entre teclas = figura ritmica (corchea = salto corto y frenetico,
+//                            semicorchea = escalon pegado, blanca = riel)
+//   ancho de la tecla    = ventana de tiempo (la geometria juzga, no un reloj)
 //
-// Nadie juzga el ritmo con un reloj: lo juzga la geometria. Tocar de menos
-// mata (hueco) y tocar de mas tambien (techo medio). El pulso eterno esta en
-// duda (Seba, 12-ago): si en la practica se siente pasivo, la perilla es
-// agregarle restitucion — pero primero probar con la cancion densa.
+// Verbos: TOCAR sobre una tecla = sonar la nota + saltar a la proxima.
+//         MANTENER sobre un riel = nota larga (si soltas, te caes).
+//         NO TOCAR bajo un techo = el silencio del compas.
 //
-// La cancion es UNA (Am-F-C-G, 16 compases) y el nivel es su coreografia:
-// cada seccion musical pide un verbo distinto. Los instrumentos viven en el
-// mapa: pads = bombo, resortes = bajo, campanas = melodia. La base nunca se
-// calla como castigo: jugar mal suena incompleto, nunca roto.
+// Si fallas una nota te caes a la RED. No morir, pero la melodia queda con un
+// hueco (se oye) y perdes hasta el proximo resorte de rescate. Sobre los
+// abismos no hay red: ahi el riel se paga con la vida.
+//
+// Corre en node (solo simulacion) y en el navegador (render + audio).
 // ---------------------------------------------------------------------------
 
 export const BPM = 100;
 export const SPB = 60 / BPM;
+export const G = 1.24;              // gravedad, en unidades de beat
+export const R = 0.055;             // radio de la esfera
+export const PASO_TONO = 0.024;     // cuanto sube el mapa por semitono
+export const Y_GRAVE = 0.26;        // altura de la nota mas grave (E4)
+export const GRACIA_RIEL = 0.18;    // margen para agarrarse al riel
+export const CAIDA_MUERTE = -0.35;
 
-export const G = 1.24;            // la misma gravedad del juego grande
-export const V_LLENO = G / 2;     // rebote de 1 beat exacto: apex 0.155
-export const V_BOOST = G;         // el toque: rebote de 2 beats, apex 0.62
-export const R = 0.055;           // radio de la esfera
-export const VENTANA = 0.22;      // beats: cuan antes puede llegar el toque
-export const CAIDA_MUERTE = -0.45;
+// --- la cancion ------------------------------------------------------------
+// Un compas por linea, "nota:figura" separados por espacio. "-" es silencio.
+// Am F C G. El compas 0 es la entrada: cuatro tiempos de bateria sola.
 
-// --- el tramo: 16 compases de 4 beats ---------------------------------------
-// compas 1-2 intro · 3-6 groove · 7-8 calma (rodar) · 9-10 pulso (no tocar)
-// 11 subida · 12-13 cima (plataforma) · 14 groove · 15 drop · 16 salida
-
-export const LARGO = 64;
-
-export const HUECOS = [           // mas anchos que el pulso: piden boost
-  { x0: 8.08, x1: 9.92 },
-  { x0: 56.08, x1: 57.92 }
+export const CANCION = [
+  '-:4',                                                             //  0  entrada
+  'E4:1 A4:1 C5:.5 B4:.5 A4:1',                                      //  1  Am  tema
+  'F4:1 A4:1 C5:1 A4:1',                                             //  2  F
+  'G4:1 C5:1 E5:.5 D5:.5 C5:1',                                      //  3  C
+  'D5:1 B4:.5 A4:.5 G4:2',                                           //  4  G   primer riel
+  'E4:1 A4:1 C5:.5 B4:.5 C5:1',                                      //  5  Am
+  'F5:.5 E5:.5 C5:1 A4:2',                                           //  6  F   riel sobre abismo
+  '-:4',                                                             //  7  C   SILENCIO: rodar
+  'G4:.5 G4:.5 G4:.5 G4:.5 A4:1 B4:1',                               //  8  G   puro ritmo
+  'A4:1 C5:1 E5:1 A5:1',                                             //  9  Am  arpegio que trepa
+  'G5:.5 F5:.5 E5:.5 C5:.5 A4:2',                                    // 10  F   riel sobre abismo
+  'C5:.25 D5:.25 E5:.25 F5:.25 G5:.25 A5:.25 G5:.25 E5:.25 C5:1 E5:1', // 11 C  frenesi
+  'B4:.25 C5:.25 D5:.25 E5:.25 F5:.25 G5:.25 A5:.25 B5:.25 D5:2',    // 12  G   escalera + riel
+  'A5:2 G5:1 E5:1',                                                  // 13  Am  la cima
+  'F5:1 E5:1 C5:2',                                                  // 14  F
+  'E5:.5 C5:.5 G4:1 E4:1 G4:1',                                      // 15  C   descenso
+  'D5:.5 B4:.5 G4:1 A4:2'                                            // 16  G   final
 ];
 
-export const PINCHOS = [          // se pasan por arriba, con el pulso alcanza
-  { x: 12.5, w: 0.16, h: 0.09 },
-  { x: 18.5, w: 0.16, h: 0.09 },
-  { x: 59.5, w: 0.16, h: 0.09 }
-];
+export const LARGO = CANCION.length * 4;
 
-// Dos alturas de techo = dos verbos prohibidos:
-//   0.19 -> ni el pulso entra: hay que PALMAR y pasar rodando (la calma)
-//   0.30 -> el pulso pasa justo, el boost NO: prohibido tocar (medio tiempo)
-export const TUNELES = [
-  { x0: 24.5, x1: 29.5, techo: 0.19 },
-  { x0: 32.5, x1: 39.5, techo: 0.30 }
-];
+// --- compilador: de la cancion al mapa --------------------------------------
 
-export const PLATAFORMAS = [      // piso elevado de una via: la cima del tema
-  { x0: 44, x1: 48, y: 0.465 }
-];
+const SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const semitono = n => SEMI[n[0]] + (+n.slice(1) + 1) * 12;
+const frecuencia = n => 440 * Math.pow(2, (semitono(n) - 69) / 12);
+const alturaDe = n => Y_GRAVE + (semitono(n) - semitono('E4')) * PASO_TONO;
 
-export const PADS = [             // parches en el piso: pisarlos suena a bombo
-  { x: 2 }, { x: 4 }, { x: 6 }, { x: 10 }, { x: 12 }, { x: 20 }, { x: 22 }
-];
+// Tiempo minimo de vuelo para llegar a +dy CAYENDO (no subiendo): si llegas
+// todavia subiendo atravesas la tecla por abajo y la perdes.
+export function vueloMinimo (dy) {
+  return dy > 0 ? Math.sqrt(2 * dy / G) * 1.15 + 0.03 : 0.06;
+}
 
-export const RESORTES = [         // te lanzan 2 beats Y tocan el bajo
-  { x: 14 }, { x: 16 },
-  { x: 43 }                       // este te SUBE a la plataforma
-];
-export const V_RESORTE = G;
+function compilar () {
+  const notas = [];
+  let b = 0;
+  for (const compas of CANCION) {
+    for (const tok of compas.trim().split(/\s+/)) {
+      const [nombre, fig] = tok.split(':');
+      const dur = parseFloat(fig);
+      const silencio = nombre === '-';
+      notas.push({
+        i: notas.length, b, dur, nombre, silencio,
+        f: silencio ? 0 : frecuencia(nombre),
+        y: silencio ? 0 : alturaDe(nombre),
+        x0: b, x1: b + dur
+      });
+      b += dur;
+    }
+  }
+  // ancho de cada tecla = ventana de tiempo, recortada para que el vuelo alcance
+  for (const n of notas) {
+    const sig = notas[n.i + 1];
+    if (n.silencio) continue;
+    n.riel = n.dur >= 1.5;
+    n.escalera = !n.riel && n.dur <= 0.25 && sig && !sig.silencio &&
+                 Math.abs(sig.y - n.y) <= 3 * PASO_TONO;
+    const tv = sig && !sig.silencio ? vueloMinimo(sig.y - n.y) : 0.03;
+    const tope = sig ? sig.x0 - tv : n.b + n.dur;
+    if (n.escalera) n.x1 = sig.x0;                       // pegadas: se rueda
+    else if (n.riel) n.x1 = Math.max(n.b + 0.4, tope);   // se suelta al final
+    else n.x1 = Math.min(n.b + Math.min(0.34, n.dur * 0.6), tope);
+  }
+  return notas;
+}
 
-// Campanas = la melodia, colgada en el mapa. Notas del acorde del compas en
-// que suenan: no hay forma de tocarlas mal.
-export const CAMPANAS = [
-  // bajo el techo medio, a la altura del pulso: se tocan NO tocando
-  { x: 33.5, y: 0.21, f: 329.63 },
-  { x: 34.5, y: 0.21, f: 440 },
-  { x: 35.5, y: 0.21, f: 523.25 },
-  { x: 36.5, y: 0.21, f: 440 },
-  // sobre la plataforma: el arpegio de la cima (do mayor, compas de C)
-  { x: 45, y: 0.675, f: 523.25 },
-  { x: 46, y: 0.675, f: 659.25 },
-  { x: 47, y: 0.675, f: 783.99 }
+export const NOTAS = compilar();
+export const TOTAL_NOTAS = NOTAS.filter(n => !n.silencio).length;
+
+// --- el terreno, deducido de la cancion -------------------------------------
+
+// Los abismos van debajo de los rieles dramaticos: ahi mantener vale la vida.
+export const HUECOS = [
+  { x0: 25.6, x1: 28.3 },    // riel del compas 6
+  { x0: 41.6, x1: 44.3 },    // riel del compas 10
+  { x0: 49.6, x1: 54.3 },    // los dos rieles de la cima
+  { x0: 57.6, x1: 60.3 }     // riel del compas 14
 ];
+export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
+
+// Techo sobre el silencio del compas 7: ahi tocar mata.
+// Termina antes del resorte de reenganche (31.0): ahi ya se puede volver a subir.
+export const TECHOS = [{ x0: 28.9, x1: 30.6, y: 0.19 }];
+
+// Resortes: reenganche despues de un silencio y rescate si te caiste a la red.
+function resortes () {
+  const r = [];
+  const enSilencio = x => NOTAS.some(n => n.silencio && x >= n.x0 && x < n.x0 + n.dur);
+  const candidatos = [];
+  for (const n of NOTAS) if (n.silencio) candidatos.push(n.x0 + n.dur - 1.0);   // reenganche
+  for (let x = 4; x < LARGO - 4; x += 4) if (!enSilencio(x)) candidatos.push(x); // rescate
+  for (const x of candidatos) {
+    if (enHueco(x) || TECHOS.some(t => x > t.x0 - 0.2 && x < t.x1 + 0.2)) continue;
+    const destino = NOTAS.find(n => !n.silencio && n.x0 - x >= vueloMinimo(n.y) && n.x0 - x <= 3.2);
+    if (destino) r.push({ x: +x.toFixed(3), destino: destino.i });
+  }
+  return r.sort((a, b) => a.x - b.x);
+}
+export const RESORTES = resortes();
 
 export const SECCIONES = [
-  { x0: 0, n: 'intro' },
-  { x0: 8, n: 'groove' },
-  { x0: 24.5, n: 'calma · manten y roda' },
-  { x0: 32.5, n: 'medio tiempo · no toques' },
-  { x0: 40, n: 'subida' },
-  { x0: 44, n: 'la cima' },
-  { x0: 52, n: 'salida' }
+  { x0: 0, n: 'entrada' }, { x0: 4, n: 'tema' }, { x0: 28, n: 'silencio · no toques' },
+  { x0: 32, n: 'ritmo' }, { x0: 36, n: 'el tema fuerte' }, { x0: 44, n: 'frenesi' },
+  { x0: 52, n: 'la cima' }, { x0: 60, n: 'salida' }
 ];
 
-export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
-export const tunelEn = x => TUNELES.find(t => x > t.x0 && x < t.x1) || null;
-
 // --- simulacion --------------------------------------------------------------
-// Separada del render y del DOM para poder correrla en node (prueba.js).
-// x avanza con el tiempo (1 unidad = 1 beat), y es la BASE de la esfera.
 
 export function crearSim () {
   return {
-    x: 0, y: 0, vy: V_LLENO,
-    viva: true, meta: false, causa: '',
-    rodando: false,
-    nivel: 0,                     // altura de la superficie donde apoya/rueda
-    tocadas: new Set(),           // campanas ya sonadas en este intento
-    toqueEn: -Infinity,           // beat del ultimo toque (flanco de bajada)
+    x: 0, y: 0, vy: 0,
+    estado: 'apoyada',      // 'apoyada' | 'aire'
+    tecla: -1,              // indice en NOTAS, o -1 = la red
+    viva: true, meta: false, causa: null,
     sostiene: false,
-    contactos: []                 // eventos para audio y efectos
+    tocadas: new Set(),
+    resortesUsados: new Set(),
+    eventos: []
   };
 }
 
-export function tocar (s, b) {
-  s.toqueEn = b;
-  // Toque apenas DESPUES del contacto: si la pelota acaba de salir del piso
-  // con el rebote de pulso, el toque lo agranda igual. Una mano real dribla
-  // asi -- el contacto y el toque no son simultaneos, conversan.
-  if (!s.sostiene && s.y - s.nivel < 0.05 && s.vy > 0 && s.vy <= V_LLENO + 1e-9) {
-    s.vy = V_BOOST; s.rodando = false; s.toqueEn = -Infinity;
-    s.contactos.push({ b, tipo: 'lleno' });
+// Se apunta un poco adentro de la tecla, no al borde: cayendo justo sobre el
+// canto la esfera pasa de largo por medio paso de integracion.
+const MIRA = 0.05;
+const TOL_BORDE = 0.03;
+
+function despegar (s) { s.estado = 'aire'; s.tecla = -1; }
+
+function lanzar (s, desde) {
+  const sig = NOTAS[desde.i + 1];
+  s.estado = 'aire'; s.tecla = -1;
+  if (!sig || sig.silencio) { s.vy = 0; return; }        // al silencio se cae solo
+  const T = Math.max(0.06, sig.x0 + MIRA - s.x);
+  s.vy = Math.min(1.9, (sig.y - s.y) / T + G * T / 2);
+}
+
+function posarse (s, yAntes) {
+  let mejor = null, mejorY = -Infinity;
+  for (const k of NOTAS) {
+    if (k.silencio || s.x < k.x0 - TOL_BORDE || s.x > k.x1) continue;
+    if (yAntes >= k.y - 1e-9 && s.y <= k.y && k.y > mejorY) { mejor = k; mejorY = k.y; }
+  }
+  if (mejor) {
+    s.estado = 'apoyada'; s.tecla = mejor.i; s.y = mejor.y; s.vy = 0;
+    s.eventos.push({ tipo: 'posar', x: s.x, y: mejor.y, riel: !!mejor.riel });
+    return;
+  }
+  if (!enHueco(s.x) && yAntes >= -1e-9 && s.y <= 0) {
+    s.estado = 'apoyada'; s.tecla = -1; s.y = 0; s.vy = 0;
+    s.eventos.push({ tipo: 'red', x: s.x, y: 0 });
   }
 }
 
 export function paso (s, dt) {
   if (!s.viva || s.meta) return;
+  const xAntes = s.x;
   s.x += dt;
-  s.vy -= G * dt;
-  const yAntes = s.y;
-  s.y += s.vy * dt;
 
-  const piso = !enHueco(s.x);
-  // ¿hay superficie a la altura h en este x? (el piso, o alguna plataforma)
-  const hay = h => h === 0
-    ? piso
-    : PLATAFORMAS.some(p => p.y === h && s.x > p.x0 && s.x < p.x1);
-
-  // venir cayendo dentro de un hueco y alcanzar la pared del otro lado NO es
-  // aterrizar: es chocar. Sin esto la esfera trepaba la pared del hueco.
-  if (piso && s.y < -R) { s.viva = false; s.causa = 'hueco'; return; }
-
-  // rodando: pegada a SU superficie, estable, hasta que un toque la levante o
-  // la superficie se acabe (el borde de la plataforma: cae por la parabola).
-  if (s.rodando) {
-    if (hay(s.nivel)) { s.y = s.nivel; s.vy = 0; }
-    else s.rodando = false;
-  } else if (s.vy < 0) {
-    // aterrizar = cruzar una superficie desde arriba; gana la mas alta.
-    // Las plataformas son de una via: subiendo se atraviesan.
-    let superficie = piso && yAntes >= -1e-9 && s.y <= 0 ? 0 : null;
-    for (const p of PLATAFORMAS) {
-      if (s.x > p.x0 && s.x < p.x1 && yAntes >= p.y - 1e-9 && s.y <= p.y &&
-          (superficie === null || p.y > superficie)) superficie = p.y;
+  if (s.estado === 'apoyada' && s.tecla >= 0) {
+    const k = NOTAS[s.tecla];
+    s.y = k.y;
+    if (k.riel && s.sostiene && !s.tocadas.has(k.i)) {
+      s.tocadas.add(k.i);
+      s.eventos.push({ tipo: 'riel', f: k.f, x: s.x, y: k.y, i: k.i, hasta: k.x1 });
     }
-    if (superficie !== null) {
-      s.y = superficie; s.nivel = superficie;
-      if (s.sostiene) {
-        s.vy = 0; s.rodando = true;
-        s.contactos.push({ b: s.x, tipo: 'palma' });
-      } else if (s.x - s.toqueEn <= VENTANA) {
-        s.vy = V_BOOST; s.rodando = false;
-        s.toqueEn = -Infinity;      // un toque agranda UN contacto
-        s.contactos.push({ b: s.x, tipo: 'lleno' });
-      } else {
-        s.vy = V_LLENO;             // el pulso es gratis: rebota solo, al beat
-        s.contactos.push({ b: s.x, tipo: 'auto' });
-      }
-      // los elementos del piso suenan al ser tocados: el instrumento es el MAPA
-      if (superficie === 0) {
-        if (PADS.some(p => Math.abs(s.x - p.x) < 0.18)) {
-          s.contactos.push({ b: s.x, tipo: 'pad', x: s.x });
-        }
-        const rs = RESORTES.find(r => Math.abs(s.x - r.x) < 0.18);
-        if (rs && !s.sostiene) {
-          s.vy = V_RESORTE; s.rodando = false;  // el resorte manda sobre el rebote
-          s.contactos.push({ b: s.x, tipo: 'resorte', x: rs.x });
-        }
+    if (k.riel && !s.sostiene && s.x > k.x0 + GRACIA_RIEL) {
+      if (s.tocadas.has(k.i)) s.eventos.push({ tipo: 'rielCorta' });
+      despegar(s);
+    } else if (s.x > k.x1) {
+      if (k.riel) { s.eventos.push({ tipo: 'rielCorta' }); lanzar(s, k); }
+      else if (k.escalera) { s.tecla = k.i + 1; s.y = NOTAS[s.tecla].y; }
+      else despegar(s);
+    }
+  } else if (s.estado === 'apoyada') {
+    s.y = 0;
+    if (enHueco(s.x)) despegar(s);
+    else for (const r of RESORTES) {
+      if (xAntes < r.x && s.x >= r.x && !s.resortesUsados.has(r.x)) {
+        s.resortesUsados.add(r.x);
+        const k = NOTAS[r.destino];
+        const T = Math.max(0.2, k.x0 + MIRA - s.x);
+        s.estado = 'aire'; s.tecla = -1;
+        s.vy = Math.min(1.9, k.y / T + G * T / 2);
+        s.eventos.push({ tipo: 'resorte', x: r.x, y: 0 });
+        break;
       }
     }
   }
-  // tocar estando rodando: la levanta con boost (re-arranca a lo grande)
-  if (hay(s.nivel) && s.y === s.nivel && s.vy === 0 && !s.sostiene && s.x - s.toqueEn <= VENTANA) {
-    s.vy = V_BOOST; s.rodando = false; s.toqueEn = -Infinity;
-    s.contactos.push({ b: s.x, tipo: 'lleno' });
+
+  if (s.estado === 'aire') {
+    s.vy -= G * dt;
+    const yAntes = s.y;
+    s.y += s.vy * dt;
+    if (s.vy < 0) posarse(s, yAntes);
   }
 
-  // campanas: se tocan pasando por el aire, una vez por intento
-  for (const c of CAMPANAS) {
-    if (s.tocadas.has(c.x)) continue;
-    const dx = s.x - c.x, dy = (s.y + R) - c.y;
-    if (dx * dx + dy * dy < (R + 0.09) ** 2) {
-      s.tocadas.add(c.x);
-      s.contactos.push({ b: s.x, tipo: 'campana', f: c.f, x: c.x, y: c.y });
-    }
-  }
-
-  // muertes: la geometria juzga, no el reloj
   if (s.y < CAIDA_MUERTE) { s.viva = false; s.causa = 'hueco'; return; }
-  for (const p of PINCHOS) {
-    if (Math.abs(s.x - p.x) < p.w / 2 + R && s.y < p.h) {
-      s.viva = false; s.causa = 'pincho'; return;
-    }
+  for (const t of TECHOS) {
+    if (s.x > t.x0 && s.x < t.x1 && s.y + 2 * R > t.y) { s.viva = false; s.causa = 'techo'; return; }
   }
-  const t = tunelEn(s.x);
-  if (t && s.y + 2 * R > t.techo) { s.viva = false; s.causa = 'tunel'; return; }
-
   if (s.x >= LARGO) s.meta = true;
 }
 
-// --- navegador ---------------------------------------------------------------
+export function tocar (s, b) {
+  if (!s.viva || s.meta) return;
+  if (s.estado !== 'apoyada') { s.eventos.push({ tipo: 'aire' }); return; }
+  if (s.tecla < 0) {                      // en la red: un saltito que no suena
+    s.estado = 'aire'; s.vy = 0.62;
+    s.eventos.push({ tipo: 'saltoRed' });
+    return;
+  }
+  const k = NOTAS[s.tecla];
+  if (k.riel) return;                     // el riel se toca sosteniendo
+  if (!s.tocadas.has(k.i)) {
+    s.tocadas.add(k.i);
+    s.eventos.push({ tipo: 'nota', f: k.f, x: s.x, y: k.y, i: k.i, tarde: s.x - k.x0 });
+  }
+  if (!k.escalera) lanzar(s, k);
+}
 
 if (typeof document !== 'undefined') arrancarNavegador();
+
+// ---------------------------------------------------------------------------
+// Navegador: render + audio
+// ---------------------------------------------------------------------------
 
 function arrancarNavegador () {
   const cv = document.getElementById('lienzo');
@@ -219,25 +270,22 @@ function arrancarNavegador () {
 
   const C = {
     fondo: '#111214',
-    piso: 'rgba(232,230,224,0.55)',
+    red: 'rgba(232,230,224,0.20)',
     peligro: 'rgb(232,230,224)',
     esfera: 'rgb(255,179,71)',
     esferaRGB: '255,179,71',
-    tenue: 'rgba(232,230,224,0.22)'
+    tecla: 'rgba(120,190,255,0.55)',
+    teclaRGB: '120,190,255',
+    tenue: 'rgba(232,230,224,0.18)'
   };
 
   let s = crearSim();
-  let intento = 1;
+  let intento = 1, mejor = 0;
   let ac = null, master = null, t0 = 0, proxBeat = 0;
   let corriendo = false, finSonado = false;
-  let abajoDesde = null;
 
-  // juice
-  const estela = [];
-  const particulas = [];
-  const aros = [];                 // ondas de campana
-  const padsVivos = new Map();     // x -> hora del ultimo pisoton
-  let squash = 0, flash = 0;
+  const estela = [], particulas = [], destellos = [];
+  let squash = 0, flash = 0, rielVoz = null;
 
   const ahora = () => ac ? (ac.currentTime - t0) / SPB : 0;
 
@@ -248,7 +296,7 @@ function arrancarNavegador () {
       ac = new (window.AudioContext || window.webkitAudioContext)();
       const comp = ac.createDynamicsCompressor();
       master = ac.createGain();
-      master.gain.value = 0.85;
+      master.gain.value = 0.8;
       master.connect(comp).connect(ac.destination);
     }
     ac.resume();
@@ -257,21 +305,21 @@ function arrancarNavegador () {
     finSonado = false;
   }
 
-  function golpe (cuando, f, dur, gan, tipo = 'sine') {
+  function golpe (t, f, dur, gan, tipo = 'sine') {
     const o = ac.createOscillator(), g = ac.createGain();
-    o.type = tipo; o.frequency.setValueAtTime(f, cuando);
-    g.gain.setValueAtTime(gan, cuando);
-    g.gain.exponentialRampToValueAtTime(0.001, cuando + dur);
+    o.type = tipo; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(gan, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     o.connect(g).connect(master);
-    o.start(cuando); o.stop(cuando + dur);
+    o.start(t); o.stop(t + dur);
   }
-  function ruido (cuando, dur, gan) {
+  function ruido (t, dur, gan) {
     const n = Math.max(1, ac.sampleRate * dur | 0), buf = ac.createBuffer(1, n, ac.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
     const src = ac.createBufferSource(); src.buffer = buf;
     const g = ac.createGain(); g.gain.value = gan;
-    src.connect(g).connect(master); src.start(cuando);
+    src.connect(g).connect(master); src.start(t);
   }
   function kick (t) {
     const o = ac.createOscillator(), g = ac.createGain();
@@ -282,32 +330,67 @@ function arrancarNavegador () {
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
     o.connect(g).connect(master); o.start(t); o.stop(t + 0.3);
   }
-  function snare (t, gan = 0.4) { ruido(t, 0.12, gan); golpe(t, 190, 0.08, 0.16, 'triangle'); }
-  function clap (t) { ruido(t, 0.05, 0.22); ruido(t + 0.014, 0.05, 0.18); ruido(t + 0.03, 0.09, 0.22); }
-  function hat (t, abierto = false) { ruido(t, abierto ? 0.14 : 0.045, abierto ? 0.14 : 0.11); }
-  function bajo (t, f, dur = 0.24, gan = 0.3) { golpe(t, f, dur, gan, 'triangle'); }
-  function campanaSon (t, f, gan = 0.4) {
-    golpe(t, f, 0.6, gan, 'sine');
-    golpe(t, f * 2.01, 0.3, gan * 0.3, 'sine');
-    golpe(t, f * 3.02, 0.12, gan * 0.12, 'sine');
-  }
-  function acordePad (t, notas, dur, gan = 0.05) {
-    for (const f of notas) {
-      for (const det of [-4, 4]) {
-        const o = ac.createOscillator(), g = ac.createGain();
-        o.type = 'sawtooth';
-        o.frequency.value = f; o.detune.value = det;
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(gan, t + 0.35);
-        g.gain.setValueAtTime(gan, t + dur - 0.5);
-        g.gain.linearRampToValueAtTime(0.0001, t + dur);
-        o.connect(g).connect(master);
-        o.start(t); o.stop(t + dur);
-      }
+  const snare = (t, gan = 0.38) => { ruido(t, 0.12, gan); golpe(t, 190, 0.08, 0.15, 'triangle'); };
+  const clap = t => { ruido(t, 0.05, 0.2); ruido(t + 0.014, 0.05, 0.16); ruido(t + 0.03, 0.09, 0.2); };
+  const hat = (t, abierto) => ruido(t, abierto ? 0.14 : 0.04, abierto ? 0.12 : 0.09);
+  const bajo = (t, f, dur = 0.24, gan = 0.3) => golpe(t, f, dur, gan, 'triangle');
+
+  function acordePad (t, notas, dur, gan = 0.045) {
+    for (const f of notas) for (const det of [-5, 5]) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(gan, t + 0.4);
+      g.gain.setValueAtTime(gan, t + dur - 0.5);
+      g.gain.linearRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(master);
+      o.start(t); o.stop(t + dur);
     }
   }
 
-  // --- la cancion: Am F C G, 16 compases --------------------------------------
+  // la voz del jugador: solo suena si el jugador la toca
+  function lead (t, f, dur = 0.4, gan = 0.2) {
+    const lp = ac.createBiquadFilter(), g = ac.createGain();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(Math.min(9000, f * 7), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(200, f * 1.5), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gan, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.connect(lp).connect(master);
+    for (const [tipo, det, v] of [['square', 0, 1], ['sawtooth', 8, 0.5]]) {
+      const o = ac.createOscillator(), gv = ac.createGain();
+      o.type = tipo; o.frequency.value = f; o.detune.value = det; gv.gain.value = v;
+      o.connect(gv).connect(g); o.start(t); o.stop(t + dur + 0.02);
+    }
+  }
+
+  function rielAbrir (f) {
+    rielCerrar();
+    const g = ac.createGain(), lp = ac.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = Math.min(9000, f * 5);
+    g.gain.setValueAtTime(0.0001, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.17, ac.currentTime + 0.03);
+    g.connect(lp).connect(master);
+    const osc = [];
+    for (const [tipo, det] of [['square', 0], ['sawtooth', 9]]) {
+      const o = ac.createOscillator();
+      o.type = tipo; o.frequency.value = f; o.detune.value = det;
+      o.connect(g); o.start(); osc.push(o);
+    }
+    rielVoz = { g, osc };
+  }
+  function rielCerrar () {
+    if (!rielVoz) return;
+    const { g, osc } = rielVoz, t = ac.currentTime;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    for (const o of osc) o.stop(t + 0.12);
+    rielVoz = null;
+  }
+
+  // --- la base: siempre suena, nunca se calla como castigo --------------------
 
   const PROG = [
     { r: 110.00, acorde: [220.00, 261.63, 329.63] },   // Am
@@ -315,40 +398,41 @@ function arrancarNavegador () {
     { r: 130.81, acorde: [261.63, 329.63, 392.00] },   // C
     { r: 98.00, acorde: [196.00, 246.94, 293.66] }     // G
   ];
+  const armonia = c => PROG[((c - 1) % 4 + 4) % 4];
 
-  // Que toca la base en el compas c. El nivel es la coreografia de ESTO.
   function planCompas (c) {
-    if (c < 0 || c > 15) return null;
-    const base = { kick: [], snare: [], clap: [], hats: [0.5, 1.5, 2.5, 3.5], abierto: [], bass: 'ochos', pad: true, fill: false };
-    if (c < 2) return { ...base, bass: c === 0 ? 'nada' : 'sus', hats: [0.5, 1.5, 2.5, 3.5] };                    // intro
-    if (c < 6) return { ...base, kick: [0, 2], snare: [1, 3], fill: c === 5 };                                     // groove
-    if (c < 8) return { ...base, kick: [0], hats: [0.5, 2.5], bass: 'sus' };                                       // calma
-    if (c < 10) return { ...base, kick: [0, 2], clap: [1, 3], fill: c === 9 };                                     // medio tiempo
-    if (c === 10) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], fill: true };                               // subida
-    if (c < 13) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], hats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], abierto: [3.5], bass: 'octava' }; // cima
-    if (c === 13) return { ...base, kick: [0, 2], snare: [1, 3] };                                                 // groove
-    if (c === 14) return { ...base, kick: [0], hats: [0.5, 1.5], bass: 'sus', fill: true };                        // drop
-    return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], hats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], bass: 'octava' }; // salida
+    if (c < 0 || c >= CANCION.length) return null;
+    const base = { kick: [], snare: [], clap: [], hats: [0.5, 1.5, 2.5, 3.5], abierto: [], bajo: 'ochos', pad: true, fill: false };
+    if (c === 0) return { ...base, kick: [0, 2], bajo: 'nada', pad: false, fill: true };
+    if (c <= 2) return { ...base, kick: [0, 2], snare: [3], bajo: 'sus' };
+    if (c <= 4) return { ...base, kick: [0, 2], snare: [1, 3], fill: c === 4 };
+    if (c <= 6) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], fill: c === 6 };
+    if (c === 7) return { ...base, kick: [0], hats: [], abierto: [2], bajo: 'sus' };          // el silencio
+    if (c === 8) return { ...base, kick: [0, 0.5, 2], clap: [1, 3], bajo: 'ochos' };
+    if (c <= 10) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], fill: c === 10 };
+    if (c <= 12) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], hats: [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75], fill: c === 12 };
+    if (c <= 14) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], abierto: [3.5], bajo: 'octava', fill: c === 14 };
+    return { ...base, kick: [0, 2, 2.5], snare: [1, 3], hats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], bajo: 'octava' };
   }
 
   function agendarMusica () {
     const b = ahora();
     while (proxBeat < b + 2) {
       const t = t0 + proxBeat * SPB;
-      const c = Math.floor(proxBeat / 4);
-      const u = proxBeat - c * 4;            // posicion dentro del compas
+      const c = Math.floor(proxBeat / 4), u = proxBeat - c * 4;
       const plan = planCompas(c);
       if (plan) {
-        const arm = PROG[c % 4];
+        const arm = armonia(c);
         if (u === 0 && plan.pad) acordePad(t, arm.acorde, 4 * SPB);
         if (plan.kick.includes(u)) kick(t);
         if (plan.snare.includes(u)) snare(t);
         if (plan.clap.includes(u)) clap(t);
         if (plan.hats.includes(u)) hat(t, plan.abierto.includes(u));
-        if (plan.bass === 'ochos' && u % 0.5 === 0) bajo(t, arm.r);
-        if (plan.bass === 'octava' && u % 0.5 === 0) bajo(t, u % 1 === 0.5 ? arm.r * 2 : arm.r, 0.2, 0.28);
-        if (plan.bass === 'sus' && u === 0) bajo(t, arm.r, 3.6 * SPB, 0.22);
-        if (plan.fill && u === 3.25) { snare(t, 0.18); snare(t + 0.25 * SPB, 0.24); snare(t + 0.5 * SPB, 0.32); }
+        if (plan.abierto.includes(u) && !plan.hats.includes(u)) hat(t, true);
+        if (plan.bajo === 'ochos' && u % 0.5 === 0) bajo(t, arm.r);
+        if (plan.bajo === 'octava' && u % 0.5 === 0) bajo(t, u % 1 === 0.5 ? arm.r * 2 : arm.r, 0.2, 0.28);
+        if (plan.bajo === 'sus' && u === 0) bajo(t, arm.r, 3.6 * SPB, 0.22);
+        if (plan.fill && u === 3.25) [0, 1, 2].forEach(i => snare(t + i * 0.25 * SPB, 0.16 + i * 0.08));
       }
       proxBeat += 0.25;
     }
@@ -356,55 +440,57 @@ function arrancarNavegador () {
 
   function sonarFinal () {
     const t = ac.currentTime + 0.05;
-    acordePad(t, PROG[0].acorde.map(f => f * 2), 3, 0.08);
+    acordePad(t, PROG[0].acorde.map(f => f * 2), 3, 0.07);
     bajo(t, PROG[0].r, 1.2, 0.35);
-    [0, 0.12, 0.24].forEach((d, i) => campanaSon(t + d, [523.25, 659.25, 880][i], 0.3));
+    [440, 523.25, 659.25, 880].forEach((f, i) => lead(t + i * 0.1, f, 0.9, 0.16));
   }
 
-  // --- sonidos y efectos del contacto -----------------------------------------
+  // --- eventos de la simulacion ------------------------------------------------
 
-  function chispas (x, y, n, arriba = false) {
-    for (let i = 0; i < n; i++) {
-      particulas.push({
-        x, y,
-        vx: (Math.random() - 0.5) * 1.6,
-        vy: arriba ? Math.random() * 1.6 + 0.4 : Math.random() * 0.9,
-        vida: 1
-      });
-    }
+  function chispas (x, y, n, arriba = false, rgb = C.esferaRGB) {
+    for (let i = 0; i < n; i++) particulas.push({
+      x, y, rgb,
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: arriba ? Math.random() * 1.6 + 0.4 : Math.random() * 0.8,
+      vida: 1
+    });
   }
 
-  function procesarContactos () {
-    for (const c of s.contactos) {
-      const t = ac.currentTime;
-      if (c.tipo === 'pad') {
-        kick(t);
-        padsVivos.set(Math.round(c.x / 2) * 2, performance.now());
-        chispas(c.b, s.nivel, 5);
-      } else if (c.tipo === 'resorte') {
-        bajo(t, PROG[Math.floor(c.b / 4) % 4].r, 0.34, 0.42);
-        bajo(t, PROG[Math.floor(c.b / 4) % 4].r * 2, 0.14, 0.16);
-        chispas(c.x, s.nivel, 10, true);
+  function procesar () {
+    for (const e of s.eventos) {
+      if (e.tipo === 'nota') {
+        lead(ac.currentTime, e.f, Math.max(0.22, 0.44 - Math.abs(e.tarde) * 0.4));
+        destellos.push({ x: e.x, y: e.y, t: performance.now() });
+        chispas(e.x, e.y, 7, true, C.teclaRGB);
         squash = 1;
-      } else if (c.tipo === 'campana') {
-        campanaSon(t, c.f);
-        aros.push({ x: c.x, y: c.y, t: performance.now() });
-        chispas(c.x, c.y, 6, true);
-      } else if (c.tipo === 'lleno') {
-        ruido(t, 0.06, 0.15); squash = 1; chispas(s.x, s.nivel, 6);
-      } else if (c.tipo === 'auto') {
-        ruido(t, 0.03, 0.07); squash = 0.6;
-      } else if (c.tipo === 'palma') {
-        ruido(t, 0.04, 0.10); squash = 0.8;
+      } else if (e.tipo === 'riel') {
+        rielAbrir(e.f);
+        destellos.push({ x: e.x, y: e.y, t: performance.now() });
+        chispas(e.x, e.y, 10, true, C.teclaRGB);
+      } else if (e.tipo === 'rielCorta') {
+        rielCerrar();
+      } else if (e.tipo === 'resorte') {
+        kick(ac.currentTime);
+        chispas(e.x, 0, 12, true);
+        squash = 1;
+      } else if (e.tipo === 'posar') {
+        ruido(ac.currentTime, 0.03, 0.05); squash = 0.7;
+      } else if (e.tipo === 'red') {
+        ruido(ac.currentTime, 0.09, 0.09); squash = 0.9;
+        chispas(e.x, 0, 5);
+      } else if (e.tipo === 'aire' || e.tipo === 'saltoRed') {
+        ruido(ac.currentTime, 0.05, 0.035);
       }
     }
-    s.contactos.length = 0;
+    s.eventos.length = 0;
   }
 
   function morirOReiniciar () {
+    rielCerrar();
+    mejor = Math.max(mejor, s.tocadas.size);
     intento++;
     s = crearSim();
-    t0 = ac.currentTime + 0.6;
+    t0 = ac.currentTime + 0.7;
     proxBeat = 0;
     estela.length = 0;
     flash = 1;
@@ -413,19 +499,14 @@ function arrancarNavegador () {
   // --- entrada -----------------------------------------------------------------
 
   function bajar () {
-    if (!corriendo) { corriendo = true; arrancarAudio(); hud.textContent = ''; return; }
-    if (s.meta) { intento = 1; s = crearSim(); t0 = ac.currentTime + 0.6; proxBeat = 0; finSonado = false; hud.textContent = ''; return; }
-    const b = ahora();
-    abajoDesde = b;
-    tocar(s, b);
+    if (!corriendo) { corriendo = true; arrancarAudio(); return; }
+    if (s.meta) { intento = 1; s = crearSim(); t0 = ac.currentTime + 0.7; proxBeat = 0; finSonado = false; return; }
+    s.sostiene = true;
+    tocar(s, ahora());
   }
-  function subir () { abajoDesde = null; s.sostiene = false; }
+  function subir () { s.sostiene = false; }
 
-  addEventListener('keydown', e => {
-    if (e.code !== 'Space') return;
-    e.preventDefault();
-    if (!e.repeat) bajar();
-  });
+  addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) bajar(); } });
   addEventListener('keyup', e => { if (e.code === 'Space') subir(); });
   cv.addEventListener('pointerdown', e => { e.preventDefault(); bajar(); });
   addEventListener('pointerup', subir);
@@ -443,15 +524,13 @@ function arrancarNavegador () {
     const b = ahora();
     if (b < 0) { dibujar(dtSeg); return; }
 
-    if (abajoDesde !== null && b - abajoDesde > 0.25) s.sostiene = true;
-
     const dtBeat = dtSeg / SPB;
     const n = Math.max(1, Math.ceil(dtBeat / (1 / 240)));
     for (let i = 0; i < n && s.viva && !s.meta; i++) paso(s, dtBeat / n);
 
-    procesarContactos();
-    if (!s.viva) { golpe(ac.currentTime, 90, 0.3, 0.4, 'sawtooth'); ruido(ac.currentTime, 0.2, 0.3); morirOReiniciar(); }
-    if (s.meta && !finSonado) { finSonado = true; sonarFinal(); hud.textContent = 'COMPLETADO — toca para volver'; }
+    procesar();
+    if (!s.viva) { golpe(ac.currentTime, 90, 0.3, 0.4, 'sawtooth'); ruido(ac.currentTime, 0.2, 0.28); morirOReiniciar(); }
+    if (s.meta && !finSonado) { finSonado = true; rielCerrar(); sonarFinal(); }
     dibujar(dtSeg);
   }
   requestAnimationFrame(cuadro);
@@ -464,93 +543,82 @@ function arrancarNavegador () {
     cx.setTransform(dpr, 0, 0, dpr, 0, 0);
     cx.fillStyle = C.fondo; cx.fillRect(0, 0, w, h);
 
-    const esc = w / 8;
-    const y0 = h * 0.74;
-    const px = wx => (wx - s.x + 2.2) * esc;
+    const esc = w / 9;
+    const y0 = h * 0.86;
+    const px = wx => (wx - s.x + 2.4) * esc;
     const py = wy => y0 - wy * esc;
 
-    // piso con huecos
-    cx.strokeStyle = C.piso; cx.lineWidth = 2;
-    const cortes = [0, ...HUECOS.flatMap(hh => [hh.x0, hh.x1]), LARGO + 6];
+    // la red, con sus abismos
+    cx.strokeStyle = C.red; cx.lineWidth = 2;
+    const cortes = [0, ...HUECOS.flatMap(g => [g.x0, g.x1]), LARGO + 6];
     for (let i = 0; i < cortes.length; i += 2) {
       cx.beginPath(); cx.moveTo(px(cortes[i]), py(0)); cx.lineTo(px(cortes[i + 1]), py(0)); cx.stroke();
     }
-    // marcas de beat
+    // compases
     cx.strokeStyle = C.tenue; cx.lineWidth = 1;
-    for (let bb = Math.ceil(s.x - 3); bb < s.x + 6; bb++) {
-      if (bb < 0 || enHueco(bb)) continue;
-      cx.beginPath(); cx.moveTo(px(bb), py(0)); cx.lineTo(px(bb), py(0) + (bb % 4 === 0 ? 10 : 5)); cx.stroke();
+    for (let bb = Math.ceil(s.x - 3); bb < s.x + 7; bb++) {
+      if (bb < 0 || bb % 4) continue;
+      cx.beginPath(); cx.moveTo(px(bb), py(0) + 14); cx.lineTo(px(bb), py(0.95)); cx.stroke();
     }
-    // nombres de seccion en el piso
     cx.fillStyle = C.tenue; cx.font = '12px system-ui'; cx.textAlign = 'left';
-    for (const z of SECCIONES) cx.fillText(z.n, px(z.x0) + 8, py(0) + 26);
+    for (const z of SECCIONES) cx.fillText(z.n, px(z.x0) + 8, py(0) + 30);
 
-    // plataformas
-    cx.strokeStyle = C.piso; cx.lineWidth = 2;
-    for (const p of PLATAFORMAS) {
-      cx.beginPath(); cx.moveTo(px(p.x0), py(p.y)); cx.lineTo(px(p.x1), py(p.y)); cx.stroke();
+    // techos del silencio
+    cx.fillStyle = 'rgba(232,230,224,0.10)';
+    cx.strokeStyle = C.peligro; cx.lineWidth = 3;
+    for (const t of TECHOS) {
+      cx.fillRect(px(t.x0), py(t.y), (t.x1 - t.x0) * esc, py(0) - py(t.y));
+      cx.beginPath(); cx.moveTo(px(t.x0), py(t.y)); cx.lineTo(px(t.x1), py(t.y)); cx.stroke();
     }
-    // pads de bombo: se encienden al pisarlos
-    for (const p of PADS) {
-      const vivo = (performance.now() - (padsVivos.get(p.x) || -9e9)) < 250;
-      cx.fillStyle = vivo ? C.esfera : `rgba(${C.esferaRGB},0.4)`;
-      cx.fillRect(px(p.x - 0.16), py(0) - (vivo ? 5 : 3), 0.32 * esc, vivo ? 5 : 3);
-    }
+
     // resortes
     cx.strokeStyle = C.esfera; cx.lineWidth = 2;
     for (const r of RESORTES) {
+      if (r.x < s.x - 3 || r.x > s.x + 7) continue;
       for (const d of [0, 5]) {
         cx.beginPath();
-        cx.moveTo(px(r.x - 0.12), py(0) - d);
-        cx.lineTo(px(r.x), py(0) - 8 - d);
-        cx.lineTo(px(r.x + 0.12), py(0) - d);
+        cx.moveTo(px(r.x - 0.13), py(0) - d);
+        cx.lineTo(px(r.x), py(0) - 9 - d);
+        cx.lineTo(px(r.x + 0.13), py(0) - d);
         cx.stroke();
       }
     }
-    // pinchos
-    cx.fillStyle = C.peligro;
-    for (const p of PINCHOS) {
-      cx.beginPath();
-      cx.moveTo(px(p.x - p.w / 2), py(0)); cx.lineTo(px(p.x), py(p.h)); cx.lineTo(px(p.x + p.w / 2), py(0));
-      cx.fill();
+
+    // las teclas: la partitura
+    for (const k of NOTAS) {
+      if (k.silencio || k.x1 < s.x - 3 || k.x0 > s.x + 7) continue;
+      const sono = s.tocadas.has(k.i);
+      const alto = k.riel ? 7 : 5;
+      cx.fillStyle = sono ? C.esfera : C.tecla;
+      if (sono) { cx.shadowColor = C.esfera; cx.shadowBlur = 12; }
+      cx.fillRect(px(k.x0), py(k.y), Math.max(4, (k.x1 - k.x0) * esc), alto);
+      cx.shadowBlur = 0;
+      if (k.riel) {                                  // el riel se agarra: se marca
+        cx.strokeStyle = sono ? C.esfera : C.tecla;
+        cx.lineWidth = 1;
+        for (let x = k.x0; x < k.x1; x += 0.25) {
+          cx.beginPath(); cx.moveTo(px(x), py(k.y)); cx.lineTo(px(x) - 5, py(k.y) + 9); cx.stroke();
+        }
+      }
     }
-    // tuneles
-    cx.strokeStyle = C.peligro; cx.lineWidth = 3;
-    for (const tt of TUNELES) {
-      cx.beginPath(); cx.moveTo(px(tt.x0), py(tt.techo)); cx.lineTo(px(tt.x1), py(tt.techo)); cx.stroke();
-      cx.strokeStyle = C.tenue; cx.lineWidth = 1;
-      cx.beginPath(); cx.moveTo(px(tt.x0), py(tt.techo)); cx.lineTo(px(tt.x0), py(0));
-      cx.moveTo(px(tt.x1), py(tt.techo)); cx.lineTo(px(tt.x1), py(0)); cx.stroke();
-      cx.strokeStyle = C.peligro; cx.lineWidth = 3;
+    // destellos de nota
+    for (let i = destellos.length - 1; i >= 0; i--) {
+      const d = destellos[i], e = (performance.now() - d.t) / 420;
+      if (e > 1) { destellos.splice(i, 1); continue; }
+      cx.strokeStyle = `rgba(${C.esferaRGB},${(1 - e) * 0.9})`;
+      cx.lineWidth = 2.5 * (1 - e);
+      cx.beginPath(); cx.arc(px(d.x), py(d.y), (0.05 + e * 0.42) * esc, 0, Math.PI * 2); cx.stroke();
     }
-    // campanas
-    for (const c of CAMPANAS) {
-      const sono = s.tocadas.has(c.x);
-      cx.beginPath(); cx.arc(px(c.x), py(c.y), 0.085 * esc, 0, Math.PI * 2);
-      if (sono) {
-        cx.fillStyle = C.esfera;
-        cx.shadowColor = C.esfera; cx.shadowBlur = 14;
-        cx.fill();
-        cx.shadowBlur = 0;
-      } else { cx.strokeStyle = C.esfera; cx.lineWidth = 1.5; cx.stroke(); }
-    }
-    // aros de campana
-    for (let i = aros.length - 1; i >= 0; i--) {
-      const a = aros[i], e = (performance.now() - a.t) / 450;
-      if (e > 1) { aros.splice(i, 1); continue; }
-      cx.strokeStyle = `rgba(${C.esferaRGB},${(1 - e) * 0.8})`;
-      cx.lineWidth = 2 * (1 - e);
-      cx.beginPath(); cx.arc(px(a.x), py(a.y), (0.085 + e * 0.3) * esc, 0, Math.PI * 2); cx.stroke();
-    }
+
     // meta
     cx.strokeStyle = C.esfera; cx.lineWidth = 2;
-    cx.beginPath(); cx.moveTo(px(LARGO), py(0)); cx.lineTo(px(LARGO), py(0.6)); cx.stroke();
+    cx.beginPath(); cx.moveTo(px(LARGO), py(0)); cx.lineTo(px(LARGO), py(0.9)); cx.stroke();
 
     // estela
     estela.push({ x: s.x, y: s.y + R });
-    if (estela.length > 46) estela.shift();
+    if (estela.length > 44) estela.shift();
     for (let i = 1; i < estela.length; i++) {
-      cx.strokeStyle = `rgba(${C.esferaRGB},${(i / estela.length) * 0.35})`;
+      cx.strokeStyle = `rgba(${C.esferaRGB},${(i / estela.length) * 0.32})`;
       cx.lineWidth = (i / estela.length) * 3;
       cx.beginPath();
       cx.moveTo(px(estela[i - 1].x), py(estela[i - 1].y));
@@ -560,43 +628,50 @@ function arrancarNavegador () {
     // particulas
     for (let i = particulas.length - 1; i >= 0; i--) {
       const p = particulas[i];
-      p.vida -= dtSeg * 2.4;
+      p.vida -= dtSeg * 2.3;
       if (p.vida <= 0) { particulas.splice(i, 1); continue; }
       p.x += p.vx * dtSeg; p.y += p.vy * dtSeg; p.vy -= 3 * dtSeg;
-      cx.fillStyle = `rgba(${C.esferaRGB},${p.vida * 0.8})`;
+      cx.fillStyle = `rgba(${p.rgb},${p.vida * 0.8})`;
       cx.beginPath(); cx.arc(px(p.x), py(p.y), 2.2 * p.vida, 0, Math.PI * 2); cx.fill();
     }
 
-    // la esfera, con squash en el contacto
+    // la esfera
     squash = Math.max(0, squash - dtSeg * 7);
-    const k = squash * 0.28;
+    const k = squash * 0.3;
     cx.fillStyle = C.esfera;
-    cx.shadowColor = C.esfera; cx.shadowBlur = 10;
+    cx.shadowColor = C.esfera; cx.shadowBlur = 12;
     cx.beginPath();
     cx.ellipse(px(s.x), py(s.y + R * (1 - k)), R * esc * (1 + k), R * esc * (1 - k), 0, 0, Math.PI * 2);
     cx.fill();
     cx.shadowBlur = 0;
 
-    // flash de muerte
     if (flash > 0) {
       flash = Math.max(0, flash - dtSeg * 3);
-      cx.fillStyle = `rgba(232,230,224,${flash * 0.25})`;
+      cx.fillStyle = `rgba(232,230,224,${flash * 0.22})`;
       cx.fillRect(0, 0, w, h);
     }
 
     // HUD
-    cx.fillStyle = C.piso; cx.font = '14px system-ui'; cx.textAlign = 'left';
     if (!corriendo) {
-      cx.textAlign = 'center'; cx.font = '17px system-ui';
-      cx.fillText('DRIBLE — toca para empezar', w / 2, h * 0.38);
-      cx.font = '13px system-ui'; cx.fillStyle = C.tenue;
-      cx.fillText('el pulso rebota solo · toque = salto grande · mantener = rodar', w / 2, h * 0.38 + 26);
+      cx.textAlign = 'center';
+      cx.fillStyle = C.peligro; cx.font = '17px system-ui';
+      cx.fillText('DRIBLE — toca para empezar', w / 2, h * 0.30);
+      cx.fillStyle = C.tenue; cx.font = '13px system-ui';
+      cx.fillText('cada tecla azul es una nota: tocala al pisarla', w / 2, h * 0.30 + 26);
+      cx.fillText('las largas se MANTIENEN · bajo el techo NO se toca', w / 2, h * 0.30 + 46);
     } else {
-      cx.fillText(`intento ${intento}`, 12, 22);
-      cx.fillText(`♪ ${s.tocadas.size}/${CAMPANAS.length}`, 12, 42);
-      // barra de progreso
+      cx.textAlign = 'left';
+      cx.fillStyle = C.red; cx.font = '14px system-ui';
+      cx.fillText(`intento ${intento}${mejor ? `   mejor ${mejor}` : ''}`, 12, 22);
+      cx.fillStyle = C.esfera; cx.font = '15px system-ui';
+      cx.fillText(`♪ ${s.tocadas.size}/${TOTAL_NOTAS}`, 12, 44);
       cx.fillStyle = C.tenue; cx.fillRect(w - 132, 16, 120, 4);
       cx.fillStyle = C.esfera; cx.fillRect(w - 132, 16, 120 * Math.min(1, s.x / LARGO), 4);
+      if (s.meta) {
+        cx.textAlign = 'center'; cx.fillStyle = C.peligro; cx.font = '18px system-ui';
+        cx.fillText(`${s.tocadas.size}/${TOTAL_NOTAS} notas — toca para volver`, w / 2, h * 0.3);
+      }
     }
+    hud.textContent = '';
   }
 }
