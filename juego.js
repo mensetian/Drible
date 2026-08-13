@@ -36,7 +36,7 @@ export const CAIDA_MUERTE = -0.45;
 // 40 beats. Primero aire para agarrar el ritmo, despues una pregunta por vez,
 // y al final las tres juntas.
 
-export const LARGO = 40;
+export const LARGO = 50;
 
 export const HUECOS = [           // {x0, x1} — mas anchos que el pulso: piden boost
   { x0: 8.08, x1: 9.92 },
@@ -50,8 +50,16 @@ export const PINCHOS = [          // {x, w, h} — muerte si el cuerpo pasa bajo
   { x: 34.5, w: 0.16, h: 0.09 }
 ];
 
+// Dos alturas de techo = dos verbos prohibidos:
+//   0.19 -> ni el pulso entra: hay que PALMAR y pasar rodando
+//   0.30 -> el pulso pasa justo, el boost NO: prohibido tocar (medio tiempo)
 export const TUNELES = [          // {x0, x1, techo} — muerte si toca el techo
-  { x0: 19.5, x1: 23.5, techo: 0.19 }
+  { x0: 19.5, x1: 23.5, techo: 0.19 },
+  { x0: 28.5, x1: 33.5, techo: 0.30 }
+];
+
+export const PLATAFORMAS = [      // {x0, x1, y} — piso elevado, de una via:
+  { x0: 40, x1: 43, y: 0.465 }    // se aterriza desde arriba, se cae del borde
 ];
 
 // --- los instrumentos estan en el MAPA, no en la bola -----------------------
@@ -63,14 +71,20 @@ export const PADS = [             // parches en el piso: pisarlos suena a bombo
 ];
 
 export const RESORTES = [         // resortes: te lanzan 2 beats Y tocan el bajo
-  { x: 14 }, { x: 16 }
+  { x: 14 }, { x: 16 },
+  { x: 39 }                       // este te SUBE a la plataforma
 ];
 export const V_RESORTE = G;       // vuelo de 2 beats exactos: apex 0.62
 
-export const CAMPANAS = [         // campanas ALTAS: solo el apex del boost llega
-  { x: 29, y: 0.62, f: 330 },
-  { x: 31, y: 0.62, f: 392 },
-  { x: 33, y: 0.62, f: 440 }
+export const CAMPANAS = [
+  // fila del pulso: DENTRO del techo medio, a la altura del rebote chico.
+  // Se tocan no tocando: el pulso solo las va sonando.
+  { x: 29.5, y: 0.21, f: 330 },
+  { x: 30.5, y: 0.21, f: 392 },
+  { x: 31.5, y: 0.21, f: 440 },
+  // fila de la plataforma: pulso ARRIBA, en el apex sobre el piso elevado
+  { x: 41, y: 0.675, f: 523 },
+  { x: 42, y: 0.675, f: 587 }
 ];
 
 // La esfera ES un instrumento -- pero no siempre el mismo. El nivel se divide
@@ -84,7 +98,7 @@ export const CAMPANAS = [         // campanas ALTAS: solo el apex del boost lleg
 export const ZONAS = [
   { x0: 0, x1: 14, instr: 'bombo' },
   { x0: 14, x1: 27, instr: 'bajo' },
-  { x0: 27, x1: 41, instr: 'melodia' }
+  { x0: 27, x1: 51, instr: 'melodia' }
 ];
 export const instrumentoEn = x => (ZONAS.find(z => x >= z.x0 && x < z.x1) || ZONAS[0]).instr;
 
@@ -122,6 +136,7 @@ export function crearSim () {
     x: 0, y: 0, vy: V_LLENO,
     viva: true, meta: false, causa: '',
     rodando: false,
+    nivel: 0,                     // altura de la superficie donde apoya/rueda
     tocadas: new Set(),           // campanas ya sonadas en este intento
     toqueEn: -Infinity,           // beat del ultimo toque (flanco de bajada)
     sostiene: false,
@@ -134,7 +149,7 @@ export function tocar (s, b) {
   // Toque apenas DESPUES del contacto: si la pelota acaba de salir del piso
   // con el rebote de pulso, el toque lo agranda igual. Una mano real dribla
   // asi -- el contacto y el toque no son simultaneos, conversan.
-  if (!s.sostiene && s.y < 0.05 && s.vy > 0 && s.vy <= V_LLENO + 1e-9) {
+  if (!s.sostiene && s.y - s.nivel < 0.05 && s.vy > 0 && s.vy <= V_LLENO + 1e-9) {
     s.vy = V_BOOST; s.rodando = false; s.toqueEn = -Infinity;
     s.contactos.push({ b, tipo: 'lleno' });
   }
@@ -144,45 +159,60 @@ export function paso (s, dt) {
   if (!s.viva || s.meta) return;
   s.x += dt;
   s.vy -= G * dt;
+  const yAntes = s.y;
   s.y += s.vy * dt;
 
   const piso = !enHueco(s.x);
+  // ¿hay superficie a la altura h en este x? (el piso, o alguna plataforma)
+  const hay = h => h === 0
+    ? piso
+    : PLATAFORMAS.some(p => p.y === h && s.x > p.x0 && s.x < p.x1);
 
   // venir cayendo dentro de un hueco y alcanzar la pared del otro lado NO es
   // aterrizar: es chocar. Sin esto la esfera trepaba la pared del hueco.
   if (piso && s.y < -R) { s.viva = false; s.causa = 'hueco'; return; }
 
-  // rodando: pegada al piso, estable, hasta que un toque la levante o el piso
-  // se acabe. Antes pasaba por la logica de contacto y el rebote automatico la
-  // despegaba solo -- adentro del tunel eso era saltar contra el techo.
+  // rodando: pegada a SU superficie, estable, hasta que un toque la levante o
+  // la superficie se acabe (el borde de la plataforma: cae por la parabola).
   if (s.rodando) {
-    if (piso) { s.y = 0; s.vy = 0; }
+    if (hay(s.nivel)) { s.y = s.nivel; s.vy = 0; }
     else s.rodando = false;
-  } else if (piso && s.y <= 0 && s.vy < 0) {   // contacto con el piso
-    s.y = 0;
-    if (s.sostiene) {
-      s.vy = 0; s.rodando = true;
-      s.contactos.push({ b: s.x, tipo: 'palma' });
-    } else if (s.x - s.toqueEn <= VENTANA) {
-      s.vy = V_BOOST; s.rodando = false;
-      s.toqueEn = -Infinity;      // un toque agranda UN contacto
-      s.contactos.push({ b: s.x, tipo: 'lleno' });
-    } else {
-      s.vy = V_LLENO;             // el pulso es gratis: rebota solo, al beat
-      s.contactos.push({ b: s.x, tipo: 'auto' });
+  } else if (s.vy < 0) {
+    // aterrizar = cruzar una superficie desde arriba; gana la mas alta.
+    // Las plataformas son de una via: subiendo se atraviesan.
+    let superficie = piso && yAntes >= -1e-9 && s.y <= 0 ? 0 : null;
+    for (const p of PLATAFORMAS) {
+      if (s.x > p.x0 && s.x < p.x1 && yAntes >= p.y - 1e-9 && s.y <= p.y &&
+          (superficie === null || p.y > superficie)) superficie = p.y;
     }
-    // los elementos del piso suenan al ser tocados: el instrumento es el MAPA
-    if (PADS.some(p => Math.abs(s.x - p.x) < 0.18)) {
-      s.contactos.push({ b: s.x, tipo: 'pad' });
-    }
-    const rs = RESORTES.find(r => Math.abs(s.x - r.x) < 0.18);
-    if (rs && !s.sostiene) {
-      s.vy = V_RESORTE; s.rodando = false;   // el resorte manda sobre el rebote
-      s.contactos.push({ b: s.x, tipo: 'resorte' });
+    if (superficie !== null) {
+      s.y = superficie; s.nivel = superficie;
+      if (s.sostiene) {
+        s.vy = 0; s.rodando = true;
+        s.contactos.push({ b: s.x, tipo: 'palma' });
+      } else if (s.x - s.toqueEn <= VENTANA) {
+        s.vy = V_BOOST; s.rodando = false;
+        s.toqueEn = -Infinity;      // un toque agranda UN contacto
+        s.contactos.push({ b: s.x, tipo: 'lleno' });
+      } else {
+        s.vy = V_LLENO;             // el pulso es gratis: rebota solo, al beat
+        s.contactos.push({ b: s.x, tipo: 'auto' });
+      }
+      // los elementos del piso suenan al ser tocados: el instrumento es el MAPA
+      if (superficie === 0) {
+        if (PADS.some(p => Math.abs(s.x - p.x) < 0.18)) {
+          s.contactos.push({ b: s.x, tipo: 'pad' });
+        }
+        const rs = RESORTES.find(r => Math.abs(s.x - r.x) < 0.18);
+        if (rs && !s.sostiene) {
+          s.vy = V_RESORTE; s.rodando = false;  // el resorte manda sobre el rebote
+          s.contactos.push({ b: s.x, tipo: 'resorte' });
+        }
+      }
     }
   }
-  // tocar estando rodando: la levanta del piso con boost (re-arranca a lo grande)
-  if (piso && s.y === 0 && s.vy === 0 && !s.sostiene && s.x - s.toqueEn <= VENTANA) {
+  // tocar estando rodando: la levanta con boost (re-arranca a lo grande)
+  if (hay(s.nivel) && s.y === s.nivel && s.vy === 0 && !s.sostiene && s.x - s.toqueEn <= VENTANA) {
     s.vy = V_BOOST; s.rodando = false; s.toqueEn = -Infinity;
     s.contactos.push({ b: s.x, tipo: 'lleno' });
   }
@@ -403,6 +433,14 @@ function arrancarNavegador () {
       cx.beginPath();
       cx.moveTo(px(tt.x0), py(tt.techo));
       cx.lineTo(px(tt.x1), py(tt.techo));
+      cx.stroke();
+    }
+    // plataformas: piso elevado, mismo trazo que el piso
+    cx.strokeStyle = C.piso; cx.lineWidth = 2;
+    for (const p of PLATAFORMAS) {
+      cx.beginPath();
+      cx.moveTo(px(p.x0), py(p.y));
+      cx.lineTo(px(p.x1), py(p.y));
       cx.stroke();
     }
     // pads de bombo: parches en el piso
