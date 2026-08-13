@@ -404,7 +404,7 @@ function arrancarNavegador () {
 
   let s = crearSim();
   let intento = 1, mejor = 0;
-  let ac = null, master = null, eco = null, t0 = 0, proxBeat = 0;
+  let ac = null, master = null, voz = null, t0 = 0, proxBeat = 0;
   let corriendo = false, finSonado = false;
 
   const estela = [], particulas = [], destellos = [], desvios = [];
@@ -421,14 +421,12 @@ function arrancarNavegador () {
       master = ac.createGain();
       master.gain.value = 0.8;
       master.connect(comp).connect(ac.destination);
-      // eco al tempo solo para la melodia: la hace sonar mucho mas linda
-      eco = ac.createDelay(1);
-      const real = ac.createGain(), lp = ac.createBiquadFilter();
-      eco.delayTime.value = 0.75 * SPB;
-      real.gain.value = 0.32;
-      lp.type = 'lowpass'; lp.frequency.value = 2600;
-      eco.connect(lp).connect(real).connect(eco);
-      lp.connect(master);
+      // La melodia va SECA y al frente. Nada de eco ni de voces desafinadas:
+      // el apreton tiene que ser la nota, una a una, o deja de sentirse que
+      // la estas tocando vos.
+      voz = ac.createGain();
+      voz.gain.value = 1;
+      voz.connect(master);
     }
     ac.resume();
     t0 = ac.currentTime + 0.12;
@@ -466,7 +464,8 @@ function arrancarNavegador () {
   const hat = (t, abierto) => ruido(t, abierto ? 0.14 : 0.04, abierto ? 0.12 : 0.09);
   const bajo = (t, f, dur = 0.24, gan = 0.3) => golpe(t, f, dur, gan, 'triangle');
 
-  function acordePad (t, notas, dur, gan = 0.045) {
+  // La base se corre para atras: es el fondo, la melodia sos vos.
+  function acordePad (t, notas, dur, gan = 0.032) {
     for (const f of notas) for (const det of [-5, 5]) {
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
@@ -481,24 +480,24 @@ function arrancarNavegador () {
 
   // La voz del jugador: solo suena si el jugador la toca. Con `desde` no se
   // vuelve a atacar, se desliza desde la nota anterior: eso es un ligado.
-  function lead (t, f, dur = 0.4, gan = 0.2, desde = 0) {
+  function lead (t, f, dur = 0.4, gan = 0.26, desde = 0) {
     const lp = ac.createBiquadFilter(), g = ac.createGain();
-    const ataque = desde ? 0.05 : 0.012;
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(Math.min(9000, f * (desde ? 4 : 7)), t);
-    lp.frequency.exponentialRampToValueAtTime(Math.max(200, f * 1.5), t + dur);
+    const ataque = desde ? 0.03 : 0.006;      // seco y al frente: pluck, no pad
+    lp.type = 'lowpass'; lp.Q.value = 6;
+    lp.frequency.setValueAtTime(Math.min(9000, f * 8), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(240, f * 1.4), t + dur * 0.8);
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(gan, t + ataque);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    g.connect(lp).connect(master);
-    lp.connect(eco);
-    for (const [tipo, det, v] of [['square', 0, 1], ['sawtooth', 8, 0.5]]) {
+    g.connect(lp).connect(voz);
+    // una sola voz afinada + un sub por debajo que da cuerpo sin doblar la nota
+    for (const [tipo, mul, v] of [['square', 1, 1], ['sine', 0.5, 0.35]]) {
       const o = ac.createOscillator(), gv = ac.createGain();
-      o.type = tipo; o.detune.value = det; gv.gain.value = v;
+      o.type = tipo; gv.gain.value = v;
       if (desde) {
-        o.frequency.setValueAtTime(desde, t);
-        o.frequency.exponentialRampToValueAtTime(f, t + 0.07);
-      } else o.frequency.value = f;
+        o.frequency.setValueAtTime(desde * mul, t);
+        o.frequency.exponentialRampToValueAtTime(f * mul, t + 0.035);
+      } else o.frequency.value = f * mul;
       o.connect(gv).connect(g); o.start(t); o.stop(t + dur + 0.02);
     }
   }
@@ -507,15 +506,14 @@ function arrancarNavegador () {
     rielCerrar();
     const g = ac.createGain(), lp = ac.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = Math.min(9000, f * 5);
-    lp.connect(eco);
     g.gain.setValueAtTime(0.0001, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.17, ac.currentTime + 0.03);
-    g.connect(lp).connect(master);
+    g.gain.exponentialRampToValueAtTime(0.2, ac.currentTime + 0.03);
+    g.connect(lp).connect(voz);
     const osc = [];
-    for (const [tipo, det] of [['square', 0], ['sawtooth', 9]]) {
-      const o = ac.createOscillator();
-      o.type = tipo; o.frequency.value = f; o.detune.value = det;
-      o.connect(g); o.start(); osc.push(o);
+    for (const [tipo, mul, v] of [['square', 1, 1], ['sine', 0.5, 0.35]]) {
+      const o = ac.createOscillator(), gv = ac.createGain();
+      o.type = tipo; o.frequency.value = f * mul; gv.gain.value = v;
+      o.connect(gv).connect(g); o.start(); osc.push(o);
     }
     rielVoz = { g, osc };
   }
