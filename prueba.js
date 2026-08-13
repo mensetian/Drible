@@ -107,11 +107,13 @@ const saltos = NOTAS.filter(k => !k.silencio && !k.escalera && !k.riel);
 const estrechas = saltos.filter(k => k.x1 - k.x0 < 0.09);
 const solapadas = NOTAS.filter((k, i) => NOTAS[i + 1] && k.x1 > NOTAS[i + 1].x0 + 1e-9);
 
-// cada salto tiene que llegar CAYENDO a la tecla siguiente, si no la atraviesa
+// Desde el toque MAS TARDE de cada tecla hay que poder aterrizar dentro de la
+// que sigue, cayendo. Si no, la esfera la atraviesa por abajo y la nota no
+// existe: no alcanza con que la ventana sea ancha.
 const inalcanzables = saltos.filter(k => {
   const sig = NOTAS[k.i + 1];
   if (!sig || sig.silencio) return false;
-  return sig.x0 - k.x1 < vueloMinimo(sig.y - k.y) - 1e-9;
+  return k.x1 + vueloMinimo(sig.y - k.y) > sig.x1 - 0.05 + 1e-9;
 });
 
 const pruebas = [
@@ -189,6 +191,17 @@ const pruebas = [
   ['soltar el riel sobre el abismo mata',
     !rf.viva && rf.causa === 'hueco' && HUECOS.some(h => rf.x > h.x0 && rf.x < h.x1 + 1),
     `x ${rf.x.toFixed(2)} causa ${rf.causa || 'sigue viva'}`],
+  // el terreno se deduce de la partitura: cambiar la melodia no puede dejar un
+  // abismo debajo de una nota que se toca saltando
+  ['todo abismo cae debajo de un riel', HUECOS.length >= 3 &&
+    HUECOS.every(h => NOTAS.some(n => n.riel && h.x0 >= n.x0 && h.x1 <= n.x1)),
+    `${HUECOS.length} abismos`],
+  ['el techo del silencio empieza despues de que la esfera toco la red',
+    TECHOS.length >= 1 && TECHOS.every(t => {
+      const n = NOTAS.find(k => k.silencio && !k.piso && t.x0 > k.x0 && t.x0 < k.x0 + k.dur);
+      const ant = n && NOTAS[n.i - 1];
+      return !ant || t.x0 >= n.x0 + Math.sqrt(2 * ant.y / G);
+    }), `${TECHOS.length}`],
   ['la red rescata: hay resortes repartidos', RESORTES.length >= 8, `${RESORTES.length}`],
   // un punto exacto se esquiva sin querer, o se salta creyendo que es obstaculo
   ['los trampolines son una zona pisable, no un punto',

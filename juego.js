@@ -40,22 +40,24 @@ export const CAIDA_MUERTE = -0.35;
 
 export const CANCION = [
   '-:4',                                                             //  0  entrada
-  'A4:1 E5:1.5 D5:.5 C5:1',                                          //  1  Am  el gancho
-  'A4:1 F5:1.5 E5:.5 D5:1',                                          //  2  F   el mismo, mas alto
-  'C5:1 G5:1.5 E5:.5 D5:1',                                          //  3  C   y otra vez
-  'B4:1 D5:1 G4:2',                                                  //  4  G   respuesta
-  'A4:1 E5:1 D5:.5 C5:.5 B4:1',                                      //  5  Am  variacion
-  'A4:.5 C5:1 F5:.5 E5:.5 D5:.5 C5:1',                               //  6  F   se apura
+  // El riff: corchea-corchea-negra, la misma celula cuatro veces con distinto
+  // techo. Se reconoce a la segunda vuelta, que es lo que le faltaba antes.
+  'A4:.5 C5:.5 D5:1 E5:.5 D5:.5 C5:1',                               //  1  Am
+  'A4:.5 C5:.5 F5:1 E5:.5 D5:.5 C5:1',                               //  2  F   mismo dibujo, mas alto
+  'C5:.5 E5:.5 G5:1 E5:.5 D5:.5 C5:1',                               //  3  C
+  'B4:.5 D5:.5 G5:1 F5:.5 D5:.5 B4:1',                               //  4  G   el fa es el b7: muerde
+  'A4:.5 C5:.5 E5:1 A5:2',                                           //  5  Am  primera altura: se sostiene
+  'G5:.5 F5:.5 E5:1 D5:2',                                           //  6  F   y baja
   '-:4',                                                             //  7  C   SILENCIO: rodar
-  'D5:.5 D5:.5 D5:1 D5:.5 C5:.5 B4:1',                               //  8  G   puro ritmo
-  'A4:.5 C5:1 E5:1.5 D5:1',                                          //  9  Am  el gancho fuerte
-  'A4:.5 C5:1 F5:1.5 E5:1',                                          // 10  F
+  'D5:.5 D5:.5 B4:.5 D5:.5 E5:1 D5:1',                               //  8  G   puro ritmo
+  'A4:.5 C5:.5 E5:1 D5:.5 C5:.5 B4:1',                               //  9  Am  el riff, contestado
+  'A4:.5 C5:.5 F5:1 A5:2',                                           // 10  F   y se cuelga arriba
   'C5:.25 D5:.25 E5:.25 F5:.25 G5:.25 A5:.25 B5:.25 C6:.25 G5:1 E5:1', // 11 C escalera que trepa
   'B5:.25 A5:.25 G5:.25 F5:.25 E5:.25 D5:.25 C5:.25 B4:.25 G4:1 D5:1', // 12 G  cascada que baja
-  'A5:2 G5:1 E5:1',                                                  // 13  Am  la cima
-  'F5:1.5 E5:.5 C5:2',                                               // 14  F
-  'E5:1 G5:1.5 E5:.5 C5:1',                                          // 15  C   el gancho por ultima vez
-  'D5:1 B4:1 A4:2'                                                   // 16  G   resuelve en la
+  'E5:.5 A5:.5 G5:1 A5:2',                                           // 13  Am  la cima
+  'A5:.5 G5:.5 F5:1 E5:2',                                           // 14  F
+  'G5:.5 E5:.5 C5:1 D5:.5 E5:.5 G5:1',                               // 15  C   el riff dado vuelta
+  'B4:.5 D5:.5 G5:1 A4:2'                                            // 16  G   resuelve en la
 ];
 
 export const LARGO = CANCION.length * 4;
@@ -122,11 +124,25 @@ function compilar () {
     n.riel = n.dur >= 1.5;
     n.escalera = !n.riel && n.dur <= 0.25 && sig && !sig.silencio &&
                  Math.abs(sig.y - n.y) <= 3 * PASO_TONO;
-    const tv = sig && !sig.silencio ? vueloMinimo(sig.y - n.y) : 0.03;
-    const tope = sig ? sig.x0 - tv : n.b + n.dur;
+    const fin = sig ? sig.x0 : n.b + n.dur;
     if (n.escalera) n.x1 = sig.x0;                       // pegadas: se rueda
-    else if (n.riel) n.x1 = Math.max(n.b + 0.4, tope);   // se suelta al final
-    else n.x1 = Math.min(n.b + Math.min(0.42, n.dur * 0.7), tope);
+    else if (n.riel) n.x1 = fin;                         // se suelta al final
+    else n.x1 = Math.min(n.b + Math.min(0.42, n.dur * 0.7), fin);
+  }
+  // Recorte por vuelo, al reves para que la tecla siguiente ya este medida.
+  // Del toque MAS TARDE hay que poder aterrizar DENTRO de la que sigue, no
+  // sobre su borde: llegar tarde es peor, no imposible. Con la regla vieja
+  // --caer justo en el canto-- una corchea antes de un salto de cuarta se
+  // quedaba sin ventana, y eso obligaba a escribir la melodia para que la
+  // geometria la dejara pasar. Es al reves: el mapa sigue a la musica.
+  for (let i = notas.length - 1; i >= 0; i--) {
+    const n = notas[i], sig = notas[i + 1];
+    if (n.silencio || n.escalera || !sig || sig.silencio) continue;
+    const tv = vueloMinimo(sig.y - n.y);
+    // El riel lanza solo al terminarse: su borde tiene que dar el vuelo JUSTO,
+    // porque el jugador no elige cuando salir. Una tecla normal la lanza el,
+    // asi que ahi alcanza con poder aterrizar adentro de la que sigue.
+    n.x1 = Math.min(n.x1, n.riel ? sig.x0 + MIRA - tv : Math.max(sig.x0, sig.x1 - 0.06) - tv);
   }
   // LIGADURAS: de una nota larga a una corta mas grave no se vuelve a atacar,
   // se cae. El borde de la tecla se corre para que la caida libre aterrice
@@ -134,7 +150,9 @@ function compilar () {
   for (const n of notas) {
     const sig = notas[n.i + 1];
     if (n.silencio || !sig || sig.silencio) continue;
-    if (n.escalera || n.dur < 1 || sig.dur > 0.5 || sig.y >= n.y) continue;
+    // a una carrera no se cae ligado: se entra rodando, o se rompe la carrera
+    if (n.escalera || sig.escalera) continue;
+    if (n.dur < 1 || sig.dur > 0.5 || sig.y >= n.y) continue;
     const caida = Math.sqrt(2 * (n.y - sig.y) / G);
     const borde = sig.x0 + MIRA - caida;
     if (borde < n.x0 + 0.14) continue;                   // sin ventana no hay ligadura
@@ -158,18 +176,29 @@ export const PISO = NOTAS[0] && NOTAS[0].piso ? NOTAS[0] : null;   // la platafo
 
 // --- el terreno, deducido de la cancion -------------------------------------
 
-// Los abismos van debajo de los rieles dramaticos: ahi mantener vale la vida.
-export const HUECOS = [
-  { x0: 37.1, x1: 39.3 },    // riel del compas 9
-  { x0: 41.1, x1: 43.3 },    // riel del compas 10
-  { x0: 51.6, x1: 54.3 },    // el riel de la cima
-  { x0: 57.6, x1: 60.3 }     // riel del compas 14
-];
+// Los abismos van debajo de los rieles de la segunda mitad: ahi mantener vale
+// la vida. Se deducen de la partitura -- estaban escritos a mano y cada vez que
+// se tocaba la melodia quedaban debajo de cualquier cosa.
+export const HUECOS = NOTAS
+  .filter(n => n.riel && n.b >= LARGO / 2 && n.x1 - n.x0 > 1.2)
+  .map(n => ({ x0: +(n.x0 + 0.7).toFixed(3), x1: +(n.x1 - 0.1).toFixed(3) }));
 export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
 
-// Techo sobre el silencio del compas 7: ahi tocar mata.
-// Termina antes del resorte de reenganche (31.0): ahi ya se puede volver a subir.
-export const TECHOS = [{ x0: 28.5, x1: 30.5, y: 0.19 }];
+// Techo sobre el silencio largo: ahi tocar mata. Se corta antes del final para
+// que el resorte de reenganche quede libre y se pueda volver a subir.
+// Empieza recien cuando la esfera ya toco la red: si arranca antes, la mata
+// mientras todavia esta cayendo desde la ultima nota, sin haber hecho nada.
+export const TECHOS = NOTAS
+  .filter(n => n.silencio && !n.piso && n.dur >= 2)
+  .map(n => {
+    const ant = NOTAS[n.i - 1];
+    const caida = ant && !ant.silencio ? Math.sqrt(2 * ant.y / G) : 0.4;
+    return {
+      x0: +(n.x0 + caida + 0.25).toFixed(3),
+      x1: +(n.x0 + n.dur - 1.4).toFixed(3),
+      y: 0.19
+    };
+  });
 
 // Resortes: reenganche despues de un silencio y rescate si te caiste a la red.
 // Son una ZONA, no un punto: pisarla en cualquier parte te devuelve arriba. Un
@@ -198,9 +227,10 @@ function resortes () {
 export const RESORTES = resortes();
 
 export const SECCIONES = [
-  { x0: 0, n: 'entrada' }, { x0: 4, n: 'tema' }, { x0: 28, n: 'silencio · no toques' },
-  { x0: 32, n: 'ritmo' }, { x0: 36, n: 'el tema fuerte' }, { x0: 44, n: 'frenesi' },
-  { x0: 52, n: 'la cima' }, { x0: 60, n: 'salida' }
+  { x0: 0, n: 'salida' }, { x0: 4, n: 'el riff' }, { x0: 20, n: 'lo alto' },
+  { x0: 28, n: 'silencio · no toques' }, { x0: 32, n: 'ritmo' },
+  { x0: 36, n: 'el riff otra vez' }, { x0: 44, n: 'la escalera' },
+  { x0: 52, n: 'la cima' }, { x0: 60, n: 'el final' }
 ];
 
 // --- simulacion --------------------------------------------------------------
@@ -503,38 +533,72 @@ function arrancarNavegador () {
     o.connect(g).connect(master);
     o.start(t); o.stop(t + dur);
   }
-  function ruido (t, dur, gan) {
+  // El ruido va FILTRADO. El blanco pelado es lo que hacia sonar a lata la
+  // bateria entera: la caja, el hat y el clap eran el mismo siseo con distinta
+  // envolvente. Con un filtro cada uno tiene su registro y aparece el groove.
+  function ruido (t, dur, gan, filtro = null, f = 1000, Q = 1) {
     const n = Math.max(1, ac.sampleRate * dur | 0), buf = ac.createBuffer(1, n, ac.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
     const src = ac.createBufferSource(); src.buffer = buf;
     const g = ac.createGain(); g.gain.value = gan;
-    src.connect(g).connect(master); src.start(t);
+    if (filtro) {
+      const bq = ac.createBiquadFilter();
+      bq.type = filtro; bq.frequency.value = f; bq.Q.value = Q;
+      src.connect(bq).connect(g).connect(master);
+    } else src.connect(g).connect(master);
+    src.start(t);
   }
   function kick (t) {
     const o = ac.createOscillator(), g = ac.createGain();
     o.type = 'sine';
-    o.frequency.setValueAtTime(150, t);
-    o.frequency.exponentialRampToValueAtTime(48, t + 0.12);
-    g.gain.setValueAtTime(0.55, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
-    o.connect(g).connect(master); o.start(t); o.stop(t + 0.3);
+    o.frequency.setValueAtTime(135, t);
+    o.frequency.exponentialRampToValueAtTime(44, t + 0.10);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.8, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.30);
+    o.connect(g).connect(master); o.start(t); o.stop(t + 0.34);
   }
-  const snare = (t, gan = 0.38) => { ruido(t, 0.12, gan); golpe(t, 190, 0.08, 0.15, 'triangle'); };
-  const clap = t => { ruido(t, 0.05, 0.2); ruido(t + 0.014, 0.05, 0.16); ruido(t + 0.03, 0.09, 0.2); };
-  const hat = (t, abierto) => ruido(t, abierto ? 0.14 : 0.04, abierto ? 0.12 : 0.09);
-  const bajo = (t, f, dur = 0.24, gan = 0.3) => golpe(t, f, dur, gan, 'triangle');
+  const snare = (t, gan = 0.3) => {
+    ruido(t, 0.15, gan, 'bandpass', 1900, 0.8);
+    golpe(t, 185, 0.07, 0.11, 'triangle');
+  };
+  const clap = t => {
+    for (const [d, g] of [[0, 0.15], [0.014, 0.12], [0.032, 0.16]])
+      ruido(t + d, 0.07, g, 'bandpass', 1500, 0.9);
+  };
+  const hat = (t, abierto) =>
+    ruido(t, abierto ? 0.15 : 0.045, abierto ? 0.13 : 0.10, 'highpass', 8200);
 
-  // La base se corre para atras: es el fondo, la melodia sos vos.
-  function acordePad (t, notas, dur, gan = 0.032) {
+  // El bajo es el peso de la cancion: sierra por un pasabajos con resonancia
+  // que se cierra. Era un triangulo pelado y por eso no empujaba nada.
+  function bajo (t, f, dur = 0.24, gan = 0.3) {
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 6;
+    lp.frequency.setValueAtTime(460, t);
+    lp.frequency.exponentialRampToValueAtTime(150, t + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gan, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp).connect(g).connect(master);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+
+  // La base se corre para atras: es el fondo, la melodia sos vos. Triangulos
+  // por un pasabajos, no sierras: una sierra detras de la melodia es serrucho.
+  function acordePad (t, notas, dur, gan = 0.03) {
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 1300;
+    lp.connect(master);
     for (const f of notas) for (const det of [-5, 5]) {
       const o = ac.createOscillator(), g = ac.createGain();
-      o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+      o.type = 'triangle'; o.frequency.value = f; o.detune.value = det;
       g.gain.setValueAtTime(0.0001, t);
       g.gain.linearRampToValueAtTime(gan, t + 0.4);
       g.gain.setValueAtTime(gan, t + dur - 0.5);
       g.gain.linearRampToValueAtTime(0.0001, t + dur);
-      o.connect(g).connect(master);
+      o.connect(g).connect(lp);
       o.start(t); o.stop(t + dur);
     }
   }
@@ -547,18 +611,26 @@ function arrancarNavegador () {
   // corrido.
   function lead (t, f, dur = 0.4, gan = 0.26, desde = 0, chueca = false) {
     const lp = ac.createBiquadFilter(), g = ac.createGain();
-    const ataque = desde ? 0.03 : 0.006;      // seco y al frente: pluck, no pad
-    lp.type = 'lowpass'; lp.Q.value = chueca ? 2 : 6;
-    lp.frequency.setValueAtTime(Math.min(9000, f * (chueca ? 3 : 8)), t);
-    lp.frequency.exponentialRampToValueAtTime(Math.max(240, f * (chueca ? 0.9 : 1.4)), t + dur * 0.8);
+    const ataque = desde ? 0.03 : 0.005;      // seco y al frente: pluck, no pad
+    // EL BRILLO TIENE TECHO ABSOLUTO. Atado solo a la nota (f * 8), cada nota
+    // mas aguda salia mas brillante que la anterior, y arriba la melodia se
+    // volvia un silbido. Un instrumento de verdad no se pone mas brillante
+    // porque toques mas agudo: el cuerpo del instrumento no cambia.
+    lp.type = 'lowpass'; lp.Q.value = chueca ? 1 : 2.2;
+    lp.frequency.setValueAtTime(Math.min(chueca ? 1500 : 4600, f * 6), t);
+    lp.frequency.exponentialRampToValueAtTime(
+      Math.max(220, Math.min(chueca ? 480 : 1100, f * 1.6)), t + dur * 0.85);
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(gan * (chueca ? 0.7 : 1), t + ataque);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     g.connect(lp).connect(voz);
-    if (chueca) ruido(t, 0.05, 0.1);          // el golpe seco de la cuerda mal pisada
-    // una sola voz afinada + un sub por debajo que da cuerpo sin doblar la nota.
-    // Chueca, las dos se van para lados distintos: eso es lo que bate y molesta.
-    for (const [tipo, mul, v, des] of [['square', 1, 1, -45], ['sine', 0.5, 0.35, 28]]) {
+    // el pico del ataque: sin esto la nota entra sin uña y suena plana
+    if (!desde) ruido(t, 0.02, chueca ? 0.09 : 0.045, 'bandpass', chueca ? 900 : 2600, 1.2);
+    // Triangulo de cuerpo + un poco de sierra para el filo + sub una octava
+    // abajo. La cuadrada sola era la chicharra. Chueca, las voces se van para
+    // lados distintos: eso es lo que bate y molesta.
+    for (const [tipo, mul, v, des] of
+      [['triangle', 1, 1, -45], ['sawtooth', 1, 0.32, -45], ['sine', 0.5, 0.5, 28]]) {
       const o = ac.createOscillator(), gv = ac.createGain();
       o.type = tipo; gv.gain.value = v;
       if (chueca) o.detune.value = des;
@@ -572,20 +644,31 @@ function arrancarNavegador () {
 
   function rielAbrir (f, chueca = false) {
     rielCerrar();
+    const t = ac.currentTime;
     const g = ac.createGain(), lp = ac.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = Math.min(9000, f * (chueca ? 2.2 : 5));
-    g.gain.setValueAtTime(0.0001, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(chueca ? 0.15 : 0.2, ac.currentTime + 0.03);
+    lp.type = 'lowpass'; lp.Q.value = 1.6;
+    lp.frequency.value = Math.min(chueca ? 1200 : 3400, f * 5);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(chueca ? 0.15 : 0.2, t + 0.03);
     g.connect(lp).connect(voz);
-    if (chueca) ruido(ac.currentTime, 0.05, 0.1);
+    if (chueca) ruido(t, 0.05, 0.09, 'bandpass', 900, 1.2);
+    // Vibrato que entra despues del ataque. Una nota larga sin vibrato es un
+    // tono de test: es lo que sonaba plano cuando se sostenia un riel.
+    const lfo = ac.createOscillator(), lfoG = ac.createGain();
+    lfo.type = 'sine'; lfo.frequency.value = 5.2;
+    lfoG.gain.setValueAtTime(0, t);
+    lfoG.gain.linearRampToValueAtTime(7, t + 0.35);
+    lfo.connect(lfoG); lfo.start(t);
     const osc = [];
-    for (const [tipo, mul, v, des] of [['square', 1, 1, -45], ['sine', 0.5, 0.35, 28]]) {
+    for (const [tipo, mul, v, des] of
+      [['triangle', 1, 1, -45], ['sawtooth', 1, 0.3, -45], ['sine', 0.5, 0.5, 28]]) {
       const o = ac.createOscillator(), gv = ac.createGain();
       o.type = tipo; o.frequency.value = f * mul; gv.gain.value = v;
       if (chueca) o.detune.value = des;
+      lfoG.connect(o.detune);
       o.connect(gv).connect(g); o.start(); osc.push(o);
     }
-    rielVoz = { g, osc };
+    rielVoz = { g, osc: [...osc, lfo] };
   }
   function rielCerrar () {
     if (!rielVoz) return;
@@ -607,19 +690,25 @@ function arrancarNavegador () {
   ];
   const armonia = c => PROG[((c - 1) % 4 + 4) % 4];
 
+  const CONTRA = [0.5, 1.5, 2.5, 3.5];                                  // el contratiempo
+  const OCHOS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5];
+  const DIECISEIS = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75];
+
+  // La base entra por capas, como en esfera: pulso, peso, aire, todo. Un
+  // arreglo que ya empieza completo no puede crecer, y sin crecer no hay viaje.
   function planCompas (c) {
     if (c < 0 || c >= CANCION.length) return null;
-    const base = { kick: [], snare: [], clap: [], hats: [0.5, 1.5, 2.5, 3.5], abierto: [], bajo: 'ochos', pad: true, fill: false };
-    if (c === 0) return { ...base, kick: [0, 2], bajo: 'nada', pad: false, fill: true };
-    if (c <= 2) return { ...base, kick: [0, 2], snare: [3], bajo: 'sus' };
-    if (c <= 4) return { ...base, kick: [0, 2], snare: [1, 3], fill: c === 4 };
-    if (c <= 6) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], fill: c === 6 };
+    const base = { kick: [], snare: [], clap: [], hats: CONTRA, abierto: [], bajo: 'ochos', pad: true, fill: false };
+    if (c === 0) return { ...base, kick: [0, 1, 2, 3], hats: [], bajo: 'nada', pad: false, fill: true };
+    if (c <= 2) return { ...base, kick: [0, 2], snare: [3], hats: [], bajo: 'empuje' };
+    if (c <= 4) return { ...base, kick: [0, 2], snare: [1, 3], bajo: 'empuje', fill: c === 4 };
+    if (c <= 6) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: OCHOS, abierto: [3.5], fill: c === 6 };
     if (c === 7) return { ...base, kick: [0], hats: [], abierto: [2], bajo: 'sus' };          // el silencio
-    if (c === 8) return { ...base, kick: [0, 0.5, 2], clap: [1, 3], bajo: 'ochos' };
-    if (c <= 10) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], fill: c === 10 };
-    if (c <= 12) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], hats: [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75], fill: c === 12 };
-    if (c <= 14) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], abierto: [3.5], bajo: 'octava', fill: c === 14 };
-    return { ...base, kick: [0, 2, 2.5], snare: [1, 3], hats: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], bajo: 'octava' };
+    if (c === 8) return { ...base, kick: [0, 0.5, 2], clap: [1, 3], bajo: 'empuje' };
+    if (c <= 10) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], hats: OCHOS, fill: c === 10 };
+    if (c <= 12) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], hats: DIECISEIS, fill: c === 12 };
+    if (c <= 14) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS, abierto: [3.5], bajo: 'octava', fill: c === 14 };
+    return { ...base, kick: [0, 2, 2.5], snare: [1, 3], clap: [1, 3], hats: OCHOS, bajo: 'octava' };
   }
 
   function agendarMusica () {
@@ -636,6 +725,10 @@ function arrancarNavegador () {
         if (plan.clap.includes(u)) clap(t);
         if (plan.hats.includes(u)) hat(t, plan.abierto.includes(u));
         if (plan.abierto.includes(u) && !plan.hats.includes(u)) hat(t, true);
+        // El empuje: fundamental larga en el 1 y un golpe corrido en el "y" del
+        // 3. Esa media unidad fuera de lugar es la mitad de la vibra de esfera.
+        if (plan.bajo === 'empuje' && u === 0) bajo(t, arm.r, 1.6 * SPB, 0.32);
+        if (plan.bajo === 'empuje' && u === 2.5) bajo(t, arm.r, 0.9 * SPB, 0.3);
         if (plan.bajo === 'ochos' && u % 0.5 === 0) bajo(t, arm.r);
         if (plan.bajo === 'octava' && u % 0.5 === 0) bajo(t, u % 1 === 0.5 ? arm.r * 2 : arm.r, 0.2, 0.28);
         if (plan.bajo === 'sus' && u === 0) bajo(t, arm.r, 3.6 * SPB, 0.22);
@@ -681,7 +774,11 @@ function arrancarNavegador () {
     for (const e of s.eventos) {
       if (e.tipo === 'nota') {
         desvios.push(Math.abs(e.tarde) * 600); aviso(e);
-        lead(ac.currentTime, e.f, Math.max(0.22, 0.44 - Math.abs(e.tarde) * 0.4), 0.26, 0, e.chueca);
+        // acento: la nota que cae en el pulso pega mas fuerte. Todas iguales es
+        // lo que sonaba plano -- un instrumento tiene dinamica, un beep no.
+        const fuerte = NOTAS[e.i].b % 1 === 0;
+        lead(ac.currentTime, e.f, Math.max(0.22, 0.46 - Math.abs(e.tarde) * 0.4),
+          fuerte ? 0.29 : 0.21, 0, e.chueca);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 3 : 7, true, e.chueca ? C.suciaRGB : C.teclaRGB);
         squash = 1;
@@ -696,7 +793,7 @@ function arrancarNavegador () {
         chispas(e.x, e.y, e.chueca ? 4 : 10, true, e.chueca ? C.suciaRGB : C.teclaRGB);
       } else if (e.tipo === 'falso') {
         // martillaste: cuerda muerta. El boton queda sordo hasta que se acomode.
-        ruido(ac.currentTime, 0.05, 0.16);
+        ruido(ac.currentTime, 0.06, 0.14, 'bandpass', 700, 1.4);
         golpe(ac.currentTime, 70, 0.09, 0.16, 'square');
         chispas(e.x, e.y, 4, false, C.suciaRGB);
       } else if (e.tipo === 'sordo') {
@@ -708,12 +805,12 @@ function arrancarNavegador () {
         chispas(e.x, 0, 12, true);
         squash = 1;
       } else if (e.tipo === 'posar') {
-        ruido(ac.currentTime, 0.03, 0.05); squash = 0.7;
+        ruido(ac.currentTime, 0.03, 0.05, 'lowpass', 900); squash = 0.7;
       } else if (e.tipo === 'red') {
-        ruido(ac.currentTime, 0.09, 0.09); squash = 0.9;
+        ruido(ac.currentTime, 0.09, 0.09, 'lowpass', 700); squash = 0.9;
         chispas(e.x, 0, 5);
       } else if (e.tipo === 'aire' || e.tipo === 'saltoRed') {
-        ruido(ac.currentTime, 0.05, 0.035);
+        ruido(ac.currentTime, 0.04, 0.03, 'highpass', 3000);
       }
     }
     s.eventos.length = 0;
