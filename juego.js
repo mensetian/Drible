@@ -206,24 +206,63 @@ const CANCIONES = {
     // beat, y cada pique afinado dispara las cuatro semicorcheas del acorde.
     // Es la primera seccion donde la esfera toca OTRO instrumento.
     arpegios: [{ x0: 36.4, x1: 50.4 }],
-    // El arreglo, calcado seccion a seccion del estudio: amanecer respira con
-    // el pad, amanecer II mete hats y bajo, el motor sube hasta el redoble, y
-    // el drop entra con todo.
-    plan (c) {
-      if (c < 0 || c >= this.compases.length) return null;
-      const base = { kick: [], snare: [], clap: [], hats: [], abierto: [], bajo: 'nada', pad: true, fill: false };
-      if (c === 0) return { ...base, kick: [0, 1, 2, 3], pad: false, fill: true };
-      if (c <= 2) return base;                                                       // amanecer: pad solo
-      if (c <= 4) return { ...base, hats: CONTRA };
-      if (c <= 6) return { ...base, kick: [0], hats: CONTRA, bajo: 'empuje' };       // amanecer II
-      if (c <= 8) return { ...base, kick: [0, 2], snare: [3], hats: OCHOS, bajo: 'empuje', fill: c === 8 };
-      if (c <= 11) return { ...base, kick: [0, 2], snare: [1, 3], hats: OCHOS, bajo: 'ochos' };  // motor
-      if (c === 12) return { ...base, kick: [0, 1, 2, 3], snare: [1, 1.5, 2, 2.5, 3, 3.5], hats: OCHOS, bajo: 'ochos', fill: true };  // el redoble
-      if (c <= 16) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: OCHOS, abierto: [3.5], bajo: 'octava' };  // drop 1
-      if (c <= 20) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], clap: [1, 3], hats: OCHOS, bajo: 'octava', fill: c === 20 };
-      return { ...base, kick: [0], clap: [1, 3], bajo: 'sus' };                      // cierre
+    // El arreglo NO se aproxima: usa el motor del estudio tal cual (banco de
+    // patrones por semicorchea + voces calcadas). Cada compas dice que patron
+    // toca cada capa, seccion a seccion como en estudio/index.html. En el
+    // motor no hay `arp`: el arpegio lo driblea el jugador.
+    estudio (c) {
+      if (c === 0) return { drums: 'cuenta' };
+      if (c <= 2) return { drums: 'silencio', arp: 'soft8', arpGan: 0.7, pad: true };          // amanecer
+      if (c <= 4) return { drums: 'hats', arp: 'soft8', arpGan: 0.7, pad: true };
+      if (c <= 7) return { drums: 'hats', bajo: 'pulso', arp: 'soft8', pad: true };            // amanecer II
+      if (c === 8) return { drums: 'preFill', bajo: 'pulso', arp: 'soft8', pad: true };
+      if (c <= 11) return { drums: 'coro', bajo: 'corchea', pad: true, riser: c === 11 };      // motor
+      if (c === 12) return { drums: 'roll', bajo: 'corchea', pad: true };
+      if (c <= 20) return { drums: (c - 13) % 4 === 3 ? 'fillTom' : 'coro', bajo: 'drive', arp: 'up16', pad: true, crash: c === 13 };  // drop 1
+      if (c === 21) return { drums: 'outro', bajo: 'pulso', arp: 'glitter', pad: true, crash: true };
+      return null;
     }
   }
+};
+
+// --- el banco del estudio (calcado de estudio/index.html, sonido aprobado) ---
+// Bateria por caracteres (16 pasos): k bombo · K bombo duro · s caja · c clap
+// x k+s+c · h hat · H hat abierto · u/T/t toms · . nada.
+const E_BATERIA = {
+  cuenta: 'k...k...k...k...',
+  silencio: '................',
+  pulso: 'k.......k.......',
+  hats: 'h...h...h...h.h.',
+  preFill: 'h...h...h...s.s.',
+  coro: 'k.h.x.h.k.h.x.h.',
+  fillTom: 'k.h.x.h.k.u.T.t.',
+  roll: 'k.s.s.s.ssssssss',
+  outro: 'k.......x.......'
+};
+// Bajo y arpegio en numeros (16 pasos): semitonos sobre la raiz / grados de la
+// triada. '.' = paso mudo.
+const parsearPasos = s => s.trim().split(/\s+/).map(t => t === '.' ? null : +t);
+const E_BAJO = {
+  pulso: parsearPasos('0 . . . . . . . 0 . . . . . . .'),
+  corchea: parsearPasos('0 . 0 . 0 . 0 . 0 . 0 . 0 . 0 .'),
+  drive: parsearPasos('0 . 0 . 12 . 0 . 0 . 12 . 0 . 12 .'),
+  verso: parsearPasos('0 . . 0 . . 12 . 0 . . 0 . 7 . .'),
+  climb: parsearPasos('0 . 0 . 3 . 3 . 5 . 5 . 7 . 10 .')
+};
+const E_ARP = {
+  up16: parsearPasos('0 1 2 3 0 1 2 3 0 1 2 3 0 1 2 3'),
+  soft8: parsearPasos('0 . 2 . 3 . 2 . 0 . 2 . 3 . 2 .'),
+  glitter: parsearPasos('3 . 4 . 5 . 4 . 3 . 4 . 5 . 6 .')
+};
+// El acorde como lo arma el estudio: raiz en octava 3 + intervalos de triada.
+const E_RAIZ = { A: 220.00, B: 246.94, C: 130.81, D: 146.83, E: 164.81, F: 174.61, G: 196.00 };
+const acordeEstudio = sym => ({
+  root: E_RAIZ[sym[0]],
+  ints: sym.endsWith('m') ? [0, 3, 7] : [0, 4, 7]
+});
+const acordeEnCompas = c => {
+  const a = CANCIONES[CANCION_ID].acordes || ['Am'];
+  return acordeEstudio(a[Math.max(0, Math.min(c, a.length - 1))]);
 };
 
 export const NIVELES = ['esfera', 'aurora', 'viaje'];   // el orden en el menu
@@ -479,10 +518,17 @@ export function elegirCancion (id) {
   NOTAS = compilar();
   TOTAL_NOTAS = NOTAS.filter(n => !n.silencio).length;
   PISO = NOTAS[0] && NOTAS[0].piso ? NOTAS[0] : null;
+  ARPEGIOS = c.arpegios || [];
   HUECOS = NOTAS
     .filter(n => n.riel && n.b >= LARGO / 2 && n.x1 - n.x0 > 1.2)
     .map(n => ({ x0: +(n.x0 + 0.7).toFixed(3), x1: +(n.x1 - 0.1).toFixed(3) }));
-  ARPEGIOS = c.arpegios || [];
+  // La zona de dribleo se sostiene PICANDO: entre pad y pad la red se corta.
+  // Pasarla sin driblear no existe -- rodar te lleva al abismo. Picar corrido
+  // no te tira (el bote se corrige al proximo pad): el espacio perdona, el
+  // sonido no.
+  for (const z of ARPEGIOS)
+    for (let bx = Math.ceil(z.x0); bx < z.x1 - 0.6; bx++)
+      HUECOS.push({ x0: +(bx + 0.3).toFixed(3), x1: +(bx + 0.7).toFixed(3) });
   TECHOS = calcularTechos();
   RESORTES = resortes();
   SECCIONES = c.secciones;
@@ -515,6 +561,7 @@ export function crearSim () {
     racha: 0, mejorRacha: 0, falsos: 0,
     resortesUsados: new Set(),
     botes: 0, botesLimpios: 0,     // los piques de las zonas de dribleo
+    rafaga: false,
     eventos: []
   };
 }
@@ -695,9 +742,10 @@ function aplicar (s, xt = s.x) {
     // afinado dispara el arpegio; el chueco rebota mudo.
     if (enArpegio(s.x)) {
       const dev = s.x - Math.round(s.x);
-      const chueca = Math.abs(dev) > AFINADO;
-      s.botes++;
-      if (!chueca) s.botesLimpios++;
+      // el pique en rafaga es martilleo, como en las teclas: falso y sordera
+      const chueca = Math.abs(dev) > AFINADO || s.rafaga;
+      if (s.rafaga) castigar(s);
+      else { s.botes++; if (!chueca) s.botesLimpios++; }
       s.estado = 'aire';
       // El ultimo pique de la zona no rebota: LANZA a la primera tecla que
       // sigue. El dribleo desemboca en la melodia sin costura -- un resorte
@@ -709,7 +757,12 @@ function aplicar (s, xt = s.x) {
         if (objetivo - s.x < tv) objetivo = Math.min(sig.x1 - 0.02, s.x + tv);
         const T = Math.max(0.2, objetivo - s.x);
         s.vy = Math.min(1.9, sig.y / T + G * T / 2);
-      } else s.vy = G * 0.45;                // vuelve a la red en ~un beat
+      } else {
+        // el pique apunta al PROXIMO pad (un pelo antes del beat, para rodar
+        // y volver a picar): llegar corrido no te tira, no picar si
+        const T = Math.max(0.4, Math.min(1.6, Math.round(s.x) + 0.9 - s.x));
+        s.vy = G * T / 2;
+      }
       s.eventos.push({ tipo: 'bote', x: s.x, y: 0, tarde: dev, chueca });
       return true;
     }
@@ -769,6 +822,7 @@ export function tocar (s, b) {
   s.apretadoEn = s.x;
   if (s.x < s.bloqueo) { s.eventos.push({ tipo: 'sordo' }); return; }
   const rafaga = s.x - s.ultimoToque < MARTILLO;
+  s.rafaga = rafaga;              // el pique de la zona de dribleo lo consulta
   s.ultimoToque = s.x;
   // la plataforma de salida no es una nota: tocar ahi no suena ni cuenta
   const bajo = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
@@ -822,6 +876,7 @@ function arrancarNavegador () {
   const estela = [], particulas = [], destellos = [], desvios = [];
   const avisos = [], marcas = [];     // cuanto te corriste, dicho y dibujado
   let squash = 0, flash = 0, rielVoz = null;
+  let ultimoPique = null;      // el pique limpio en curso: enciende sus orbes
 
   const ahora = () => ac ? (ac.currentTime - t0) / SPB : 0;
 
@@ -925,6 +980,92 @@ function arrancarNavegador () {
     }
   }
 
+  // --- las voces del ESTUDIO, calcadas: para las canciones portadas tal cual --
+  // Mismo diseño de sonido que estudio/index.html (aprobado 6-jul), escalado x2
+  // para convivir con la voz del jugador. `duckE` es el sidechain: el bombo
+  // hunde bajo/arpegio/pad un instante y eso ES el pump del synthwave.
+  let duckE = null;
+  const busE = () => {
+    if (!duckE) { duckE = ac.createGain(); duckE.connect(master); }
+    return duckE;
+  };
+  const EG = 2;
+  function eBeep (t, f, dur, tipo, gan, slide, alBus) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = tipo || 'sine'; o.frequency.setValueAtTime(f, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
+    g.gain.setValueAtTime(gan, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(alBus ? busE() : master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function eKick (t, duro) {
+    eBeep(t, duro ? 165 : 135, 0.13, 'sine', (duro ? 0.13 : 0.105) * EG, 42);
+    ruido(t, 0.025, 0.02 * EG, 'lowpass', 2600);
+    const g = busE().gain;
+    g.cancelScheduledValues(t); g.setValueAtTime(1, t);
+    g.linearRampToValueAtTime(0.42, t + 0.012); g.linearRampToValueAtTime(1, t + 0.24);
+  }
+  const eSnare = t => {
+    ruido(t, 0.09, 0.05 * EG, 'highpass', 1700);
+    ruido(t, 0.16, 0.024 * EG, 'bandpass', 900);
+    eBeep(t, 195, 0.05, 'triangle', 0.032 * EG);
+  };
+  const eHat = (t, abierto) =>
+    ruido(t, abierto ? 0.09 : 0.028, (abierto ? 0.02 : 0.017) * EG, 'highpass', 7200);
+  const eClap = t => {
+    ruido(t, 0.03, 0.045 * EG, 'bandpass', 1500);
+    ruido(t + 0.012, 0.03, 0.04 * EG, 'bandpass', 1500);
+    ruido(t + 0.026, 0.13, 0.05 * EG, 'bandpass', 1200);
+  };
+  const eCrash = t => ruido(t, 0.55, 0.045 * EG, 'highpass', 4200);
+  const eTom = (t, f) => { eBeep(t, f, 0.2, 'sine', 0.095 * EG, f * 0.45); ruido(t, 0.02, 0.012 * EG, 'lowpass', 1800); };
+  function eBajo (t, f, gan) {
+    const filtro = ac.createBiquadFilter(); filtro.type = 'lowpass';
+    filtro.frequency.setValueAtTime(560, t);
+    filtro.frequency.exponentialRampToValueAtTime(180, t + 0.16);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(gan, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    filtro.connect(g).connect(busE());
+    const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t);
+    o.connect(filtro); o.start(t); o.stop(t + 0.22);
+    const gs = ac.createGain(); gs.gain.value = 1;      // el sub: seno una octava abajo
+    const o2 = ac.createOscillator(); o2.type = 'sine'; o2.frequency.setValueAtTime(f / 2, t);
+    o2.connect(gs).connect(filtro); o2.start(t); o2.stop(t + 0.22);
+  }
+  const eArp = (t, f, gan) => eBeep(t, f, 0.07, 'square', gan, 0, true);
+  function ePad (t, freqs, gan, durCompas) {
+    const filtro = ac.createBiquadFilter(); filtro.type = 'lowpass'; filtro.frequency.setValueAtTime(750, t);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(gan, t + 0.35);
+    g.gain.setValueAtTime(gan, t + durCompas * 0.55);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + durCompas * 0.95);
+    filtro.connect(g).connect(busE());
+    for (const fr of freqs) for (const dt of [1 - 0.0035, 1 + 0.0035]) {
+      const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(fr * dt, t);
+      o.connect(filtro); o.start(t); o.stop(t + durCompas);
+    }
+  }
+  function eRiser (t, dur) {
+    const n = Math.max(1, ac.sampleRate * (dur + 0.1) | 0), buf = ac.createBuffer(1, n, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2;
+    f.frequency.setValueAtTime(350, t); f.frequency.exponentialRampToValueAtTime(3800, t + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.003, t); g.gain.linearRampToValueAtTime(0.05 * EG, t + dur);
+    g.gain.setValueAtTime(0.05 * EG, t + dur); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.05);
+    src.connect(f).connect(g).connect(master);
+    src.start(t); src.stop(t + dur + 0.1);
+  }
+  const eTambor = (c, t) => {
+    if (c === 'k') eKick(t); else if (c === 'K') eKick(t, true);
+    else if (c === 's') eSnare(t); else if (c === 'c') eClap(t);
+    else if (c === 'h') eHat(t); else if (c === 'H') eHat(t, true);
+    else if (c === 'u') eTom(t, 190); else if (c === 'T') eTom(t, 140); else if (c === 't') eTom(t, 95);
+    else if (c === 'x') { eKick(t); eSnare(t); eClap(t); }
+  };
+
   // La voz del jugador: solo suena si el jugador la toca. Con `desde` no se
   // vuelve a atacar, se desliza desde la nota anterior: eso es un ligado.
   // `chueca` = llegaste fuera de la ventana afinada. La nota suena igual --nunca
@@ -932,6 +1073,24 @@ function arrancarNavegador () {
   // mal pisada. Es la unica forma de que el oido, y no el HUD, te diga que vas
   // corrido.
   function lead (t, f, dur = 0.4, gan = 0.26, desde = 0, chueca = false) {
+    // En las canciones portadas del estudio, la nota AFINADA usa la voz del
+    // estudio calcada: cuadrada limpia, brillante, ataque de 4 ms. La chueca
+    // sigue con la voz apagada y batida de siempre -- ese es el feedback.
+    if (CANCIONES[CANCION_ID].estudio && !chueca) {
+      const ge = ac.createGain(), lpe = ac.createBiquadFilter();
+      lpe.type = 'lowpass'; lpe.frequency.setValueAtTime(18000, t);
+      ge.gain.setValueAtTime(0.0001, t);
+      ge.gain.linearRampToValueAtTime(gan * 0.5, t + Math.min(0.004, dur * 0.5));
+      ge.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      lpe.connect(voz);
+      const o = ac.createOscillator(); o.type = 'square';
+      if (desde) {
+        o.frequency.setValueAtTime(desde, t);
+        o.frequency.exponentialRampToValueAtTime(f, t + 0.035);
+      } else o.frequency.setValueAtTime(f, t);
+      o.connect(ge).connect(lpe); o.start(t); o.stop(t + dur + 0.02);
+      return;
+    }
     const lp = ac.createBiquadFilter(), g = ac.createGain();
     const ataque = desde ? 0.03 : 0.005;      // seco y al frente: pluck, no pad
     // EL BRILLO TIENE TECHO ABSOLUTO. Atado solo a la nota (f * 8), cada nota
@@ -1006,7 +1165,43 @@ function arrancarNavegador () {
   // El QUE de cada compas (planCompas) vive arriba, con su cancion; aca solo
   // se traduce a sintesis.
 
+  // El motor del estudio: un paso de semicorchea por vez, patron por capa.
+  // Es el MISMO recorrido que hace estudio/index.html, para que suene igual.
+  function agendarEstudio (spec) {
+    const b = ahora();
+    while (proxBeat < b + 2) {
+      const t = t0 + proxBeat * SPB;
+      const c = Math.floor(proxBeat / 4), i16 = Math.round((proxBeat - c * 4) * 4);
+      const p = spec(c);
+      if (p) {
+        const ch = acordeEnCompas(c);
+        const bat = E_BATERIA[p.drums];
+        if (bat && bat[i16] && bat[i16] !== '.') eTambor(bat[i16], t);
+        if (p.bajo) {
+          const n = E_BAJO[p.bajo][i16];
+          if (n != null) eBajo(t, (ch.root / 4) * Math.pow(2, n / 12), 0.062 * EG);
+        }
+        // el arpegio de fondo calla en la zona de dribleo: ahi lo toca la esfera
+        if (p.arp && !enArpegio(proxBeat)) {
+          const n = E_ARP[p.arp][i16];
+          if (n != null) {
+            const semis = ch.ints[n % 3] + 12 * Math.floor(n / 3);
+            eArp(t, ch.root * Math.pow(2, semis / 12), 0.016 * EG * (p.arpGan || 1));
+          }
+        }
+        if (i16 === 0) {
+          if (p.pad) ePad(t, ch.ints.map(sm => ch.root * Math.pow(2, sm / 12)), 0.014 * EG, 4 * SPB);
+          if (p.crash) eCrash(t);
+          if (p.riser) eRiser(t, 8 * SPB);   // dos compases de tension
+        }
+      }
+      proxBeat += 0.25;
+    }
+  }
+
   function agendarMusica () {
+    const spec = CANCIONES[CANCION_ID].estudio;
+    if (spec) { agendarEstudio(spec); return; }
     const b = ahora();
     while (proxBeat < b + 2) {
       const t = t0 + proxBeat * SPB;
@@ -1035,8 +1230,8 @@ function arrancarNavegador () {
 
   function sonarFinal () {
     const t = ac.currentTime + 0.05;
-    acordePad(t, PROG[0].acorde.map(f => f * 2), 3, 0.07);
-    bajo(t, PROG[0].r, 1.2, 0.35);
+    acordePad(t, ACORDE.Am.acorde.map(f => f * 2), 3, 0.07);
+    bajo(t, ACORDE.Am.r, 1.2, 0.35);
     [440, 523.25, 659.25, 880].forEach((f, i) => lead(t + i * 0.1, f, 0.9, 0.16));
   }
 
@@ -1103,9 +1298,15 @@ function arrancarNavegador () {
           ruido(ac.currentTime, 0.04, 0.08, 'lowpass', 600);
           chispas(e.x, 0, 3, false, C.suciaRGB);
         } else {
-          const arm = armonia(Math.floor(e.x / 4));
-          [arm.acorde[0], arm.acorde[1], arm.acorde[2], arm.acorde[0] * 2]
-            .forEach((f, i) => lead(ac.currentTime + i * SPB / 4, f * 2, 0.09, 0.06));
+          // el up16 del estudio, tocado por la esfera: cuatro semicorcheas de
+          // la triada, con la voz del arpegio del estudio pero AL FRENTE --
+          // es el jugador tocando, no el fondo
+          const ch = acordeEnCompas(Math.floor(e.x / 4));
+          [0, 1, 2, 3].forEach(n => {
+            const semis = ch.ints[n % 3] + 12 * Math.floor(n / 3);
+            eArp(ac.currentTime + n * SPB / 4, ch.root * Math.pow(2, semis / 12) * 2, 0.11);
+          });
+          ultimoPique = { x: e.x, t: performance.now() };
           chispas(e.x, 0, 8, true, C.impulsoRGB);
         }
       } else if (e.tipo === 'falso') {
@@ -1143,6 +1344,7 @@ function arrancarNavegador () {
     estela.length = 0;
     desvios.length = 0;
     marcas.length = 0;
+    ultimoPique = null;
     avisos.length = 0;
     flash = 1;
   }
@@ -1154,6 +1356,7 @@ function arrancarNavegador () {
     intento = 1; mejor = 0;
     s = crearSim();
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0;
+    ultimoPique = null;
     corriendo = true;
     arrancarAudio();
   }
@@ -1315,6 +1518,24 @@ function arrancarNavegador () {
         const cerca = Math.abs(bx - s.x) < 0.5 ? lat : 0.35;
         cx.fillStyle = `rgba(${C.impulsoRGB},${0.25 + 0.55 * cerca})`;
         cx.beginPath(); cx.arc(px(bx), py(0), 3 + 2.5 * cerca, 0, Math.PI * 2); cx.fill();
+        // los ORBES del arpegio: tres por arco de pique, sobre la parabola del
+        // bote. La esfera los atraviesa con el cuerpo -- el pique limpio los
+        // enciende uno a uno al pasar; sin pique quedan apagados, esperando
+        for (let n = 1; n <= 3; n++) {
+          const dt = 0.225 * n;
+          const oy = G * 0.45 * dt - G * dt * dt / 2;
+          const ox = bx + dt;
+          if (ox > z.x1) break;
+          const enArco = ultimoPique && Math.abs(ultimoPique.x - bx) < 0.3;
+          const pasado = enArco && s.x >= ox - 0.03;
+          const brillo = pasado ? 0.95 : enArco ? 0.5 : 0.22;
+          cx.fillStyle = `rgba(${C.teclaRGB},${brillo})`;
+          cx.beginPath(); cx.arc(px(ox), py(oy), pasado ? 6 : 3.5, 0, Math.PI * 2); cx.fill();
+          if (pasado) {
+            cx.strokeStyle = `rgba(${C.teclaRGB},0.35)`; cx.lineWidth = 1.5;
+            cx.beginPath(); cx.arc(px(ox), py(oy), 10, 0, Math.PI * 2); cx.stroke();
+          }
+        }
       }
     }
     for (const r of RESORTES) {
