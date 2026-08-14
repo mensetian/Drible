@@ -110,6 +110,14 @@ const CANCIONES = {
   aurora: {
     nombre: 'AURORA 2.0', bpm: 112,
     rielMin: 1.5,
+    acordes: [
+      'Am',
+      'Am', 'F', 'C', 'G',
+      'Am', 'F', 'C', 'G',
+      'Am', 'F', 'C', 'G',
+      'Am', 'F', 'C', 'G',
+      'Am'
+    ],
     compases: [
       '-:4',                                              //  0  entrada
       'E5:2 C5:1 A4:1',                                   //  1  Am  el tema, a lo grande
@@ -135,22 +143,17 @@ const CANCIONES = {
       { x0: 36, n: 'el coro, mas arriba' }, { x0: 52, n: 'silencio · no toques' },
       { x0: 56, n: 'el final' }
     ],
-    // La base entra por capas, como en esfera: pulso, peso, aire, todo. Un
-    // arreglo que ya empieza completo no puede crecer, y sin crecer no hay viaje.
-    plan (c) {
-      if (c < 0 || c >= this.compases.length) return null;
-      const base = { kick: [], snare: [], clap: [], hats: CONTRA, abierto: [], bajo: 'ochos', pad: true, fill: false };
-      if (c === 0) return { ...base, kick: [0, 1, 2, 3], hats: [], bajo: 'nada', pad: false, fill: true };
-      if (c <= 2) return { ...base, kick: [0, 2], snare: [3], hats: [], bajo: 'empuje' };       // el tema
-      if (c <= 4) return { ...base, kick: [0, 2], snare: [1, 3], bajo: 'empuje', fill: c === 4 };
-      if (c <= 6) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: OCHOS, abierto: [3.5] };  // el coro
-      if (c <= 8) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], hats: OCHOS, fill: c === 8 };
-      if (c <= 10) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS };
-      if (c <= 12) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], hats: DIECISEIS, fill: c === 12 };
-      if (c === 13) return { ...base, kick: [0], hats: [], abierto: [2], bajo: 'sus' };         // el silencio
-      if (c === 14) return { ...base, kick: [0, 0.5, 2], clap: [1, 3], bajo: 'empuje' };
-      if (c <= 16) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS, abierto: [3.5], bajo: 'octava', fill: c === 16 };
-      return { ...base, kick: [0, 2, 2.5], snare: [1, 3], clap: [1, 3], hats: OCHOS, bajo: 'octava' };
+    // El arreglo: el motor del estudio, como el viaje -- misma bateria,
+    // mismo bajo sierra, mismo arpegio y pad. El tema respira, el coro entra
+    // con crash y drive, el silencio deja el pad solo, y el final brilla.
+    estudio (c) {
+      if (c === 0) return { drums: 'cuenta' };
+      if (c <= 2) return { drums: 'hats', arp: 'soft8', arpGan: 0.7, pad: true };            // el tema
+      if (c <= 4) return { drums: 'preFill', bajo: 'pulso', arp: 'soft8', pad: true, riser: c === 4 ? 1 : 0 };
+      if (c <= 12) return { drums: c % 4 === 0 ? 'fillTom' : 'coro', bajo: 'drive', arp: 'up16', pad: true, crash: c === 5 };  // el coro
+      if (c === 13) return { drums: 'silencio', arp: 'soft8', arpGan: 0.6, pad: true };      // el silencio
+      if (c <= 16) return { drums: 'coro', bajo: 'drive', arp: 'glitter', pad: true, crash: c === 14 };
+      return { drums: 'outro', bajo: 'pulso', arp: 'glitter', pad: true, crash: true };      // el final
     }
   },
 
@@ -216,7 +219,7 @@ const CANCIONES = {
       if (c <= 4) return { drums: 'hats', arp: 'soft8', arpGan: 0.7, pad: true };
       if (c <= 7) return { drums: 'hats', bajo: 'pulso', arp: 'soft8', pad: true };            // amanecer II
       if (c === 8) return { drums: 'preFill', bajo: 'pulso', arp: 'soft8', pad: true };
-      if (c <= 11) return { drums: 'coro', bajo: 'corchea', pad: true, riser: c === 11 };      // motor
+      if (c <= 11) return { drums: 'coro', bajo: 'corchea', pad: true, riser: c === 11 ? 2 : 0 };  // motor
       if (c === 12) return { drums: 'roll', bajo: 'corchea', pad: true };
       if (c <= 20) return { drums: (c - 13) % 4 === 3 ? 'fillTom' : 'coro', bajo: 'drive', arp: 'up16', pad: true, crash: c === 13 };  // drop 1
       if (c === 21) return { drums: 'outro', bajo: 'pulso', arp: 'glitter', pad: true, crash: true };
@@ -1034,7 +1037,7 @@ function arrancarNavegador () {
     if (!duckE) { duckE = ac.createGain(); duckE.connect(master); }
     return duckE;
   };
-  const EG = 2;
+  const EG = 2.5;
   function eBeep (t, f, dur, tipo, gan, slide, alBus) {
     const o = ac.createOscillator(), g = ac.createGain();
     o.type = tipo || 'sine'; o.frequency.setValueAtTime(f, t);
@@ -1125,7 +1128,7 @@ function arrancarNavegador () {
       const ge = ac.createGain(), lpe = ac.createBiquadFilter();
       lpe.type = 'lowpass'; lpe.frequency.setValueAtTime(18000, t);
       ge.gain.setValueAtTime(0.0001, t);
-      ge.gain.linearRampToValueAtTime(gan * 0.5, t + Math.min(0.004, dur * 0.5));
+      ge.gain.linearRampToValueAtTime(gan * 0.45, t + Math.min(0.004, dur * 0.5));
       ge.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       lpe.connect(voz);
       const o = ac.createOscillator(); o.type = 'square';
@@ -1237,7 +1240,7 @@ function arrancarNavegador () {
         if (i16 === 0) {
           if (p.pad) ePad(t, ch.ints.map(sm => ch.root * Math.pow(2, sm / 12)), 0.014 * EG, 4 * SPB);
           if (p.crash) eCrash(t);
-          if (p.riser) eRiser(t, 8 * SPB);   // dos compases de tension
+          if (p.riser) eRiser(t, p.riser * 4 * SPB);
         }
       }
       proxBeat += 0.25;
@@ -1314,17 +1317,18 @@ function arrancarNavegador () {
         const fuerte = NOTAS[e.i].b % 1 === 0;
         lead(ac.currentTime, e.f, Math.max(0.22, 0.46 - Math.abs(e.tarde) * 0.4),
           fuerte ? 0.29 : 0.21, 0, e.chueca);
-        // El eco, IDENTICO al estudio: solo las notas cortas (hasta media
-        // negra), 3 semicorcheas despues, al 30% del volumen. La chueca lo
-        // arrastra chueco: el eco repite lo que sono, no lo que debia sonar.
-        if (NOTAS[e.i].dur <= 0.5)
+        // El eco, IDENTICO al estudio: alla lo lleva toda nota no prolongada
+        // (en su notacion los puntos son silencios, asi que casi todas), 3
+        // semicorcheas despues, al 30%. Aca: toda nota que no sea riel. La
+        // chueca lo arrastra chueco: el eco repite lo que sono.
+        if (!NOTAS[e.i].riel)
           lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.3, 0, e.chueca);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 3 : 7, true, e.chueca ? C.suciaRGB : C.teclaRGB);
         squash = 1;
       } else if (e.tipo === 'ligada') {
         lead(ac.currentTime, e.f, 0.5, 0.15, e.desde, e.chueca);
-        if (NOTAS[e.i].dur <= 0.5)
+        if (!NOTAS[e.i].riel)
           lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, 0.15 * 0.3, 0, e.chueca);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, 5, false, e.chueca ? C.suciaRGB : C.teclaRGB);
