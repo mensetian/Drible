@@ -478,6 +478,30 @@ function orbes () {
     const sig = NOTAS[n.i + 1];
     if (n.silencio || !sig || sig.silencio) continue;
     if (n.escalera || sig.escalera || n.ligada) continue;
+    // Sobre los RIELES largos: orbes que piden el saltito (tocar de nuevo
+    // mientras sostenes). Flotan mas arriba de lo que alcanza rodar: solo el
+    // saltito los toca. Tambien reclaman golpes reales.
+    if (extra && spec && n.riel && n.x1 - n.xm > 1.6) {
+      for (let tx = n.xm + 0.7; tx < n.x1 - 1.1; tx += 1) {
+        let mr = null;
+        for (let p = Math.ceil((tx - 0.3) * 4); p <= Math.floor((tx + 0.3) * 4); p++) {
+          const cc = Math.floor(p / 16), i16 = p % 16;
+          const pl = spec(cc); if (!pl) continue;
+          const bat = E_BATERIA[pl.drums];
+          const golpe = bat && 'hHsc'.includes(bat[i16]) ? bat[i16] : null;
+          const nb = pl.bajo && E_BAJO[pl.bajo] ? E_BAJO[pl.bajo][i16] : null;
+          if (golpe == null && nb == null) continue;
+          const d = Math.abs(p / 4 - tx);
+          if (!mr || d < mr.d) mr = { p, golpe, nb, d, cc };
+        }
+        if (!mr) continue;
+        const o = { i: r.length, x: +(mr.p / 4).toFixed(3), y: +(n.y + 0.075).toFixed(3), c: mr.cc };
+        if (mr.nb != null && mr.golpe == null) { o.instr = 'bajo'; o.semi = mr.nb; PASOS_BAJO.add(mr.p); }
+        else if (mr.golpe) { o.instr = mr.golpe; PASOS_BATERIA.add(mr.p); }
+        else continue;
+        r.push(o);
+      }
+    }
     // el arco ideal: el mismo que calcula lanzar() desde el toque en el pulso
     const x0 = n.riel ? n.x1 : n.xm, y0 = n.y;
     const tv = vueloMinimo(sig.y - y0);
@@ -510,10 +534,11 @@ function orbes () {
         const dt = p / 4 - x0, d = Math.abs(dt - T / 2);
         if (!mejor || d < mejor.d) mejor = { p, golpe, nb, dt, d, cc };
       }
-      if (mejor && ++salto % 2 === 0) {
+      if (mejor) {
         const o = { i: r.length, x: +(mejor.p / 4).toFixed(3), y: +arco(mejor.dt).toFixed(3), c: mejor.cc };
         // se alterna: bajo cuando lo hay cada dos, si no el golpe de bateria
-        if (mejor.nb != null && (salto % 4 === 0 || mejor.golpe == null)) {
+        salto++;
+        if (mejor.nb != null && (salto % 2 === 0 || mejor.golpe == null)) {
           o.instr = 'bajo'; o.semi = mejor.nb; PASOS_BAJO.add(mejor.p);
         } else {
           o.instr = mejor.golpe; PASOS_BATERIA.add(mejor.p);
@@ -714,7 +739,19 @@ function anotar (s, obj, dev, tipo, extra = {}) {
 // siempre es donde se cobra: un toque adelantado espera en la cola y se paga al
 // posarse, pero se juzga por el momento en que lo diste.
 function pulsar (s, k, xt = s.x) {
-  if (k.riel || k.silencio) return false; // el riel se sostiene; la salida no suena
+  if (k.silencio) return false;           // la salida no suena
+  if (k.riel) {
+    // El riel se sostiene -- pero el riel YA SONADO se puede picar: un
+    // saltito que sube a cosechar los orbes que flotan encima y cae de
+    // vuelta al riel (si seguis sosteniendo). Lejos del final, para no
+    // perderse el lanzamiento. El ataque de la nota sigue siendo sostener.
+    if (s.tocadas.has(k.i) && s.x < k.x1 - 0.9) {
+      s.estado = 'aire'; s.vy = G * 0.4; s.tecla = -1; s.saliendoDe = -1;
+      s.eventos.push({ tipo: 'saltoRiel', x: s.x, y: s.y });
+      return true;
+    }
+    return false;
+  }
   const obj = queSuena(s, k);
   if (obj) anotar(s, obj, xt - obj.xm, 'nota');
   if (!k.escalera && !k.ligada) lanzar(s, k);   // de una ligada se sale cayendo
@@ -1401,6 +1438,10 @@ function arrancarNavegador () {
         aviso(e);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 4 : 10, true, e.chueca ? C.suciaRGB : C.teclaRGB);
+      } else if (e.tipo === 'saltoRiel') {
+        // el saltito sobre el riel: mudo (la nota larga sigue sonando)
+        squash = 0.8;
+        chispas(e.x, e.y, 4, true);
       } else if (e.tipo === 'orbe') {
         // la esfera atraveso un orbe: suena el golpe REAL que reclamo -- la
         // nota del arpegio, el hat/clap/caja de la bateria, o la del bajo
@@ -1690,6 +1731,25 @@ function arrancarNavegador () {
       if (limpia || aqui) { cx.shadowColor = limpia ? C.esfera : cBase; cx.shadowBlur = 12; }
       cx.fillRect(px(k.x0), py(k.y), Math.max(4, (k.x1 - k.x0) * esc), alto);
       cx.shadowBlur = 0;
+      // El riel se ve como SOSTENER, no como otra tecla: rayado que corre a
+      // lo largo mientras dura la nota. Y el primero de cada cancion lleva su
+      // cartel -- que se aprenda viendolo, no muriendo.
+      if (k.riel) {
+        const a0 = px(k.x0), a1 = px(k.x0) + Math.max(4, (k.x1 - k.x0) * esc);
+        const off = (performance.now() / 60) % 12;
+        cx.strokeStyle = 'rgba(17,18,20,0.5)'; cx.lineWidth = 2;
+        cx.beginPath();
+        for (let xx = a0 + off; xx < a1 - 3; xx += 12) {
+          cx.moveTo(xx, py(k.y) + alto - 1); cx.lineTo(xx + 4, py(k.y) + 1);
+        }
+        cx.stroke();
+        const primero = NOTAS.find(n => n.riel);
+        if (primero && k.i === primero.i && !sono) {
+          cx.fillStyle = C.peligro; cx.font = 'bold 11px system-ui'; cx.textAlign = 'center';
+          cx.fillText('MANTENE', px(k.xm), py(k.y) - 16);
+          cx.fillText('▼', px(k.xm), py(k.y) - 5);
+        }
+      }
       // EL PUNTO EXACTO. La tecla entera es la ventana en la que la nota suena;
       // esta marca es donde sale afinada. Son cosas distintas y hasta ahora solo
       // se dibujaba la primera: se jugaba creyendo ir a tiempo y sonaba chueco.
@@ -1829,7 +1889,8 @@ function arrancarNavegador () {
         'caes ANTES de la marca blanca: roda, y golpea al cruzar la linea',
         'a tiempo suena afinada; corrida suena chueca',
         'martillar el boton no sirve: se queda sordo',
-        'las largas se MANTIENEN: el riel te lanza solo al final',
+        'las largas (rayadas) se MANTIENEN: el riel te lanza solo al final',
+        'sobre un riel sonado, TOCA otra vez: saltito a los orbes de arriba',
         'las que cuelgan de un arco no se tocan: dejate caer',
         'si caes a la red, TOCA: te relanza a la proxima tecla',
         'en el MOTOR la esfera toca el BAJO: teclas graves que trepan',

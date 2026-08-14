@@ -28,7 +28,7 @@ const RASGOS = {
   aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, resortes: 8, saltos: 30, exigente: true },
   // el viaje va por el ACTO 1 (amanecer ×2, motor, drop 1): crece por sesiones.
   // El motor es zona de dribleo (sin techo: el silencio ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, resortes: 8, saltos: 30, exigente: true, orbes: 40 }
+  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, resortes: 8, saltos: 30, exigente: true, orbes: 60 }
 };
 
 let fallas = 0;
@@ -47,10 +47,13 @@ function correr (id) {
   }
 
   // la mano perfecta: toca cada tecla apenas la pisa, sostiene los rieles,
-  // y driblea las zonas de arpegio al beat
+  // y sobre un riel sonado da el saltito para cosechar los orbes de arriba
   const perfecta = (s, b) => {
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     s.sostiene = !!(k && k.riel);
+    if (k && k.riel && s.tocadas.has(k.i) &&
+        ORBES.some(o => !s.orbesTocados.has(o.i) && o.y > k.y + 0.05 &&
+          o.x - s.x > 0.36 && o.x - s.x < 0.44)) { tocar(s, b); return; }
     if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
   };
 
