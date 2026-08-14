@@ -176,10 +176,10 @@ const CANCIONES = {
       'C5:4',                                             //  6  F   la base crece
       'E5:2 G5:1 E5:1',                                   //  7  C
       'D5:4',                                             //  8  G
-      '-:4',                                              //  9  Am  MOTOR: el build.
-      '-:4',                                              // 10  F   Sin melodia: rodar
-      '-:4',                                              // 11  Dm  y aguantar mientras
-      '-:4',                                              // 12  E   la bateria sube
+      'A4!:1 A4!:1 A4!:1 A4!:1',                          //  9  Am  MOTOR: la esfera
+      'F4!:1 F4!:1 A4!:1 F4!:1',                          // 10  F   toca el BAJO --
+      'F4!:1 A4!:1 D5!:1 A4!:1',                          // 11  Dm  teclas graves que
+      'E4!:1 G4!:1 B4!:1 E5!:1',                          // 12  E   trepan al drop
       'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             // 13  Am  DESPEGUE · DROP 1
       'E5:.75 D5:.75 C5:.5 D5:1.5 C5:.25 D5:.25',         // 14  F
       'E5:.75 E5:.75 G5:.5 E5:1 D5:.5 C5:.5',             // 15  C
@@ -204,11 +204,15 @@ const CANCIONES = {
       { x0: 36, n: 'motor · DRIBLEA al beat' }, { x0: 52, n: 'despegue · drop 1' },
       { x0: 84, n: 'aterrizaje del acto' }
     ],
-    // MOTOR es zona de DRIBLEO: la melodia calla y entra el arpegio del
-    // estudio (up16). Aca la esfera no toca teclas -- se pica contra la red al
-    // beat, y cada pique afinado dispara las cuatro semicorcheas del acorde.
-    // Es la primera seccion donde la esfera toca OTRO instrumento.
-    arpegios: [{ x0: 36.4, x1: 50.4 }],
+    // MOTOR es zona de ARPEGIO: abajo de las teclas de bajo la red se corta
+    // (fallar una tecla del motor se paga), y cada arco entre teclas lleva
+    // tres orbes con las semicorcheas del up16. El bajo lo toca la esfera,
+    // asi que el bajo de fondo calla aca.
+    arpegios: [{ x0: 35.9, x1: 51.5 }],
+    // y entre plataformas, de vez en cuando, un orbe suelto con OTRO
+    // instrumento (hat, clap, chispa de arpegio): la esfera completa el
+    // arreglo con el cuerpo tambien fuera del motor
+    orbesExtra: true,
     // El arreglo NO se aproxima: usa el motor del estudio tal cual (banco de
     // patrones por semicorchea + voces calcadas). Cada compas dice que patron
     // toca cada capa, seccion a seccion como en estudio/index.html. En el
@@ -346,11 +350,15 @@ function compilar () {
   let b = 0;
   for (const compas of CANCION) {
     for (const tok of compas.trim().split(/\s+/)) {
-      const [nombre, fig] = tok.split(':');
+      const [crudo, fig] = tok.split(':');
       const dur = parseFloat(fig);
-      const silencio = nombre === '-';
+      const silencio = crudo === '-';
+      // 'A4!' es una tecla de BAJO: se para donde dice la altura, pero suena
+      // dos octavas abajo con la voz del bajo -- la esfera cambia de instrumento
+      const bajo = crudo.endsWith('!');
+      const nombre = bajo ? crudo.slice(0, -1) : crudo;
       notas.push({
-        i: notas.length, b, dur, nombre, silencio,
+        i: notas.length, b, dur, nombre, silencio, bajo,
         f: silencio ? 0 : frecuencia(nombre),
         y: silencio ? 0 : alturaDe(nombre),
         xm: b,                 // el punto exacto: el pulso. Aca la nota sale afinada.
@@ -456,29 +464,34 @@ export const enArpegio = x => ARPEGIOS.some(z => x > z.x0 && x < z.x1);
 export let ORBES = [];
 function orbes () {
   const r = [];
-  for (const z of ARPEGIOS) {
-    const pads = [];
-    for (let bx = Math.ceil(z.x0); bx < z.x1; bx++) pads.push(bx);
-    pads.forEach((bx, i) => {
-      if (i < pads.length - 1) {
-        for (let n = 1; n <= 3; n++) {
-          const dt = 0.225 * n;                      // el arco del bote: T = 0.9
-          r.push({ i: r.length, x: +(bx + dt).toFixed(3), y: +(G * dt * (0.9 - dt) / 2).toFixed(3), n, c: Math.floor(bx / 4) });
-        }
-        return;
+  const extra = !!CANCIONES[CANCION_ID].orbesExtra;
+  if (!ARPEGIOS.length && !extra) return r;
+  const INSTR = ['hat', 'clap', 'arp'];
+  let salto = 0;
+  for (const n of NOTAS) {
+    const sig = NOTAS[n.i + 1];
+    if (n.silencio || !sig || sig.silencio) continue;
+    if (n.escalera || sig.escalera || n.ligada) continue;
+    // el arco ideal: el mismo que calcula lanzar() desde el toque en el pulso
+    const x0 = n.riel ? n.x1 : n.xm, y0 = n.y;
+    const tv = vueloMinimo(sig.y - y0);
+    let obj = sig.x0 + MIRA;
+    if (obj - x0 < tv) obj = Math.min(sig.x1 - 0.02, x0 + tv);
+    const T = obj - x0;
+    if (T < 0.3) continue;
+    const vy = Math.min(1.9, (sig.y - y0) / T + G * T / 2);
+    const arco = dt => y0 + vy * dt - G * dt * dt / 2;
+    if (enArpegio(n.xm)) {
+      // en la zona de arpegio: las tres semicorcheas del up16, cada arco
+      for (let k = 1; k <= 3; k++) {
+        const dt = T * k / 4;
+        r.push({ i: r.length, x: +(x0 + dt).toFixed(3), y: +arco(dt).toFixed(3), n: k, c: Math.floor(n.b / 4), instr: 'arp' });
       }
-      // el ultimo pad lanza al drop: sus orbes suben por ESE arco -- la rampa
-      const sig = NOTAS.find(k => !k.silencio && k.x0 > bx);
-      if (!sig) return;
-      const tv = vueloMinimo(sig.y);
-      let obj = sig.x0 + MIRA;
-      if (obj - bx < tv) obj = Math.min(sig.x1 - 0.02, bx + tv);
-      const T = obj - bx, vy = sig.y / T + G * T / 2;
-      for (let n = 1; n <= 3; n++) {
-        const dt = T * n / 4;
-        r.push({ i: r.length, x: +(bx + dt).toFixed(3), y: +(vy * dt - G * dt * dt / 2).toFixed(3), n, c: Math.floor(bx / 4) });
-      }
-    });
+    } else if (extra && T >= 0.5 && ++salto % 3 === 0) {
+      // ocasional entre plataformas: un orbe con OTRO instrumento, rotando
+      const dt = T / 2;
+      r.push({ i: r.length, x: +(x0 + dt).toFixed(3), y: +arco(dt).toFixed(3), n: 2, c: Math.floor(n.b / 4), instr: INSTR[(salto / 3 | 0) % 3] });
+    }
   }
   return r.sort((a, b) => a.x - b.x);
 }
@@ -598,9 +611,7 @@ export function crearSim () {
     limpias: new Set(),     // las que ademas sonaron afinadas: ese es el puntaje
     racha: 0, mejorRacha: 0, falsos: 0,
     resortesUsados: new Set(),
-    botes: 0, botesLimpios: 0,     // los piques de las zonas de dribleo
-    orbes: 0, orbesTocados: new Set(),   // las semicorcheas cosechadas en el aire
-    rafaga: false,
+    orbes: 0, orbesTocados: new Set(),   // los orbes cosechados en el aire
     eventos: []
   };
 }
@@ -786,35 +797,6 @@ function aplicar (s, xt = s.x) {
   // para consumir el toque -- si quedara en la cola de anticipos, se cobraria
   // al aterrizar como una nota juzgada desde la red, chueca seguro.
   if (s.tecla < 0) {
-    // En zona de dribleo el toque es el PIQUE: la esfera rebota y se juzga
-    // contra el pulso mas cercano, con el mismo margen que una nota. El pique
-    // afinado dispara el arpegio; el chueco rebota mudo.
-    if (enArpegio(s.x)) {
-      const dev = s.x - Math.round(s.x);
-      // el pique en rafaga es martilleo, como en las teclas: falso y sordera
-      const chueca = Math.abs(dev) > AFINADO || s.rafaga;
-      if (s.rafaga) castigar(s);
-      else { s.botes++; if (!chueca) s.botesLimpios++; }
-      s.estado = 'aire';
-      // El ultimo pique de la zona no rebota: LANZA a la primera tecla que
-      // sigue. El dribleo desemboca en la melodia sin costura -- un resorte
-      // aca lanzaba desde el borde y se quedaba corto.
-      const sig = NOTAS.find(n => !n.silencio && n.x0 + MIRA > s.x + 0.2);
-      if (sig && sig.x0 + MIRA - s.x < 2.2) {
-        const tv = vueloMinimo(sig.y);
-        let objetivo = sig.x0 + MIRA;
-        if (objetivo - s.x < tv) objetivo = Math.min(sig.x1 - 0.02, s.x + tv);
-        const T = Math.max(0.2, objetivo - s.x);
-        s.vy = Math.min(1.9, sig.y / T + G * T / 2);
-      } else {
-        // el pique apunta al PROXIMO pad (un pelo antes del beat, para rodar
-        // y volver a picar): llegar corrido no te tira, no picar si
-        const T = Math.max(0.4, Math.min(1.6, Math.round(s.x) + 0.9 - s.x));
-        s.vy = G * T / 2;
-      }
-      s.eventos.push({ tipo: 'bote', x: s.x, y: 0, tarde: dev, chueca });
-      return true;
-    }
     // ...pero nunca a traves de un techo: ese arco se estrella. Si la proxima
     // tecla queda del otro lado de un silencio con techo, el toque es el
     // saltito de siempre, y del silencio te saca el resorte.
@@ -871,7 +853,6 @@ export function tocar (s, b) {
   s.apretadoEn = s.x;
   if (s.x < s.bloqueo) { s.eventos.push({ tipo: 'sordo' }); return; }
   const rafaga = s.x - s.ultimoToque < MARTILLO;
-  s.rafaga = rafaga;              // el pique de la zona de dribleo lo consulta
   s.ultimoToque = s.x;
   // la plataforma de salida no es una nota: tocar ahi no suena ni cuenta
   const bajo = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
@@ -1253,7 +1234,7 @@ function arrancarNavegador () {
         const ch = acordeEnCompas(c);
         const bat = E_BATERIA[p.drums];
         if (bat && bat[i16] && bat[i16] !== '.') eTambor(bat[i16], t);
-        if (p.bajo) {
+        if (p.bajo && !enArpegio(proxBeat)) {
           const n = E_BAJO[p.bajo][i16];
           if (n != null) eBajo(t, (ch.root / 4) * Math.pow(2, n / 12), 0.062 * EG);
         }
@@ -1340,6 +1321,17 @@ function arrancarNavegador () {
     for (const e of s.eventos) {
       if (e.tipo === 'nota') {
         desvios.push(Math.abs(e.tarde) * SPB * 1000); aviso(e);
+        if (NOTAS[e.i].bajo) {
+          // tecla de bajo: la esfera esta tocando el bajo del estudio -- dos
+          // octavas abajo de donde pisa, con la voz de alla. Sin eco: el bajo
+          // no lo lleva. Chueca, sale apagada y con el golpe sordo.
+          eBajo(ac.currentTime, e.f / 8, e.chueca ? 0.07 : 0.16);
+          if (e.chueca) ruido(ac.currentTime, 0.05, 0.09, 'lowpass', 500);
+          destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
+          chispas(e.x, e.y, e.chueca ? 3 : 7, true, e.chueca ? C.suciaRGB : C.impulsoRGB);
+          squash = 1;
+          continue;
+        }
         // acento: la nota que cae en el pulso pega mas fuerte. Todas iguales es
         // lo que sonaba plano -- un instrumento tiene dinamica, un beep no.
         const fuerte = NOTAS[e.i].b % 1 === 0;
@@ -1368,29 +1360,17 @@ function arrancarNavegador () {
         aviso(e);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 4 : 10, true, e.chueca ? C.suciaRGB : C.teclaRGB);
-      } else if (e.tipo === 'bote') {
-        // el pique del dribleo: afinado dispara las cuatro semicorcheas del
-        // arpegio (el up16 del estudio, una octava arriba del pad); chueco
-        // rebota mudo -- el hueco en el arpegio se oye solo
-        aviso(e);
-        squash = 1;
-        if (e.chueca) {
-          ruido(ac.currentTime, 0.04, 0.08, 'lowpass', 600);
-          chispas(e.x, 0, 3, false, C.suciaRGB);
-        } else {
-          // el pique afinado pone la RAIZ del arpegio; el resto son los orbes,
-          // que suenan solo si la esfera los atraviesa en el aire
-          const ch = acordeEnCompas(Math.floor(e.x / 4));
-          eArp(ac.currentTime, ch.root * 2, 0.11);
-          chispas(e.x, 0, 8, true, C.impulsoRGB);
-        }
       } else if (e.tipo === 'orbe') {
-        // la esfera atraveso un orbe: ESA semicorchea del arpegio suena, aca
-        const ch = acordeEnCompas(e.c);
-        const semis = ch.ints[e.n % 3] + 12 * Math.floor(e.n / 3);
-        eArp(ac.currentTime, ch.root * Math.pow(2, semis / 12) * 2, 0.11);
+        // la esfera atraveso un orbe: suena SU instrumento, aca y ahora
+        if (e.instr === 'hat') eHat(ac.currentTime, true);
+        else if (e.instr === 'clap') eClap(ac.currentTime);
+        else {
+          const ch = acordeEnCompas(e.c);
+          const semis = ch.ints[e.n % 3] + 12 * Math.floor(e.n / 3);
+          eArp(ac.currentTime, ch.root * Math.pow(2, semis / 12) * 2, 0.11);
+        }
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: false });
-        chispas(e.x, e.y, 6, true, C.teclaRGB);
+        chispas(e.x, e.y, 6, true, e.instr === 'arp' ? C.teclaRGB : C.esferaRGB);
       } else if (e.tipo === 'falso') {
         // martillaste: cuerda muerta. El boton queda sordo hasta que se acomode.
         ruido(ac.currentTime, 0.06, 0.14, 'bandpass', 700, 1.4);
@@ -1589,17 +1569,6 @@ function arrancarNavegador () {
     // Trampolines. Verdes, anchos, con chevrones que suben y la parabola
     // dibujada: tienen que leerse como "pisa aca y volves arriba". Dibujados
     // como dos rayitas grises se leian como algo que hay que esquivar.
-    // Zonas de dribleo: un punto de pique en cada beat de la red, latiendo con
-    // el pulso -- el objetivo es visible, como la marca blanca de una tecla.
-    for (const z of ARPEGIOS) {
-      if (z.x1 < s.x - 3 || z.x0 > s.x + 7) continue;
-      const lat = 1 - (s.x - Math.floor(s.x));           // 1 justo en el beat
-      for (let bx = Math.ceil(z.x0); bx < z.x1; bx++) {
-        const cerca = Math.abs(bx - s.x) < 0.5 ? lat : 0.35;
-        cx.fillStyle = `rgba(${C.impulsoRGB},${0.25 + 0.55 * cerca})`;
-        cx.beginPath(); cx.arc(px(bx), py(0), 3 + 2.5 * cerca, 0, Math.PI * 2); cx.fill();
-      }
-    }
     // Los ORBES: cuerpos de verdad. Viven flotando sobre el arco del pique
     // hasta que la esfera los atraviesa -- ahi suenan y estallan. Los que el
     // arco no toco quedan ahi, mudos: se VE lo que no sonaste.
@@ -1607,9 +1576,10 @@ function arrancarNavegador () {
     for (const o of ORBES) {
       if (o.x < s.x - 3 || o.x > s.x + 7) continue;
       if (s.orbesTocados.has(o.i)) continue;
-      cx.fillStyle = `rgba(${C.teclaRGB},${0.35 + 0.35 * latOrbe})`;
+      const rgbO = o.instr === 'arp' ? C.teclaRGB : C.esferaRGB;
+      cx.fillStyle = `rgba(${rgbO},${0.35 + 0.35 * latOrbe})`;
       cx.beginPath(); cx.arc(px(o.x), py(o.y), 4 + 1.5 * latOrbe, 0, Math.PI * 2); cx.fill();
-      cx.strokeStyle = `rgba(${C.teclaRGB},0.25)`; cx.lineWidth = 1;
+      cx.strokeStyle = `rgba(${rgbO},0.25)`; cx.lineWidth = 1;
       cx.beginPath(); cx.arc(px(o.x), py(o.y), 8, 0, Math.PI * 2); cx.stroke();
     }
     // Los ABISMOS se ven como peligro, no como ausencia: dientes en los dos
@@ -1671,8 +1641,10 @@ function arrancarNavegador () {
       const limpia = s.limpias.has(k.i);          // sonar no es lo mismo que afinar
       const aqui = s.tecla === k.i;               // estas parado en esta: toca YA
       const alto = k.riel ? 7 : 5;
-      cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : C.tecla;
-      if (limpia || aqui) { cx.shadowColor = limpia ? C.esfera : C.tecla; cx.shadowBlur = 12; }
+      // las teclas de bajo son VERDES: otro instrumento, otro color
+      const cBase = k.bajo ? C.impulso : C.tecla;
+      cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
+      if (limpia || aqui) { cx.shadowColor = limpia ? C.esfera : cBase; cx.shadowBlur = 12; }
       cx.fillRect(px(k.x0), py(k.y), Math.max(4, (k.x1 - k.x0) * esc), alto);
       cx.shadowBlur = 0;
       // EL PUNTO EXACTO. La tecla entera es la ventana en la que la nota suena;
@@ -1817,8 +1789,8 @@ function arrancarNavegador () {
         'las largas se MANTIENEN: el riel te lanza solo al final',
         'las que cuelgan de un arco no se tocan: dejate caer',
         'si caes a la red, TOCA: te relanza a la proxima tecla',
-        'en las zonas VERDES de la red, DRIBLEA: pica la esfera al beat',
-        'los ORBES se tocan con el cuerpo: pique fino = el arco los enhebra',
+        'en el MOTOR la esfera toca el BAJO: teclas graves que trepan',
+        'los ORBES se tocan con el cuerpo: salto fino = el arco los enhebra',
         'los trampolines VERDES te devuelven arriba: pisalos',
         'bajo el techo NO se toca'
       ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));

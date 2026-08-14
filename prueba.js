@@ -28,7 +28,7 @@ const RASGOS = {
   aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, resortes: 8, saltos: 30, exigente: true },
   // el viaje va por el ACTO 1 (amanecer ×2, motor, drop 1): crece por sesiones.
   // El motor es zona de dribleo (sin techo: el silencio ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, resortes: 8, saltos: 30, exigente: true, dribleo: 14, orbes: 36 }
+  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, resortes: 8, saltos: 30, exigente: true, orbes: 40 }
 };
 
 let fallas = 0;
@@ -46,21 +46,9 @@ function correr (id) {
     return s;
   }
 
-  // Driblear es parte de tocar bien: en zona de dribleo toda mano razonable
-  // pica al beat (con su corrimiento, si lo tiene). El que no pica se cae:
-  // los abismos entre pads son el precio de la zona.
-  const dribla = (s, b, corr = 0) => {
-    if (s.estado !== 'apoyada' || s.tecla >= 0 || !enArpegio(s.x)) return false;
-    if (s.x - s.ultimoToque < 0.5) return true;                 // ya pico este pad
-    if (s.x < Math.round(s.x - corr) + corr - 0.02) return true; // todavia no es su momento
-    tocar(s, b);
-    return true;
-  };
-
   // la mano perfecta: toca cada tecla apenas la pisa, sostiene los rieles,
   // y driblea las zonas de arpegio al beat
   const perfecta = (s, b) => {
-    if (dribla(s, b)) return;
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     s.sostiene = !!(k && k.riel);
     if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
@@ -75,7 +63,6 @@ function correr (id) {
 
   // la mano floja: juega bien pero suelta el riel justo sobre el abismo
   const floja = (s, b) => {
-    if (dribla(s, b)) return;
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     s.sostiene = !!(k && k.riel) && !HUECOS.some(h => s.x > h.x0 && s.x < h.x1);
     if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
@@ -88,8 +75,7 @@ function correr (id) {
       .map((k, n) => k.xm + (((n * 7919) % 31) / 30 - 0.5) * 2 * amplitud);
     let j = 0;
     return (s, b) => {
-      if (dribla(s, b)) return;
-      const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+        const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
       s.sostiene = !!(k && k.riel);
       while (j < objetivos.length && s.x >= objetivos[j]) { tocar(s, b); j++; }
     };
@@ -100,7 +86,6 @@ function correr (id) {
     const objetivos = NOTAS.filter(k => !k.silencio && !k.riel).map(k => k.xm + enBeats(ms));
     let j = 0;
     return (s, b) => {
-      if (dribla(s, b, enBeats(ms))) return;
       const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
       s.sostiene = !!(k && k.riel);
       while (j < objetivos.length && s.x >= objetivos[j]) { tocar(s, b); j++; }
@@ -110,7 +95,6 @@ function correr (id) {
   // la mano que suelta el riel antes de tiempo para poder apretar de nuevo:
   // es el gesto natural para atacar la nota que sigue, y no puede matarte.
   const prepara = (s, b) => {
-    if (dribla(s, b)) return;
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     const suelta = k && k.riel && s.x > k.x1 - SUELTA + 0.05;
     if (suelta && s.sostiene) soltar(s);
@@ -137,7 +121,6 @@ function correr (id) {
   const tropieza = (s, b) => {
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     s.sostiene = !!(k && k.riel);
-    if (dribla(s, b)) return;
     // en la red toca para reengancharse -- salvo cerca de un techo: ahi hasta el
     // saltito flota hacia adentro y mata, y el jugador que ve el techo no toca
     if (s.estado === 'apoyada' && s.tecla < 0 && s.x - s.ultimoToque > 0.3 &&
@@ -291,9 +274,6 @@ function correr (id) {
     ['los orbes del arpegio se tocan con el cuerpo, y el arco fino los lleva',
       !R.orbes || (rp.orbes >= R.orbes && rAt.orbes < rp.orbes * 0.7),
       R.orbes ? `perfecta ${rp.orbes}/${ORBES.length} · atrasada ${rAt.orbes}` : 'sin orbes: no aplica'],
-    ['el motor se driblea: piques afinados y la melodia sigue entera',
-      !R.dribleo || (rp.meta && rp.botesLimpios >= R.dribleo && rp.tocadas.size === TOTAL_NOTAS),
-      R.dribleo ? `${rp.botesLimpios} piques limpios de ${rp.botes} · ${rp.tocadas.size}/${TOTAL_NOTAS} notas` : 'sin zona: no aplica'],
     ['tropezar cuesta esa nota, no el tramo: tocar en la red reengancha',
       rz.meta && rz.tocadas.size >= TOTAL_NOTAS - 3,
       `${rz.tocadas.size}/${TOTAL_NOTAS} sonadas tras caerse una vez`],
