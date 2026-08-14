@@ -110,7 +110,23 @@ function correr (id) {
     };
   }
 
+  // la mano que tropieza: juega perfecto salvo UNA nota que deja pasar, cae a
+  // la red, y toca para reengancharse. Mide que un error cueste esa nota y no
+  // el tramo entero hasta el proximo resorte.
+  const SALTEADA = NOTAS.filter(k => !k.silencio && !k.riel && !k.escalera && !k.porCaida)[2].i;
+  const tropieza = (s, b) => {
+    const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+    s.sostiene = !!(k && k.riel);
+    // en la red toca para reengancharse -- salvo cerca de un techo: ahi hasta el
+    // saltito flota hacia adentro y mata, y el jugador que ve el techo no toca
+    if (s.estado === 'apoyada' && s.tecla < 0 && s.x - s.ultimoToque > 0.3 &&
+        !TECHOS.some(t => s.x > t.x0 - 0.8 && s.x < t.x1)) { tocar(s, b); return; }
+    if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i) && k.i !== SALTEADA)
+      tocar(s, b);
+  };
+
   const rp = jugar(perfecta);
+  const rz = jugar(tropieza);
   const rSpam = jugar(martillo(0.04));
   const rSpam2 = jugar(martillo(0.12));
   const rPrep = jugar(prepara);
@@ -242,6 +258,11 @@ function correr (id) {
         return !ant || t.x0 >= n.x0 + Math.sqrt(2 * ant.y / G);
       }), `${TECHOS.length}`],
     ['la red rescata: hay resortes repartidos', RESORTES.length >= R.resortes, `${RESORTES.length}`],
+    // Un tropiezo no puede costar el tramo: desde la red, tocar te relanza a la
+    // proxima tecla. Se pierden a lo sumo la salteada y sus dos vecinas.
+    ['tropezar cuesta esa nota, no el tramo: tocar en la red reengancha',
+      rz.meta && rz.tocadas.size >= TOTAL_NOTAS - 3,
+      `${rz.tocadas.size}/${TOTAL_NOTAS} sonadas tras caerse una vez`],
     // un punto exacto se esquiva sin querer, o se salta creyendo que es obstaculo
     ['los trampolines son una zona pisable, no un punto',
       RESORTES.every(r => r.x1 - r.x0 >= 0.6),

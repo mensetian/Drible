@@ -16,8 +16,10 @@
 //         NO TOCAR bajo un techo = el silencio del compas.
 //
 // Si fallas una nota te caes a la RED. No morir, pero la melodia queda con un
-// hueco (se oye) y perdes hasta el proximo resorte de rescate. Sobre los
-// abismos no hay red: ahi el riel se paga con la vida.
+// hueco (se oye). Desde la red, TOCAR te relanza hacia la proxima tecla: el
+// error cuesta la nota perdida, nunca el tramo entero. Los resortes verdes
+// hacen lo mismo solos, como respaldo. Sobre los abismos no hay red: ahi el
+// riel se paga con la vida.
 //
 // Corre en node (solo simulacion) y en el navegador (render + audio).
 // ---------------------------------------------------------------------------
@@ -585,10 +587,26 @@ function aplicar (s, xt = s.x) {
     }
     return false;
   }
-  if (s.tecla < 0) {                      // en la red: un saltito que no suena
-    s.estado = 'aire'; s.vy = 0.62;
+  // En la red: TOCAR es el reenganche. La esfera se relanza sola hacia la
+  // proxima tecla, como un resorte pero a pedido -- caerse cuesta la nota
+  // perdida, no el tramo hasta el rescate. El salto no suena: la nota nueva
+  // hay que tocarla al pisarla, asi que esto no regala puntaje. Devuelve true
+  // para consumir el toque -- si quedara en la cola de anticipos, se cobraria
+  // al aterrizar como una nota juzgada desde la red, chueca seguro.
+  if (s.tecla < 0) {
+    // ...pero nunca a traves de un techo: ese arco se estrella. Si la proxima
+    // tecla queda del otro lado de un silencio con techo, el toque es el
+    // saltito de siempre, y del silencio te saca el resorte.
+    const k = NOTAS.find(n =>
+      !n.silencio && n.x0 + MIRA > s.x + 0.2 &&
+      !TECHOS.some(t => (n.x0 > t.x0 - 0.3 && n.x0 < t.x1) || (t.x0 > s.x && t.x0 < n.x0)));
+    s.estado = 'aire';
+    if (k) {
+      const T = Math.max(0.2, k.x0 + MIRA - s.x);
+      s.vy = Math.min(1.9, (k.y - s.y) / T + G * T / 2);
+    } else s.vy = 0.62;
     s.eventos.push({ tipo: 'saltoRed' });
-    return false;
+    return true;
   }
   return pulsar(s, NOTAS[s.tecla], xt);   // los rieles devuelven false: se sostienen
 }
@@ -1328,6 +1346,7 @@ function arrancarNavegador () {
         'martillar el boton no sirve: se queda sordo',
         'las largas se MANTIENEN: el riel te lanza solo al final',
         'las que cuelgan de un arco no se tocan: dejate caer',
+        'si caes a la red, TOCA: te relanza a la proxima tecla',
         'los trampolines VERDES te devuelven arriba: pisalos',
         'bajo el techo NO se toca'
       ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.45 + 26 + i * 20));
