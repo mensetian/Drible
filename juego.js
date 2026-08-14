@@ -198,9 +198,14 @@ const CANCIONES = {
     ],
     secciones: [
       { x0: 0, n: 'salida' }, { x0: 4, n: 'amanecer' }, { x0: 20, n: 'amanecer II' },
-      { x0: 36, n: 'motor · no toques: rueda' }, { x0: 52, n: 'despegue · drop 1' },
+      { x0: 36, n: 'motor · DRIBLEA al beat' }, { x0: 52, n: 'despegue · drop 1' },
       { x0: 84, n: 'aterrizaje del acto' }
     ],
+    // MOTOR es zona de DRIBLEO: la melodia calla y entra el arpegio del
+    // estudio (up16). Aca la esfera no toca teclas -- se pica contra la red al
+    // beat, y cada pique afinado dispara las cuatro semicorcheas del acorde.
+    // Es la primera seccion donde la esfera toca OTRO instrumento.
+    arpegios: [{ x0: 36.4, x1: 50.4 }],
     // El arreglo, calcado seccion a seccion del estudio: amanecer respira con
     // el pad, amanecer II mete hats y bajo, el motor sube hasta el redoble, y
     // el drop entra con todo.
@@ -397,6 +402,11 @@ export let PISO = null;            // la plataforma de salida
 export let HUECOS = [];
 export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
 
+// Zonas de DRIBLEO: tramos sin melodia donde la seccion trae arpegio. Ahi la
+// red es el instrumento: picar la esfera al beat dispara la rafaga del acorde.
+export let ARPEGIOS = [];
+export const enArpegio = x => ARPEGIOS.some(z => x > z.x0 && x < z.x1);
+
 // Techo sobre el silencio largo: ahi tocar mata. Se corta antes del final para
 // que el resorte de reenganche quede libre y se pueda volver a subir.
 // Donde vuelve a subir despues de un silencio: lo mas tarde posible que todavia
@@ -412,7 +422,9 @@ function reenganche (n) {
 // todavia cae de la ultima nota, sin haber hecho nada-- y termina antes del
 // reenganche, para que quede lugar para volver a subir.
 const calcularTechos = () => NOTAS
-  .filter(n => n.silencio && !n.piso && n.dur >= 2 && reenganche(n))
+  .filter(n => n.silencio && !n.piso && n.dur >= 2 && reenganche(n) &&
+    // en una zona de dribleo el silencio se JUEGA (se pica al beat): sin techo
+    !ARPEGIOS.some(z => n.x0 < z.x1 && n.x0 + n.dur > z.x0))
   .map(n => {
     const ant = NOTAS[n.i - 1];
     const caida = ant && !ant.silencio ? Math.sqrt(2 * ant.y / G) : 0.4;
@@ -438,6 +450,9 @@ function resortes () {
   for (const n of NOTAS) if (n.silencio && reenganche(n)) candidatos.push(reenganche(n));
   for (let x = 4; x < LARGO - 4; x += 4) if (!enSilencio(x)) candidatos.push(x); // rescate
   for (const x of candidatos) {
+    // dentro de una zona de dribleo no hay resorte: ahi la red se juega
+    // picando, y un resorte automatico secuestraria el rebote
+    if (enArpegio(x)) continue;
     if (enHueco(x - RESORTE_ANTES) || enHueco(x + RESORTE_DESPUES)) continue;
     if (enHueco(x) || TECHOS.some(t => x > t.x0 - 0.2 && x < t.x1 + 0.2)) continue;
     const destino = NOTAS.find(n => !n.silencio && n.x0 - x >= vueloMinimo(n.y) && n.x0 - x <= 3.2);
@@ -467,6 +482,7 @@ export function elegirCancion (id) {
   HUECOS = NOTAS
     .filter(n => n.riel && n.b >= LARGO / 2 && n.x1 - n.x0 > 1.2)
     .map(n => ({ x0: +(n.x0 + 0.7).toFixed(3), x1: +(n.x1 - 0.1).toFixed(3) }));
+  ARPEGIOS = c.arpegios || [];
   TECHOS = calcularTechos();
   RESORTES = resortes();
   SECCIONES = c.secciones;
@@ -498,6 +514,7 @@ export function crearSim () {
     limpias: new Set(),     // las que ademas sonaron afinadas: ese es el puntaje
     racha: 0, mejorRacha: 0, falsos: 0,
     resortesUsados: new Set(),
+    botes: 0, botesLimpios: 0,     // los piques de las zonas de dribleo
     eventos: []
   };
 }
@@ -627,7 +644,11 @@ export function paso (s, dt) {
     else for (const r of RESORTES) {
       if (s.x > r.x0 && s.x < r.x1 && !s.resortesUsados.has(r.x)) {
         s.resortesUsados.add(r.x);
-        const k = NOTAS[r.destino];
+        // el destino se recalcula DESDE DONDE se piso: el de la partitura se
+        // eligio desde el centro del trampolin, y lanzado desde el borde
+        // lejano el vuelo no daba y la esfera caia de vuelta a la red
+        const k = NOTAS.find(n => !n.silencio && !s.tocadas.has(n.i) &&
+          n.x0 + MIRA - s.x >= vueloMinimo(n.y)) || NOTAS[r.destino];
         const T = Math.max(0.2, k.x0 + MIRA - s.x);
         s.estado = 'aire'; s.tecla = -1;
         s.vy = Math.min(1.9, k.y / T + G * T / 2);
@@ -669,6 +690,29 @@ function aplicar (s, xt = s.x) {
   // para consumir el toque -- si quedara en la cola de anticipos, se cobraria
   // al aterrizar como una nota juzgada desde la red, chueca seguro.
   if (s.tecla < 0) {
+    // En zona de dribleo el toque es el PIQUE: la esfera rebota y se juzga
+    // contra el pulso mas cercano, con el mismo margen que una nota. El pique
+    // afinado dispara el arpegio; el chueco rebota mudo.
+    if (enArpegio(s.x)) {
+      const dev = s.x - Math.round(s.x);
+      const chueca = Math.abs(dev) > AFINADO;
+      s.botes++;
+      if (!chueca) s.botesLimpios++;
+      s.estado = 'aire';
+      // El ultimo pique de la zona no rebota: LANZA a la primera tecla que
+      // sigue. El dribleo desemboca en la melodia sin costura -- un resorte
+      // aca lanzaba desde el borde y se quedaba corto.
+      const sig = NOTAS.find(n => !n.silencio && n.x0 + MIRA > s.x + 0.2);
+      if (sig && sig.x0 + MIRA - s.x < 1.9) {
+        const tv = vueloMinimo(sig.y);
+        let objetivo = sig.x0 + MIRA;
+        if (objetivo - s.x < tv) objetivo = Math.min(sig.x1 - 0.02, s.x + tv);
+        const T = Math.max(0.2, objetivo - s.x);
+        s.vy = Math.min(1.9, sig.y / T + G * T / 2);
+      } else s.vy = G * 0.45;                // vuelve a la red en ~un beat
+      s.eventos.push({ tipo: 'bote', x: s.x, y: 0, tarde: dev, chueca });
+      return true;
+    }
     // ...pero nunca a traves de un techo: ese arco se estrella. Si la proxima
     // tecla queda del otro lado de un silencio con techo, el toque es el
     // saltito de siempre, y del silencio te saca el resorte.
@@ -1030,15 +1074,18 @@ function arrancarNavegador () {
         const fuerte = NOTAS[e.i].b % 1 === 0;
         lead(ac.currentTime, e.f, Math.max(0.22, 0.46 - Math.abs(e.tarde) * 0.4),
           fuerte ? 0.29 : 0.21, 0, e.chueca);
-        // El eco del estudio (3 semicorcheas despues, bajito), pero como
-        // PREMIO: solo la nota afinada lo deja. La chueca queda seca -- asi el
-        // eco no ensucia el juicio del oido, lo confirma.
-        if (!e.chueca) lead(ac.currentTime + 0.75 * SPB, e.f, 0.14, 0.07);
+        // El eco, IDENTICO al estudio: solo las notas cortas (hasta media
+        // negra), 3 semicorcheas despues, al 30% del volumen. La chueca lo
+        // arrastra chueco: el eco repite lo que sono, no lo que debia sonar.
+        if (NOTAS[e.i].dur <= 0.5)
+          lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.3, 0, e.chueca);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 3 : 7, true, e.chueca ? C.suciaRGB : C.teclaRGB);
         squash = 1;
       } else if (e.tipo === 'ligada') {
         lead(ac.currentTime, e.f, 0.5, 0.15, e.desde, e.chueca);
+        if (NOTAS[e.i].dur <= 0.5)
+          lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, 0.15 * 0.3, 0, e.chueca);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, 5, false, e.chueca ? C.suciaRGB : C.teclaRGB);
         squash = 0.8;
@@ -1046,6 +1093,21 @@ function arrancarNavegador () {
         rielAbrir(e.f, e.chueca); aviso(e);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 4 : 10, true, e.chueca ? C.suciaRGB : C.teclaRGB);
+      } else if (e.tipo === 'bote') {
+        // el pique del dribleo: afinado dispara las cuatro semicorcheas del
+        // arpegio (el up16 del estudio, una octava arriba del pad); chueco
+        // rebota mudo -- el hueco en el arpegio se oye solo
+        aviso(e);
+        squash = 1;
+        if (e.chueca) {
+          ruido(ac.currentTime, 0.04, 0.08, 'lowpass', 600);
+          chispas(e.x, 0, 3, false, C.suciaRGB);
+        } else {
+          const arm = armonia(Math.floor(e.x / 4));
+          [arm.acorde[0], arm.acorde[1], arm.acorde[2], arm.acorde[0] * 2]
+            .forEach((f, i) => lead(ac.currentTime + i * SPB / 4, f * 2, 0.09, 0.06));
+          chispas(e.x, 0, 8, true, C.impulsoRGB);
+        }
       } else if (e.tipo === 'falso') {
         // martillaste: cuerda muerta. El boton queda sordo hasta que se acomode.
         ruido(ac.currentTime, 0.06, 0.14, 'bandpass', 700, 1.4);
@@ -1244,6 +1306,17 @@ function arrancarNavegador () {
     // Trampolines. Verdes, anchos, con chevrones que suben y la parabola
     // dibujada: tienen que leerse como "pisa aca y volves arriba". Dibujados
     // como dos rayitas grises se leian como algo que hay que esquivar.
+    // Zonas de dribleo: un punto de pique en cada beat de la red, latiendo con
+    // el pulso -- el objetivo es visible, como la marca blanca de una tecla.
+    for (const z of ARPEGIOS) {
+      if (z.x1 < s.x - 3 || z.x0 > s.x + 7) continue;
+      const lat = 1 - (s.x - Math.floor(s.x));           // 1 justo en el beat
+      for (let bx = Math.ceil(z.x0); bx < z.x1; bx++) {
+        const cerca = Math.abs(bx - s.x) < 0.5 ? lat : 0.35;
+        cx.fillStyle = `rgba(${C.impulsoRGB},${0.25 + 0.55 * cerca})`;
+        cx.beginPath(); cx.arc(px(bx), py(0), 3 + 2.5 * cerca, 0, Math.PI * 2); cx.fill();
+      }
+    }
     for (const r of RESORTES) {
       if (r.x1 < s.x - 3 || r.x0 > s.x + 7) continue;
       const a = s.resortesUsados.has(r.x) ? 0.18 : 0.55;
@@ -1429,6 +1502,7 @@ function arrancarNavegador () {
         'las largas se MANTIENEN: el riel te lanza solo al final',
         'las que cuelgan de un arco no se tocan: dejate caer',
         'si caes a la red, TOCA: te relanza a la proxima tecla',
+        'en las zonas VERDES de la red, DRIBLEA: pica la esfera al beat',
         'los trampolines VERDES te devuelven arriba: pisalos',
         'bajo el techo NO se toca'
       ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));

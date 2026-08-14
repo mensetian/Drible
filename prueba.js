@@ -11,7 +11,7 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, PISO, G, SPB, BPM
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, PISO, G, SPB, BPM, enArpegio
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -26,8 +26,9 @@ const DT = 1 / 240;
 const RASGOS = {
   esfera: { escaleras: false, ligaduras: 0, huecos: 1, techos: 0, resortes: 8, saltos: 30, exigente: false },
   aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, resortes: 8, saltos: 30, exigente: true },
-  // el viaje va por el ACTO 1 (amanecer ×2, motor, drop 1): crece por sesiones
-  viaje: { escaleras: true, ligaduras: 2, huecos: 1, techos: 1, resortes: 8, saltos: 30, exigente: true }
+  // el viaje va por el ACTO 1 (amanecer ×2, motor, drop 1): crece por sesiones.
+  // El motor es zona de dribleo (sin techo: el silencio ahi se JUEGA).
+  viaje: { escaleras: true, ligaduras: 2, huecos: 1, techos: 0, resortes: 8, saltos: 30, exigente: true, dribleo: 14 }
 };
 
 let fallas = 0;
@@ -127,8 +128,18 @@ function correr (id) {
       tocar(s, b);
   };
 
+  // la mano dribleadora: juega perfecto y ademas pica la esfera en cada beat
+  // de las zonas de dribleo. Mide la mecanica del motor: que se pueda driblear
+  // todo el build afinado sin perder la melodia que sigue.
+  const dribleadora = (s, b) => {
+    if (s.estado === 'apoyada' && s.tecla < 0 && enArpegio(s.x) &&
+        Math.abs(s.x - Math.round(s.x)) < 0.02 && s.x - s.ultimoToque > 0.5) { tocar(s, b); return; }
+    perfecta(s, b);
+  };
+
   const rp = jugar(perfecta);
   const rz = jugar(tropieza);
+  const rd = R.dribleo ? jugar(dribleadora) : null;
   const rSpam = jugar(martillo(0.04));
   const rSpam2 = jugar(martillo(0.12));
   const rPrep = jugar(prepara);
@@ -262,6 +273,11 @@ function correr (id) {
     ['la red rescata: hay resortes repartidos', RESORTES.length >= R.resortes, `${RESORTES.length}`],
     // Un tropiezo no puede costar el tramo: desde la red, tocar te relanza a la
     // proxima tecla. Se pierden a lo sumo la salteada y sus dos vecinas.
+    // La zona de dribleo del motor: picar al beat suena el arpegio y no rompe
+    // nada -- la melodia de despues sale entera igual.
+    ['el motor se driblea: piques afinados y la melodia sigue entera',
+      !R.dribleo || (rd.meta && rd.botesLimpios >= R.dribleo && rd.tocadas.size === TOTAL_NOTAS),
+      rd ? `${rd.botesLimpios} piques limpios de ${rd.botes} · ${rd.tocadas.size}/${TOTAL_NOTAS} notas` : 'sin zona: no aplica'],
     ['tropezar cuesta esa nota, no el tramo: tocar en la red reengancha',
       rz.meta && rz.tocadas.size >= TOTAL_NOTAS - 3,
       `${rz.tocadas.size}/${TOTAL_NOTAS} sonadas tras caerse una vez`],
