@@ -322,6 +322,7 @@ export const COYOTE = 0.18;     // tocaste apenas te fuiste del borde: vale igua
 // con el boton hundido no hay toque nuevo. Asi que soltar sobre el final del
 // riel no te tira -- la nota ya esta tocada, te deja salir como corresponde.
 export const SUELTA = 0.4;
+export const REPIQUE = 0.22;   // gracia al soltar un riel: tiempo para repicar (~120 ms)
 export const EN_COLA = 2;       // toques guardados a la vez: dos notas adelantadas
 
 // Las gracias dejan que la nota SUENE aunque llegues torcido; la afinacion
@@ -495,7 +496,7 @@ function orbes () {
           if (!mr || d < mr.d) mr = { p, golpe, nb, d, cc };
         }
         if (!mr) continue;
-        const o = { i: r.length, x: +(mr.p / 4).toFixed(3), y: +(n.y + 0.075).toFixed(3), c: mr.cc };
+        const o = { i: r.length, x: +(mr.p / 4).toFixed(3), y: +(n.y + 0.13).toFixed(3), c: mr.cc };
         if (mr.nb != null && mr.golpe == null) { o.instr = 'bajo'; o.semi = mr.nb; PASOS_BAJO.add(mr.p); }
         else if (mr.golpe) { o.instr = mr.golpe; PASOS_BATERIA.add(mr.p); }
         else continue;
@@ -666,6 +667,7 @@ export function crearSim () {
     racha: 0, mejorRacha: 0, falsos: 0,
     resortesUsados: new Set(),
     orbes: 0, orbesTocados: new Set(),   // los orbes cosechados en el aire
+    soltoEn: null,          // cuando solto el riel: corre la gracia de repique
     eventos: []
   };
 }
@@ -745,8 +747,9 @@ function pulsar (s, k, xt = s.x) {
     // saltito que sube a cosechar los orbes que flotan encima y cae de
     // vuelta al riel (si seguis sosteniendo). Lejos del final, para no
     // perderse el lanzamiento. El ataque de la nota sigue siendo sostener.
-    if (s.tocadas.has(k.i) && s.x < k.x1 - 0.9) {
-      s.estado = 'aire'; s.vy = G * 0.4; s.tecla = -1; s.saliendoDe = -1;
+    if (s.tocadas.has(k.i) && s.x < k.x1 - 1.05) {
+      s.estado = 'aire'; s.vy = G * 0.5; s.tecla = -1; s.saliendoDe = -1;
+      s.soltoEn = null;
       s.eventos.push({ tipo: 'saltoRiel', x: s.x, y: s.y });
       return true;
     }
@@ -797,9 +800,16 @@ export function paso (s, dt) {
     // agarrar el riel tarde tambien desafina: la nota larga entra corrida
     if (k.riel && s.sostiene && s.x >= k.xm && !s.tocadas.has(k.i))
       anotar(s, k, s.x - k.xm, 'riel', { hasta: k.x1 });
+    if (s.sostiene) s.soltoEn = null;         // reagarro a tiempo: gracia usada
     if (k.riel && !s.sostiene && s.x > k.x0 + GRACIA_RIEL && s.x < k.x1 - SUELTA) {
-      if (s.tocadas.has(k.i)) s.eventos.push({ tipo: 'rielCorta' });
-      despegar(s, k);
+      // Soltar te tira -- pero no al instante: hay una GRACIA DE REPIQUE. Es
+      // un boton solo: para tocar de nuevo (el saltito de los orbes) primero
+      // hay que soltar, y sin esta gracia el segundo toque no existia nunca.
+      if (s.soltoEn == null) s.soltoEn = s.x;
+      if (s.x - s.soltoEn > REPIQUE) {
+        if (s.tocadas.has(k.i)) s.eventos.push({ tipo: 'rielCorta' });
+        despegar(s, k);
+      }
     } else if (s.x > k.x1) {
       if (k.ligada) {                     // no se vuelve a atacar: se cae ligado
         if (k.riel) s.eventos.push({ tipo: 'rielCorta' });
