@@ -22,8 +22,8 @@
 // Corre en node (solo simulacion) y en el navegador (render + audio).
 // ---------------------------------------------------------------------------
 
-export const BPM = 112;
-export const SPB = 60 / BPM;
+export let BPM = 112;
+export let SPB = 60 / BPM;
 export const G = 1.24;              // gravedad, en unidades de beat
 export const R = 0.055;             // radio de la esfera
 export const PASO_TONO = 0.024;     // cuanto sube el mapa por semitono
@@ -31,37 +31,147 @@ export const Y_GRAVE = 0.26;        // altura de la nota mas grave (E4)
 export const GRACIA_RIEL = 0.18;    // margen para agarrarse al riel
 export const CAIDA_MUERTE = -0.35;
 
-// --- la cancion ------------------------------------------------------------
+// --- las canciones ----------------------------------------------------------
 // Un compas por linea, "nota:figura" separados por espacio. "-" es silencio.
-// Am F C G. El compas 0 es la entrada: cuatro tiempos de bateria sola.
+// Las dos van sobre Am F C G. El compas 0 es la entrada: bateria sola.
+//
+// Hay DOS niveles a proposito, para separar dos hipotesis de dificultad que
+// venian mezcladas: el margen de error (AFINADO, igual en los dos) y la
+// cancion en si (el galope de Aurora contra las negras y blancas de esfera).
+// Si esfera sale facil y Aurora no, la dificultad es la cancion; si cuestan
+// parecido, es el margen.
 
-// AURORA 2.0 — la composicion aprobada del estudio (estudio/, 6-jul), portada
-// a una sola voz. Primero el TEMA en notas largas (se aprende escuchando y
-// sosteniendo), despues el CORO dos veces (el gancho de verdad, con el galope
-// corchea-con-puntillo del synthwave), y el final que resuelve en La.
+const CANCIONES = {
+  // ESFERA — la cancion del nivel de esfera, transcripta a una sola voz. La
+  // melodia es la linea que alli dibujaba el terreno: el pulso en negras, la
+  // escalera que sube por el acorde, las cascadas de bordes bajando una nota
+  // por beat, las dos ligaduras hechas riel, y el unico puntillo del tramo
+  // 'aire'. Casi todo cae en el beat entero: es el nivel 1.
+  esfera: {
+    nombre: 'ESFERA', bpm: 100,
+    // En esfera la blanca era UN toque y dos beats de vuelo, no una nota
+    // sostenida: el umbral de riel sube para que las blancas sigan siendo
+    // toques y solo las ligaduras de verdad (4 tiempos) se mantengan.
+    rielMin: 2.5,
+    compases: [
+      '-:4',                       //  0     entrada
+      'A4:1 A4:1 A4:1 A4:1',       //  1 Am  pulso: agarrar el beat
+      'F4:2 F4:2',                 //  2 F   los dos primeros saltos
+      'C4:2 C5:2',                 //  3 C   LA ESCALERA: sube
+      'G5:1 D5:1 B4:1 G4:1',       //  4 G   y la cascada de bordes baja
+      'A4:2 A5:2',                 //  5 Am  hi-hat: sube a la meseta
+      'F5:2 F5:2',                 //  6 F   se corre arriba y se baja
+      'C4:2 C4:2',                 //  7 C   el bajo: el pico
+      'G5:2 G5:2',                 //  8 G   la loma
+      'A4:2 A5:2',                 //  9 Am  el pad: sube
+      'F5:4',                      // 10 F   la ligadura sobre la meseta
+      'C4:2 C4:1 C4:1',            // 11 C   doble: blanca, negra-negra
+      'G4:2 G4:1 G4:1',            // 12 G
+      'A4:1 A4:1 A4:1 A4:1',       // 13 Am  el break: ocho negras
+      'F4:1 F4:1 F4:1 F4:1',       // 14 F
+      'C4:4',                      // 15 C   aire: la ligadura larga
+      'G4:1.5 G4:.5 G4:2',         // 16 G   el puntillo: la unica sincopa
+      'A4:2 A5:1 A5:1',            // 17 Am  el clima: la meseta
+      'F5:1 F5:1 F5:2',            // 18 F
+      'C4:2 C5:2',                 // 19 C   la salida: la escalera otra vez
+      'G5:1 D5:1 B4:1 G4:1'        // 20 G   y la cascada final
+    ],
+    secciones: [
+      { x0: 0, n: 'salida' }, { x0: 4, n: 'pulso' }, { x0: 12, n: 'escalera' },
+      { x0: 20, n: 'hi-hat' }, { x0: 28, n: 'bajo' }, { x0: 36, n: 'pad' },
+      { x0: 44, n: 'doble' }, { x0: 52, n: 'break' }, { x0: 60, n: 'aire' },
+      { x0: 68, n: 'todo' }, { x0: 76, n: 'salida' }
+    ],
+    // El arreglo entra por capas, calcado de esfera: pulso, escalera (entra el
+    // bajo y el pad), hi-hat, bajo, pad, doble, el break de bombo solo, el
+    // aire, todo junto, y la salida.
+    plan (c) {
+      if (c < 0 || c >= this.compases.length) return null;
+      const base = { kick: [0, 2], snare: [1, 3], clap: [], hats: [], abierto: [], bajo: 'nada', pad: false, fill: false };
+      if (c === 0) return { ...base, kick: [0, 1, 2, 3], snare: [], fill: true };
+      if (c <= 2) return base;                                                  // pulso
+      if (c <= 4) return { ...base, bajo: 'empuje', pad: true };                // escalera
+      if (c <= 6) return { ...base, hats: OCHOS };                              // hi-hat
+      if (c <= 8) return { ...base, hats: OCHOS, bajo: 'empuje' };              // bajo
+      if (c <= 12) return { ...base, hats: OCHOS, bajo: 'empuje', pad: true };  // pad y doble
+      if (c <= 14) return { ...base, kick: [0, 1, 2, 3], snare: [], fill: c === 14 };  // break
+      if (c <= 16) return { ...base, snare: [], pad: true };                    // aire
+      if (c <= 18) return { ...base, hats: OCHOS, bajo: 'empuje', pad: true };  // todo
+      return { ...base, pad: true };                                            // salida
+    }
+  },
 
-export const CANCION = [
-  '-:4',                                              //  0  entrada
-  'E5:2 C5:1 A4:1',                                   //  1  Am  el tema, a lo grande
-  'C5:4',                                             //  2  F   y se sostiene
-  'E5:2 G5:1 E5:1',                                   //  3  C
-  'D5:4',                                             //  4  G   pregunta sin resolver
-  'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             //  5  Am  EL CORO: el galope
-  'E5:.75 D5:.75 C5:.5 D5:1.5 C5:.25 D5:.25',         //  6  F
-  'E5:.75 E5:.75 G5:.5 E5:1 D5:.5 C5:.5',             //  7  C
-  'D5:1.5 B4:.5 D5:2',                                //  8  G   respiro colgado del re
-  'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             //  9  Am  el coro otra vez
-  'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 10  F   ahora sube
-  'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 11  C   la cima del coro
-  'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 12  G
-  '-:4',                                              // 13  Am  SILENCIO: rodar
-  'C5:1 D5:1 E5:1 G5:1',                              // 14  F   el final trepa
-  'D5:.5 B4:.5 D5:3',                                 // 15  C
-  'A5:4',                                             // 16  G   la nota mas alta del mapa
-  'E5:1 C5:1 A4:2'                                    // 17  Am  y resuelve en la
+  // AURORA 2.0 — la composicion aprobada del estudio (estudio/, 6-jul), portada
+  // a una sola voz. Primero el TEMA en notas largas (se aprende escuchando y
+  // sosteniendo), despues el CORO dos veces (el gancho de verdad, con el galope
+  // corchea-con-puntillo del synthwave), y el final que resuelve en La.
+  aurora: {
+    nombre: 'AURORA 2.0', bpm: 112,
+    rielMin: 1.5,
+    compases: [
+      '-:4',                                              //  0  entrada
+      'E5:2 C5:1 A4:1',                                   //  1  Am  el tema, a lo grande
+      'C5:4',                                             //  2  F   y se sostiene
+      'E5:2 G5:1 E5:1',                                   //  3  C
+      'D5:4',                                             //  4  G   pregunta sin resolver
+      'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             //  5  Am  EL CORO: el galope
+      'E5:.75 D5:.75 C5:.5 D5:1.5 C5:.25 D5:.25',         //  6  F
+      'E5:.75 E5:.75 G5:.5 E5:1 D5:.5 C5:.5',             //  7  C
+      'D5:1.5 B4:.5 D5:2',                                //  8  G   respiro colgado del re
+      'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             //  9  Am  el coro otra vez
+      'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 10  F   ahora sube
+      'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 11  C   la cima del coro
+      'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 12  G
+      '-:4',                                              // 13  Am  SILENCIO: rodar
+      'C5:1 D5:1 E5:1 G5:1',                              // 14  F   el final trepa
+      'D5:.5 B4:.5 D5:3',                                 // 15  C
+      'A5:4',                                             // 16  G   la nota mas alta del mapa
+      'E5:1 C5:1 A4:2'                                    // 17  Am  y resuelve en la
+    ],
+    secciones: [
+      { x0: 0, n: 'salida' }, { x0: 4, n: 'el tema' }, { x0: 20, n: 'el coro' },
+      { x0: 36, n: 'el coro, mas arriba' }, { x0: 52, n: 'silencio · no toques' },
+      { x0: 56, n: 'el final' }
+    ],
+    // La base entra por capas, como en esfera: pulso, peso, aire, todo. Un
+    // arreglo que ya empieza completo no puede crecer, y sin crecer no hay viaje.
+    plan (c) {
+      if (c < 0 || c >= this.compases.length) return null;
+      const base = { kick: [], snare: [], clap: [], hats: CONTRA, abierto: [], bajo: 'ochos', pad: true, fill: false };
+      if (c === 0) return { ...base, kick: [0, 1, 2, 3], hats: [], bajo: 'nada', pad: false, fill: true };
+      if (c <= 2) return { ...base, kick: [0, 2], snare: [3], hats: [], bajo: 'empuje' };       // el tema
+      if (c <= 4) return { ...base, kick: [0, 2], snare: [1, 3], bajo: 'empuje', fill: c === 4 };
+      if (c <= 6) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: OCHOS, abierto: [3.5] };  // el coro
+      if (c <= 8) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], hats: OCHOS, fill: c === 8 };
+      if (c <= 10) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS };
+      if (c <= 12) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], hats: DIECISEIS, fill: c === 12 };
+      if (c === 13) return { ...base, kick: [0], hats: [], abierto: [2], bajo: 'sus' };         // el silencio
+      if (c === 14) return { ...base, kick: [0, 0.5, 2], clap: [1, 3], bajo: 'empuje' };
+      if (c <= 16) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS, abierto: [3.5], bajo: 'octava', fill: c === 16 };
+      return { ...base, kick: [0, 2, 2.5], snare: [1, 3], clap: [1, 3], hats: OCHOS, bajo: 'octava' };
+    }
+  }
+};
+
+export const NIVELES = ['esfera', 'aurora'];   // el orden en el menu: nivel 1 y 2
+
+// Los dos arreglos comparten la progresion: Am F C G, un acorde por compas.
+const PROG = [
+  { r: 110.00, acorde: [220.00, 261.63, 329.63] },   // Am
+  { r: 87.31, acorde: [174.61, 220.00, 261.63] },    // F
+  { r: 130.81, acorde: [261.63, 329.63, 392.00] },   // C
+  { r: 98.00, acorde: [196.00, 246.94, 293.66] }     // G
 ];
+const armonia = c => PROG[((c - 1) % 4 + 4) % 4];
 
-export const LARGO = CANCION.length * 4;
+const CONTRA = [0.5, 1.5, 2.5, 3.5];                                  // el contratiempo
+const OCHOS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5];
+const DIECISEIS = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75];
+
+export let CANCION_ID = null;
+export let CANCION = null;
+export let LARGO = 0;
+let RIEL_MIN = 1.5;
 
 // --- compilador: de la cancion al mapa --------------------------------------
 
@@ -141,7 +251,7 @@ function compilar () {
   for (const n of notas) {
     const sig = notas[n.i + 1];
     if (n.silencio) continue;
-    n.riel = n.dur >= 1.5;
+    n.riel = n.dur >= RIEL_MIN;
     n.escalera = !n.riel && n.dur <= 0.25 && sig && !sig.silencio &&
                  Math.abs(sig.y - n.y) <= 3 * PASO_TONO;
     const fin = sig ? sig.x0 : n.b + n.dur;
@@ -198,18 +308,16 @@ function compilar () {
   return notas;
 }
 
-export const NOTAS = compilar();
-export const TOTAL_NOTAS = NOTAS.filter(n => !n.silencio).length;
-export const PISO = NOTAS[0] && NOTAS[0].piso ? NOTAS[0] : null;   // la plataforma de salida
+export let NOTAS = [];
+export let TOTAL_NOTAS = 0;
+export let PISO = null;            // la plataforma de salida
 
 // --- el terreno, deducido de la cancion -------------------------------------
 
 // Los abismos van debajo de los rieles de la segunda mitad: ahi mantener vale
 // la vida. Se deducen de la partitura -- estaban escritos a mano y cada vez que
 // se tocaba la melodia quedaban debajo de cualquier cosa.
-export const HUECOS = NOTAS
-  .filter(n => n.riel && n.b >= LARGO / 2 && n.x1 - n.x0 > 1.2)
-  .map(n => ({ x0: +(n.x0 + 0.7).toFixed(3), x1: +(n.x1 - 0.1).toFixed(3) }));
+export let HUECOS = [];
 export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
 
 // Techo sobre el silencio largo: ahi tocar mata. Se corta antes del final para
@@ -226,7 +334,7 @@ function reenganche (n) {
 // Empieza recien cuando la esfera ya toco la red --antes la mataria mientras
 // todavia cae de la ultima nota, sin haber hecho nada-- y termina antes del
 // reenganche, para que quede lugar para volver a subir.
-export const TECHOS = NOTAS
+const calcularTechos = () => NOTAS
   .filter(n => n.silencio && !n.piso && n.dur >= 2 && reenganche(n))
   .map(n => {
     const ant = NOTAS[n.i - 1];
@@ -237,6 +345,7 @@ export const TECHOS = NOTAS
       y: 0.19
     };
   });
+export let TECHOS = [];
 
 // Resortes: reenganche despues de un silencio y rescate si te caiste a la red.
 // Son una ZONA, no un punto: pisarla en cualquier parte te devuelve arriba. Un
@@ -262,13 +371,33 @@ function resortes () {
   }
   return r.sort((a, b) => a.x - b.x);
 }
-export const RESORTES = resortes();
+export let RESORTES = [];
+export let SECCIONES = [];
 
-export const SECCIONES = [
-  { x0: 0, n: 'salida' }, { x0: 4, n: 'el tema' }, { x0: 20, n: 'el coro' },
-  { x0: 36, n: 'el coro, mas arriba' }, { x0: 52, n: 'silencio · no toques' },
-  { x0: 56, n: 'el final' }
-];
+// Elegir cancion recompila TODO: la partitura, el mapa y el terreno deducido.
+// Es la unica puerta -- nadie escribe NOTAS ni HUECOS de afuera.
+export function elegirCancion (id) {
+  const c = CANCIONES[id];
+  if (!c) throw new Error(`cancion desconocida: ${id}`);
+  CANCION_ID = id;
+  BPM = c.bpm; SPB = 60 / BPM;
+  RIEL_MIN = c.rielMin;
+  CANCION = c.compases;
+  LARGO = CANCION.length * 4;
+  NOTAS = compilar();
+  TOTAL_NOTAS = NOTAS.filter(n => !n.silencio).length;
+  PISO = NOTAS[0] && NOTAS[0].piso ? NOTAS[0] : null;
+  HUECOS = NOTAS
+    .filter(n => n.riel && n.b >= LARGO / 2 && n.x1 - n.x0 > 1.2)
+    .map(n => ({ x0: +(n.x0 + 0.7).toFixed(3), x1: +(n.x1 - 0.1).toFixed(3) }));
+  TECHOS = calcularTechos();
+  RESORTES = resortes();
+  SECCIONES = c.secciones;
+}
+export const nombreCancion = id => CANCIONES[id || CANCION_ID].nombre;
+const planCompas = c => CANCIONES[CANCION_ID].plan(c);
+
+elegirCancion('aurora');   // el default de siempre: los tests corren contra esta
 
 // --- simulacion --------------------------------------------------------------
 
@@ -283,6 +412,8 @@ export function crearSim () {
     ligadaDe: -1,           // te dejaste caer desde esta: la caida cobra la nota
     anticipos: [],          // toques que todavia no encontraron tecla
     apretadoEn: -Infinity,  // donde empezo el apriete: distingue toque de sostenido
+    falsoEn: -Infinity,     // el ultimo toque en falso: los seguidos agravan el castigo
+    castigoNivel: 0,
     coyote: null,           // tecla recien abandonada, todavia tocable
     bloqueo: -Infinity,     // hasta donde no responde el boton: castigo por martillar
     ultimoToque: -Infinity, // para distinguir un toque adelantado de una rafaga
@@ -484,6 +615,18 @@ export function soltar (s) {
   pulsar(s, k);
 }
 
+// Un falso aislado cuesta CASTIGO y nada mas: es un dedo que se resbalo. Los
+// falsos SEGUIDOS son el martilleo, y cada uno agrava el que sigue -- si el
+// castigo fuera siempre igual, en una cancion de negras la sordera expiraba
+// antes de la proxima nota y el spam se recuperaba gratis.
+function castigar (s) {
+  s.castigoNivel = s.x - s.falsoEn < 1.2 ? Math.min(4, s.castigoNivel + 1) : 0;
+  s.falsoEn = s.x;
+  s.bloqueo = s.x + CASTIGO * (1 + s.castigoNivel);
+  s.racha = 0; s.falsos++;
+  s.eventos.push({ tipo: 'falso', x: s.x, y: s.y });
+}
+
 export function tocar (s, b) {
   if (!s.viva || s.meta) return;
   s.apretadoEn = s.x;
@@ -498,15 +641,14 @@ export function tocar (s, b) {
   // racha y deja el boton sordo. Sin esto se termina el nivel a puro spam: la
   // esfera aterriza sola sobre cada tecla, asi que el toque siempre cae bien y
   // el ritmo -- que es el juego entero -- deja de importar.
-  if (rafaga) {
-    s.bloqueo = s.x + CASTIGO;
-    s.racha = 0; s.falsos++;
-    s.eventos.push({ tipo: 'falso', x: s.x, y: s.y });
-    return;
-  }
+  if (rafaga) { castigar(s); return; }
   // Adelantarse es el error humano normal y no puede costar la cadena entera.
-  if (s.anticipos.length < EN_COLA) s.anticipos.push(s.x);
-  s.eventos.push({ tipo: 'aire' });
+  // Pero DESBORDAR la cola no es adelantarse: ya hay dos toques esperando nota,
+  // y un tercero solo lo da el que martilla. Se descartaba gratis, y en una
+  // cancion de negras eso alcanzaba para puntuar sin mirar el ritmo -- la cola
+  // convertia el spam en toques bien juzgados al posarse.
+  if (s.anticipos.length < EN_COLA) { s.anticipos.push(s.x); s.eventos.push({ tipo: 'aire' }); return; }
+  castigar(s);
 }
 
 if (typeof document !== 'undefined') arrancarNavegador();
@@ -724,36 +866,8 @@ function arrancarNavegador () {
   }
 
   // --- la base: siempre suena, nunca se calla como castigo --------------------
-
-  const PROG = [
-    { r: 110.00, acorde: [220.00, 261.63, 329.63] },   // Am
-    { r: 87.31, acorde: [174.61, 220.00, 261.63] },    // F
-    { r: 130.81, acorde: [261.63, 329.63, 392.00] },   // C
-    { r: 98.00, acorde: [196.00, 246.94, 293.66] }     // G
-  ];
-  const armonia = c => PROG[((c - 1) % 4 + 4) % 4];
-
-  const CONTRA = [0.5, 1.5, 2.5, 3.5];                                  // el contratiempo
-  const OCHOS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5];
-  const DIECISEIS = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75];
-
-  // La base entra por capas, como en esfera: pulso, peso, aire, todo. Un
-  // arreglo que ya empieza completo no puede crecer, y sin crecer no hay viaje.
-  function planCompas (c) {
-    if (c < 0 || c >= CANCION.length) return null;
-    const base = { kick: [], snare: [], clap: [], hats: CONTRA, abierto: [], bajo: 'ochos', pad: true, fill: false };
-    if (c === 0) return { ...base, kick: [0, 1, 2, 3], hats: [], bajo: 'nada', pad: false, fill: true };
-    if (c <= 2) return { ...base, kick: [0, 2], snare: [3], hats: [], bajo: 'empuje' };       // el tema
-    if (c <= 4) return { ...base, kick: [0, 2], snare: [1, 3], bajo: 'empuje', fill: c === 4 };
-    if (c <= 6) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: OCHOS, abierto: [3.5] };  // el coro
-    if (c <= 8) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], hats: OCHOS, fill: c === 8 };
-    if (c <= 10) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS };
-    if (c <= 12) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], hats: DIECISEIS, fill: c === 12 };
-    if (c === 13) return { ...base, kick: [0], hats: [], abierto: [2], bajo: 'sus' };         // el silencio
-    if (c === 14) return { ...base, kick: [0, 0.5, 2], clap: [1, 3], bajo: 'empuje' };
-    if (c <= 16) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS, abierto: [3.5], bajo: 'octava', fill: c === 16 };
-    return { ...base, kick: [0, 2, 2.5], snare: [1, 3], clap: [1, 3], hats: OCHOS, bajo: 'octava' };
-  }
+  // El QUE de cada compas (planCompas) vive arriba, con su cancion; aca solo
+  // se traduce a sintesis.
 
   function agendarMusica () {
     const b = ahora();
@@ -803,7 +917,7 @@ function arrancarNavegador () {
   // Cada nota dice en el acto cuanto te corriste. Sin esto se juega a ciegas:
   // suena mal, se ve bien, y no hay forma de saber para que lado corregir.
   function aviso (e) {
-    const ms = Math.round(e.tarde * 600);
+    const ms = Math.round(e.tarde * SPB * 1000);
     marcas.push({ d: e.tarde, t: performance.now() });
     if (marcas.length > 16) marcas.shift();
     const signo = ms > 0 ? '+' : '−';
@@ -817,7 +931,7 @@ function arrancarNavegador () {
   function procesar () {
     for (const e of s.eventos) {
       if (e.tipo === 'nota') {
-        desvios.push(Math.abs(e.tarde) * 600); aviso(e);
+        desvios.push(Math.abs(e.tarde) * SPB * 1000); aviso(e);
         // acento: la nota que cae en el pulso pega mas fuerte. Todas iguales es
         // lo que sonaba plano -- un instrumento tiene dinamica, un beep no.
         const fuerte = NOTAS[e.i].b % 1 === 0;
@@ -876,9 +990,26 @@ function arrancarNavegador () {
 
   // --- entrada -----------------------------------------------------------------
 
-  function bajar () {
-    if (!corriendo) { corriendo = true; arrancarAudio(); return; }
-    if (s.meta) { intento = 1; s = crearSim(); t0 = ac.currentTime + 0.7; proxBeat = 0; finSonado = false; return; }
+  function empezar (id) {
+    elegirCancion(id);
+    intento = 1; mejor = 0;
+    s = crearSim();
+    estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0;
+    corriendo = true;
+    arrancarAudio();
+  }
+
+  function alMenu () {
+    rielCerrar();
+    corriendo = false; finSonado = false;
+    s = crearSim();
+  }
+
+  // En el menu, un toque pelado (espacio, click) arranca el nivel 1; el nivel
+  // se elige con 1/2 en el teclado o tocando su renglon.
+  function bajar (nivel = 0) {
+    if (!corriendo) { empezar(NIVELES[nivel] || NIVELES[0]); return; }
+    if (s.meta) { alMenu(); return; }
     s.sostiene = true;
     tocar(s, ahora());
   }
@@ -895,7 +1026,9 @@ function arrancarNavegador () {
   addEventListener('keydown', e => {
     if (!esBoton(e)) return;
     e.preventDefault();
-    if (!e.repeat) bajar();
+    if (e.repeat) return;
+    if (!corriendo && (e.key === '1' || e.key === '2')) { bajar(+e.key - 1); return; }
+    bajar();
   }, { capture: true });
   addEventListener('keyup', e => { if (esBoton(e)) subir(); }, { capture: true });
 
@@ -907,7 +1040,15 @@ function arrancarNavegador () {
   addEventListener('load', enfocar);
   addEventListener('pointerdown', enfocar, { capture: true });
 
-  cv.addEventListener('pointerdown', e => { e.preventDefault(); bajar(); });
+  cv.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (!corriendo) {
+      // el renglon del nivel 2 abarca la mitad de abajo del menu
+      bajar(e.offsetY > cv.clientHeight * 0.42 ? 1 : 0);
+      return;
+    }
+    bajar();
+  });
   addEventListener('pointerup', subir);
   // si el juego pierde el foco con el boton hundido, se suelta: no queda trabado
   addEventListener('blur', subir);
@@ -1170,8 +1311,16 @@ function arrancarNavegador () {
     if (!corriendo) {
       cx.textAlign = 'center';
       cx.fillStyle = C.peligro; cx.font = '17px system-ui';
-      cx.fillText('DRIBLE — ESPACIO o toca para empezar', w / 2, h * 0.24);
-      cx.fillStyle = C.tenue; cx.font = '13px system-ui';
+      cx.fillText('DRIBLE — elegi el nivel', w / 2, h * 0.16);
+      // Dos canciones, mismo margen de error: si el nivel 1 sale facil y el 2
+      // no, la dificultad era la cancion, no el margen.
+      cx.fillStyle = C.tecla; cx.font = '15px system-ui';
+      cx.fillText(`1 — ${nombreCancion('esfera')} · negras y blancas · 100 BPM`, w / 2, h * 0.26);
+      cx.fillStyle = C.esfera;
+      cx.fillText(`2 — ${nombreCancion('aurora')} · el galope del coro · 112 BPM`, w / 2, h * 0.33);
+      cx.fillStyle = C.tenue; cx.font = '12px system-ui';
+      cx.fillText('teclas 1/2, o toca su renglon · ESPACIO arranca el nivel 1', w / 2, h * 0.39);
+      cx.font = '13px system-ui';
       [
         'cada tecla azul es una nota: tocala al pisarla',
         'caes ANTES de la marca blanca: roda, y golpea al cruzar la linea',
@@ -1181,11 +1330,11 @@ function arrancarNavegador () {
         'las que cuelgan de un arco no se tocan: dejate caer',
         'los trampolines VERDES te devuelven arriba: pisalos',
         'bajo el techo NO se toca'
-      ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.24 + 26 + i * 20));
+      ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.45 + 26 + i * 20));
     } else {
       cx.textAlign = 'left';
       cx.fillStyle = C.red; cx.font = '14px system-ui';
-      cx.fillText(`intento ${intento}${mejor ? `   mejor ${mejor}` : ''}`, 12, 22);
+      cx.fillText(`${nombreCancion()} · intento ${intento}${mejor ? `   mejor ${mejor}` : ''}`, 12, 22);
       // El puntaje son las LIMPIAS, no las sonadas: si contaran las sonadas,
       // martillar el boton puntuaba igual que tocar bien.
       cx.fillStyle = C.esfera; cx.font = '15px system-ui';
@@ -1234,7 +1383,7 @@ function arrancarNavegador () {
         cx.textAlign = 'center'; cx.fillStyle = C.peligro; cx.font = '18px system-ui';
         cx.fillText(`${s.limpias.size} limpias · ${chuecas} chuecas · racha ${s.mejorRacha}`, w / 2, h * 0.18);
         cx.fillStyle = C.tenue; cx.font = '13px system-ui';
-        cx.fillText('toca para volver', w / 2, h * 0.18 + 22);
+        cx.fillText('toca para volver al menu', w / 2, h * 0.18 + 22);
       }
     }
     hud.textContent = '';
