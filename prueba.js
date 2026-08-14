@@ -11,7 +11,7 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, PISO, G, SPB, BPM, enArpegio
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -28,7 +28,7 @@ const RASGOS = {
   aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, resortes: 8, saltos: 30, exigente: true },
   // el viaje va por el ACTO 1 (amanecer ×2, motor, drop 1): crece por sesiones.
   // El motor es zona de dribleo (sin techo: el silencio ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, resortes: 8, saltos: 30, exigente: true, dribleo: 14 }
+  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, resortes: 8, saltos: 30, exigente: true, dribleo: 14, orbes: 36 }
 };
 
 let fallas = 0;
@@ -100,7 +100,7 @@ function correr (id) {
     const objetivos = NOTAS.filter(k => !k.silencio && !k.riel).map(k => k.xm + enBeats(ms));
     let j = 0;
     return (s, b) => {
-      if (dribla(s, b)) return;
+      if (dribla(s, b, enBeats(ms))) return;
       const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
       s.sostiene = !!(k && k.riel);
       while (j < objetivos.length && s.x >= objetivos[j]) { tocar(s, b); j++; }
@@ -286,6 +286,11 @@ function correr (id) {
     // proxima tecla. Se pierden a lo sumo la salteada y sus dos vecinas.
     // La zona de dribleo del motor: picar al beat suena el arpegio y no rompe
     // nada -- la melodia de despues sale entera igual.
+    // Los orbes son cuerpos: la mano fina los cosecha casi todos con el arco;
+    // la corrida 150 ms pica por otro lado y deja la mayoria mudos.
+    ['los orbes del arpegio se tocan con el cuerpo, y el arco fino los lleva',
+      !R.orbes || (rp.orbes >= R.orbes && rAt.orbes < rp.orbes * 0.7),
+      R.orbes ? `perfecta ${rp.orbes}/${ORBES.length} · atrasada ${rAt.orbes}` : 'sin orbes: no aplica'],
     ['el motor se driblea: piques afinados y la melodia sigue entera',
       !R.dribleo || (rp.meta && rp.botesLimpios >= R.dribleo && rp.tocadas.size === TOTAL_NOTAS),
       R.dribleo ? `${rp.botesLimpios} piques limpios de ${rp.botes} · ${rp.tocadas.size}/${TOTAL_NOTAS} notas` : 'sin zona: no aplica'],

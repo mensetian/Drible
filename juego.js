@@ -446,6 +446,40 @@ export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
 export let ARPEGIOS = [];
 export const enArpegio = x => ARPEGIOS.some(z => x > z.x0 && x < z.x1);
 
+// Los ORBES del arpegio: cuerpos flotantes sobre el arco ideal de cada pique.
+// El pique pone la raiz y elige el arco; las otras tres semicorcheas se tocan
+// CON EL CUERPO: la esfera las atraviesa o no suenan. Pique fino = el arco
+// enhebra los tres; corrido = pasa por otro lado y esas notas quedan mudas.
+export let ORBES = [];
+function orbes () {
+  const r = [];
+  for (const z of ARPEGIOS) {
+    const pads = [];
+    for (let bx = Math.ceil(z.x0); bx < z.x1; bx++) pads.push(bx);
+    pads.forEach((bx, i) => {
+      if (i < pads.length - 1) {
+        for (let n = 1; n <= 3; n++) {
+          const dt = 0.225 * n;                      // el arco del bote: T = 0.9
+          r.push({ i: r.length, x: +(bx + dt).toFixed(3), y: +(G * dt * (0.9 - dt) / 2).toFixed(3), n, c: Math.floor(bx / 4) });
+        }
+        return;
+      }
+      // el ultimo pad lanza al drop: sus orbes suben por ESE arco -- la rampa
+      const sig = NOTAS.find(k => !k.silencio && k.x0 > bx);
+      if (!sig) return;
+      const tv = vueloMinimo(sig.y);
+      let obj = sig.x0 + MIRA;
+      if (obj - bx < tv) obj = Math.min(sig.x1 - 0.02, bx + tv);
+      const T = obj - bx, vy = sig.y / T + G * T / 2;
+      for (let n = 1; n <= 3; n++) {
+        const dt = T * n / 4;
+        r.push({ i: r.length, x: +(bx + dt).toFixed(3), y: +(vy * dt - G * dt * dt / 2).toFixed(3), n, c: Math.floor(bx / 4) });
+      }
+    });
+  }
+  return r.sort((a, b) => a.x - b.x);
+}
+
 // Techo sobre el silencio largo: ahi tocar mata. Se corta antes del final para
 // que el resorte de reenganche quede libre y se pueda volver a subir.
 // Donde vuelve a subir despues de un silencio: lo mas tarde posible que todavia
@@ -531,6 +565,7 @@ export function elegirCancion (id) {
       HUECOS.push({ x0: +(bx + 0.3).toFixed(3), x1: +(bx + 0.7).toFixed(3) });
   TECHOS = calcularTechos();
   RESORTES = resortes();
+  ORBES = orbes();
   SECCIONES = c.secciones;
 }
 export const nombreCancion = id => CANCIONES[id || CANCION_ID].nombre;
@@ -561,6 +596,7 @@ export function crearSim () {
     racha: 0, mejorRacha: 0, falsos: 0,
     resortesUsados: new Set(),
     botes: 0, botesLimpios: 0,     // los piques de las zonas de dribleo
+    orbes: 0, orbesTocados: new Set(),   // las semicorcheas cosechadas en el aire
     rafaga: false,
     eventos: []
   };
@@ -709,6 +745,16 @@ export function paso (s, dt) {
     s.vy -= G * dt;
     const yAntes = s.y;
     s.y += s.vy * dt;
+    // los orbes del arpegio se tocan con el cuerpo: pasar por donde estan ES
+    // sonarlos. El que el arco no atraviesa, no suena.
+    for (const o of ORBES) {
+      if (o.x < s.x - 0.12 || o.x > s.x + 0.12) continue;
+      if (s.orbesTocados.has(o.i)) continue;
+      if (Math.abs(s.x - o.x) < 0.09 && Math.abs(s.y - o.y) < R) {
+        s.orbesTocados.add(o.i); s.orbes++;
+        s.eventos.push({ tipo: 'orbe', x: o.x, y: o.y, n: o.n, c: o.c });
+      }
+    }
     if (s.vy < 0) posarse(s, yAntes);
   }
 
@@ -751,7 +797,7 @@ function aplicar (s, xt = s.x) {
       // sigue. El dribleo desemboca en la melodia sin costura -- un resorte
       // aca lanzaba desde el borde y se quedaba corto.
       const sig = NOTAS.find(n => !n.silencio && n.x0 + MIRA > s.x + 0.2);
-      if (sig && sig.x0 + MIRA - s.x < 1.9) {
+      if (sig && sig.x0 + MIRA - s.x < 2.2) {
         const tv = vueloMinimo(sig.y);
         let objetivo = sig.x0 + MIRA;
         if (objetivo - s.x < tv) objetivo = Math.min(sig.x1 - 0.02, s.x + tv);
@@ -876,7 +922,6 @@ function arrancarNavegador () {
   const estela = [], particulas = [], destellos = [], desvios = [];
   const avisos = [], marcas = [];     // cuanto te corriste, dicho y dibujado
   let squash = 0, flash = 0, rielVoz = null;
-  let ultimoPique = null;      // el pique limpio en curso: enciende sus orbes
 
   const ahora = () => ac ? (ac.currentTime - t0) / SPB : 0;
 
@@ -1298,17 +1343,19 @@ function arrancarNavegador () {
           ruido(ac.currentTime, 0.04, 0.08, 'lowpass', 600);
           chispas(e.x, 0, 3, false, C.suciaRGB);
         } else {
-          // el up16 del estudio, tocado por la esfera: cuatro semicorcheas de
-          // la triada, con la voz del arpegio del estudio pero AL FRENTE --
-          // es el jugador tocando, no el fondo
+          // el pique afinado pone la RAIZ del arpegio; el resto son los orbes,
+          // que suenan solo si la esfera los atraviesa en el aire
           const ch = acordeEnCompas(Math.floor(e.x / 4));
-          [0, 1, 2, 3].forEach(n => {
-            const semis = ch.ints[n % 3] + 12 * Math.floor(n / 3);
-            eArp(ac.currentTime + n * SPB / 4, ch.root * Math.pow(2, semis / 12) * 2, 0.11);
-          });
-          ultimoPique = { x: e.x, t: performance.now() };
+          eArp(ac.currentTime, ch.root * 2, 0.11);
           chispas(e.x, 0, 8, true, C.impulsoRGB);
         }
+      } else if (e.tipo === 'orbe') {
+        // la esfera atraveso un orbe: ESA semicorchea del arpegio suena, aca
+        const ch = acordeEnCompas(e.c);
+        const semis = ch.ints[e.n % 3] + 12 * Math.floor(e.n / 3);
+        eArp(ac.currentTime, ch.root * Math.pow(2, semis / 12) * 2, 0.11);
+        destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: false });
+        chispas(e.x, e.y, 6, true, C.teclaRGB);
       } else if (e.tipo === 'falso') {
         // martillaste: cuerda muerta. El boton queda sordo hasta que se acomode.
         ruido(ac.currentTime, 0.06, 0.14, 'bandpass', 700, 1.4);
@@ -1344,7 +1391,6 @@ function arrancarNavegador () {
     estela.length = 0;
     desvios.length = 0;
     marcas.length = 0;
-    ultimoPique = null;
     avisos.length = 0;
     flash = 1;
   }
@@ -1356,7 +1402,6 @@ function arrancarNavegador () {
     intento = 1; mejor = 0;
     s = crearSim();
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0;
-    ultimoPique = null;
     corriendo = true;
     arrancarAudio();
   }
@@ -1518,25 +1563,39 @@ function arrancarNavegador () {
         const cerca = Math.abs(bx - s.x) < 0.5 ? lat : 0.35;
         cx.fillStyle = `rgba(${C.impulsoRGB},${0.25 + 0.55 * cerca})`;
         cx.beginPath(); cx.arc(px(bx), py(0), 3 + 2.5 * cerca, 0, Math.PI * 2); cx.fill();
-        // los ORBES del arpegio: tres por arco de pique, sobre la parabola del
-        // bote. La esfera los atraviesa con el cuerpo -- el pique limpio los
-        // enciende uno a uno al pasar; sin pique quedan apagados, esperando
-        for (let n = 1; n <= 3; n++) {
-          const dt = 0.225 * n;
-          const oy = G * 0.45 * dt - G * dt * dt / 2;
-          const ox = bx + dt;
-          if (ox > z.x1) break;
-          const enArco = ultimoPique && Math.abs(ultimoPique.x - bx) < 0.3;
-          const pasado = enArco && s.x >= ox - 0.03;
-          const brillo = pasado ? 0.95 : enArco ? 0.5 : 0.22;
-          cx.fillStyle = `rgba(${C.teclaRGB},${brillo})`;
-          cx.beginPath(); cx.arc(px(ox), py(oy), pasado ? 6 : 3.5, 0, Math.PI * 2); cx.fill();
-          if (pasado) {
-            cx.strokeStyle = `rgba(${C.teclaRGB},0.35)`; cx.lineWidth = 1.5;
-            cx.beginPath(); cx.arc(px(ox), py(oy), 10, 0, Math.PI * 2); cx.stroke();
-          }
-        }
       }
+    }
+    // Los ORBES: cuerpos de verdad. Viven flotando sobre el arco del pique
+    // hasta que la esfera los atraviesa -- ahi suenan y estallan. Los que el
+    // arco no toco quedan ahi, mudos: se VE lo que no sonaste.
+    const latOrbe = 0.55 + 0.45 * Math.sin(performance.now() / 160);
+    for (const o of ORBES) {
+      if (o.x < s.x - 3 || o.x > s.x + 7) continue;
+      if (s.orbesTocados.has(o.i)) continue;
+      cx.fillStyle = `rgba(${C.teclaRGB},${0.35 + 0.35 * latOrbe})`;
+      cx.beginPath(); cx.arc(px(o.x), py(o.y), 4 + 1.5 * latOrbe, 0, Math.PI * 2); cx.fill();
+      cx.strokeStyle = `rgba(${C.teclaRGB},0.25)`; cx.lineWidth = 1;
+      cx.beginPath(); cx.arc(px(o.x), py(o.y), 8, 0, Math.PI * 2); cx.stroke();
+    }
+    // Los ABISMOS se ven como peligro, no como ausencia: dientes en los dos
+    // bordes y un degradado que se hunde. Antes el hueco era solo un corte en
+    // la linea de la red y de lejos ni se notaba.
+    for (const h of HUECOS) {
+      if (h.x1 < s.x - 3 || h.x0 > s.x + 7) continue;
+      const a0 = px(h.x0), a1 = px(h.x1), yy = py(0);
+      const gr = cx.createLinearGradient(0, yy, 0, yy + 46);
+      gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = gr; cx.fillRect(a0, yy, a1 - a0, 46);
+      cx.strokeStyle = `rgba(${C.esferaRGB},0.8)`; cx.lineWidth = 2;
+      cx.beginPath();
+      const dientes = Math.max(3, Math.round((a1 - a0) / 9));
+      for (let i = 0; i <= dientes; i++) {
+        const xx = a0 + (a1 - a0) * i / dientes;
+        cx.lineTo(xx, yy + (i % 2 ? 7 : 1));
+      }
+      cx.stroke();
+      cx.beginPath(); cx.moveTo(a0, yy - 5); cx.lineTo(a0, yy + 3);
+      cx.moveTo(a1, yy - 5); cx.lineTo(a1, yy + 3); cx.stroke();
     }
     for (const r of RESORTES) {
       if (r.x1 < s.x - 3 || r.x0 > s.x + 7) continue;
@@ -1724,6 +1783,7 @@ function arrancarNavegador () {
         'las que cuelgan de un arco no se tocan: dejate caer',
         'si caes a la red, TOCA: te relanza a la proxima tecla',
         'en las zonas VERDES de la red, DRIBLEA: pica la esfera al beat',
+        'los ORBES se tocan con el cuerpo: pique fino = el arco los enhebra',
         'los trampolines VERDES te devuelven arriba: pisalos',
         'bajo el techo NO se toca'
       ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));
