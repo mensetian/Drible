@@ -1114,6 +1114,32 @@ function arrancarNavegador () {
     else if (c === 'x') { eKick(t); eSnare(t); eClap(t); }
   };
 
+  // El sostenido, espejo del estudio: alla una nota prolongada es la misma
+  // cuadrada sonando y decayendo a lo largo de toda la nota -- no otra voz.
+  // Se guarda para poder soltarla si el jugador corta el riel antes.
+  let rielVozE = null;
+  function eRielAbrir (f, dur, gan = 0.13) {
+    const t = ac.currentTime;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(18000, t);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gan, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    lp.connect(voz);
+    const o = ac.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(f, t);
+    o.connect(g).connect(lp); o.start(t); o.stop(t + dur + 0.05);
+    rielVozE = { o, g };
+  }
+  function eRielCerrar () {
+    if (!rielVozE) return;
+    const t = ac.currentTime;
+    rielVozE.g.gain.cancelScheduledValues(t);
+    rielVozE.g.gain.setValueAtTime(Math.max(0.0001, rielVozE.g.gain.value), t);
+    rielVozE.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    rielVozE.o.stop(t + 0.1);
+    rielVozE = null;
+  }
+
   // La voz del jugador: solo suena si el jugador la toca. Con `desde` no se
   // vuelve a atacar, se desliza desde la nota anterior: eso es un ligado.
   // `chueca` = llegaste fuera de la ventana afinada. La nota suena igual --nunca
@@ -1125,18 +1151,20 @@ function arrancarNavegador () {
     // estudio calcada: cuadrada limpia, brillante, ataque de 4 ms. La chueca
     // sigue con la voz apagada y batida de siempre -- ese es el feedback.
     if (CANCIONES[CANCION_ID].estudio && !chueca) {
+      // Espejo del estudio: alla casi toda nota melodica dura UNA semicorchea
+      // (los puntos de su notacion son silencios), asi que la nota es un blip
+      // corto de cuadrada -- por eso el eco se recorta nitido detras. Y el
+      // ligado ataca fresco: en el estudio no hay glissando.
+      const durE = Math.min(dur, 0.16);
       const ge = ac.createGain(), lpe = ac.createBiquadFilter();
       lpe.type = 'lowpass'; lpe.frequency.setValueAtTime(18000, t);
       ge.gain.setValueAtTime(0.0001, t);
-      ge.gain.linearRampToValueAtTime(gan * 0.45, t + Math.min(0.004, dur * 0.5));
-      ge.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      ge.gain.linearRampToValueAtTime(gan * 0.45, t + Math.min(0.004, durE * 0.5));
+      ge.gain.exponentialRampToValueAtTime(0.0001, t + durE);
       lpe.connect(voz);
       const o = ac.createOscillator(); o.type = 'square';
-      if (desde) {
-        o.frequency.setValueAtTime(desde, t);
-        o.frequency.exponentialRampToValueAtTime(f, t + 0.035);
-      } else o.frequency.setValueAtTime(f, t);
-      o.connect(ge).connect(lpe); o.start(t); o.stop(t + dur + 0.02);
+      o.frequency.setValueAtTime(f, t);
+      o.connect(ge).connect(lpe); o.start(t); o.stop(t + durE + 0.02);
       return;
     }
     const lp = ac.createBiquadFilter(), g = ac.createGain();
@@ -1334,7 +1362,10 @@ function arrancarNavegador () {
         chispas(e.x, e.y, 5, false, e.chueca ? C.suciaRGB : C.teclaRGB);
         squash = 0.8;
       } else if (e.tipo === 'riel') {
-        rielAbrir(e.f, e.chueca); aviso(e);
+        if (CANCIONES[CANCION_ID].estudio && !e.chueca)
+          eRielAbrir(e.f, Math.max(0.3, (e.hasta - e.x) * SPB));
+        else rielAbrir(e.f, e.chueca);
+        aviso(e);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 4 : 10, true, e.chueca ? C.suciaRGB : C.teclaRGB);
       } else if (e.tipo === 'bote') {
@@ -1368,7 +1399,7 @@ function arrancarNavegador () {
       } else if (e.tipo === 'sordo') {
         ruido(ac.currentTime, 0.015, 0.02);
       } else if (e.tipo === 'rielCorta') {
-        rielCerrar();
+        if (rielVozE) eRielCerrar(); else rielCerrar();
       } else if (e.tipo === 'resorte') {
         kick(ac.currentTime);
         chispas(e.x, 0, 12, true);
@@ -1386,7 +1417,7 @@ function arrancarNavegador () {
   }
 
   function morirOReiniciar () {
-    rielCerrar();
+    rielCerrar(); eRielCerrar();
     mejor = Math.max(mejor, s.limpias.size);
     intento++;
     s = crearSim();
@@ -1411,7 +1442,7 @@ function arrancarNavegador () {
   }
 
   function alMenu () {
-    rielCerrar();
+    rielCerrar(); eRielCerrar();
     corriendo = false; finSonado = false;
     s = crearSim();
   }
@@ -1484,7 +1515,7 @@ function arrancarNavegador () {
 
     procesar();
     if (!s.viva) { golpe(ac.currentTime, 90, 0.3, 0.4, 'sawtooth'); ruido(ac.currentTime, 0.2, 0.28); morirOReiniciar(); }
-    if (s.meta && !finSonado) { finSonado = true; rielCerrar(); sonarFinal(); }
+    if (s.meta && !finSonado) { finSonado = true; rielCerrar(); eRielCerrar(); sonarFinal(); }
     dibujar(dtSeg);
   }
   requestAnimationFrame(cuadro);
