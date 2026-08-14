@@ -462,11 +462,17 @@ export const enArpegio = x => ARPEGIOS.some(z => x > z.x0 && x < z.x1);
 // CON EL CUERPO: la esfera las atraviesa o no suenan. Pique fino = el arco
 // enhebra los tres; corrido = pasa por otro lado y esas notas quedan mudas.
 export let ORBES = [];
+// Pasos de semicorchea cuyos golpes fueron RECLAMADOS por un orbe: el fondo
+// los calla y solo suenan si la esfera atraviesa su orbe. Asi el orbe no
+// agrega sonidos: completa los que la cancion ya tiene.
+export let PASOS_BATERIA = new Set();
+export let PASOS_BAJO = new Set();
 function orbes () {
   const r = [];
+  PASOS_BATERIA = new Set(); PASOS_BAJO = new Set();
   const extra = !!CANCIONES[CANCION_ID].orbesExtra;
+  const spec = CANCIONES[CANCION_ID].estudio;
   if (!ARPEGIOS.length && !extra) return r;
-  const INSTR = ['hat', 'clap', 'arp'];
   let salto = 0;
   for (const n of NOTAS) {
     const sig = NOTAS[n.i + 1];
@@ -487,10 +493,33 @@ function orbes () {
         const dt = T * k / 4;
         r.push({ i: r.length, x: +(x0 + dt).toFixed(3), y: +arco(dt).toFixed(3), n: k, c: Math.floor(n.b / 4), instr: 'arp' });
       }
-    } else if (extra && T >= 0.5 && ++salto % 3 === 0) {
-      // ocasional entre plataformas: un orbe con OTRO instrumento, rotando
-      const dt = T / 2;
-      r.push({ i: r.length, x: +(x0 + dt).toFixed(3), y: +arco(dt).toFixed(3), n: 2, c: Math.floor(n.b / 4), instr: INSTR[(salto / 3 | 0) % 3] });
+    } else if (extra && spec && T >= 0.5) {
+      // Ocasional entre plataformas: se busca un golpe REAL de la cancion que
+      // caiga dentro del vuelo (hat, clap, caja o nota del bajo), el mas
+      // cercano a la cima del arco. Ese golpe queda reclamado: el fondo lo
+      // calla y lo suena la esfera al atravesarlo -- o nadie.
+      const p0 = Math.ceil((x0 + 0.12) * 4), p1 = Math.floor((obj - 0.12) * 4);
+      let mejor = null;
+      for (let p = p0; p <= p1; p++) {
+        const cc = Math.floor(p / 16), i16 = p % 16;
+        const pl = spec(cc); if (!pl) continue;
+        const bat = E_BATERIA[pl.drums];
+        const golpe = bat && 'hHsc'.includes(bat[i16]) ? bat[i16] : null;
+        const nb = pl.bajo && E_BAJO[pl.bajo] ? E_BAJO[pl.bajo][i16] : null;
+        if (golpe == null && nb == null) continue;
+        const dt = p / 4 - x0, d = Math.abs(dt - T / 2);
+        if (!mejor || d < mejor.d) mejor = { p, golpe, nb, dt, d, cc };
+      }
+      if (mejor && ++salto % 2 === 0) {
+        const o = { i: r.length, x: +(mejor.p / 4).toFixed(3), y: +arco(mejor.dt).toFixed(3), c: mejor.cc };
+        // se alterna: bajo cuando lo hay cada dos, si no el golpe de bateria
+        if (mejor.nb != null && (salto % 4 === 0 || mejor.golpe == null)) {
+          o.instr = 'bajo'; o.semi = mejor.nb; PASOS_BAJO.add(mejor.p);
+        } else {
+          o.instr = mejor.golpe; PASOS_BATERIA.add(mejor.p);
+        }
+        r.push(o);
+      }
     }
   }
   return r.sort((a, b) => a.x - b.x);
@@ -633,11 +662,22 @@ function lanzar (s, desde) {
   if (!sig || sig.silencio) { s.vy = 0; return; }        // al silencio se cae solo
   // Se apunta al principio de la tecla siguiente; si se toco tarde y ya no da
   // el tiempo de vuelo, se apunta mas adentro: llegar tarde, no fallar.
-  const tv = vueloMinimo(sig.y - s.y);
-  let objetivo = sig.x0 + MIRA;
-  if (objetivo - s.x < tv) objetivo = Math.min(sig.x1 - 0.02, s.x + tv);
+  let destino = sig;
+  let tv = vueloMinimo(sig.y - s.y);
+  // Ir tarde no puede perseguirte nota a nota. Si el vuelo minimo ya te deja
+  // pasado de la ventana afinada de la siguiente, esa nota esta perdida de
+  // antemano -- y aterrizar tarde en ella te dejaba tarde para la otra, y asi
+  // hasta el final. Entonces se la saltea: se aterriza CON RODADA en la que
+  // sigue, como un musico que deja pasar una nota para volver al tiempo.
+  const sig2 = NOTAS[sig.i + 1];
+  if (s.x + tv > sig.xm + AFINADO && sig2 && !sig2.silencio && !sig2.escalera && !sig.riel) {
+    const tv2 = vueloMinimo(sig2.y - s.y);
+    if (sig2.x0 + MIRA - s.x >= tv2) { destino = sig2; tv = tv2; }
+  }
+  let objetivo = destino.x0 + MIRA;
+  if (objetivo - s.x < tv) objetivo = Math.min(destino.x1 - 0.02, s.x + tv);
   const T = Math.max(0.06, objetivo - s.x);
-  s.vy = Math.min(1.9, (sig.y - s.y) / T + G * T / 2);
+  s.vy = Math.min(1.9, (destino.y - s.y) / T + G * T / 2);
 }
 
 // Una carrera es un grupo de escalones pegados (las semicorcheas).
@@ -1232,9 +1272,10 @@ function arrancarNavegador () {
       const p = spec(c);
       if (p) {
         const ch = acordeEnCompas(c);
+        const paso = Math.round(proxBeat * 4);   // el paso global de semicorchea
         const bat = E_BATERIA[p.drums];
-        if (bat && bat[i16] && bat[i16] !== '.') eTambor(bat[i16], t);
-        if (p.bajo && !enArpegio(proxBeat)) {
+        if (bat && bat[i16] && bat[i16] !== '.' && !PASOS_BATERIA.has(paso)) eTambor(bat[i16], t);
+        if (p.bajo && !enArpegio(proxBeat) && !PASOS_BAJO.has(paso)) {
           const n = E_BAJO[p.bajo][i16];
           if (n != null) eBajo(t, (ch.root / 4) * Math.pow(2, n / 12), 0.062 * EG);
         }
@@ -1361,14 +1402,16 @@ function arrancarNavegador () {
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 4 : 10, true, e.chueca ? C.suciaRGB : C.teclaRGB);
       } else if (e.tipo === 'orbe') {
-        // la esfera atraveso un orbe: suena SU instrumento, aca y ahora
-        if (e.instr === 'hat') eHat(ac.currentTime, true);
-        else if (e.instr === 'clap') eClap(ac.currentTime);
-        else {
+        // la esfera atraveso un orbe: suena el golpe REAL que reclamo -- la
+        // nota del arpegio, el hat/clap/caja de la bateria, o la del bajo
+        if (e.instr === 'arp') {
           const ch = acordeEnCompas(e.c);
           const semis = ch.ints[e.n % 3] + 12 * Math.floor(e.n / 3);
           eArp(ac.currentTime, ch.root * Math.pow(2, semis / 12) * 2, 0.11);
-        }
+        } else if (e.instr === 'bajo') {
+          const ch = acordeEnCompas(e.c);
+          eBajo(ac.currentTime, (ch.root / 4) * Math.pow(2, e.semi / 12), 0.09 * EG);
+        } else eTambor(e.instr, ac.currentTime);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: false });
         chispas(e.x, e.y, 6, true, e.instr === 'arp' ? C.teclaRGB : C.esferaRGB);
       } else if (e.tipo === 'falso') {
