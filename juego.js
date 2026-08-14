@@ -518,13 +518,13 @@ function orbes () {
         const dt = T * k / 4;
         r.push({ i: r.length, x: +(x0 + dt).toFixed(3), y: +arco(dt).toFixed(3), n: k, c: Math.floor(n.b / 4), instr: 'arp' });
       }
-    } else if (extra && spec && T >= 0.5) {
+    } else if (extra && spec && T >= 0.35) {
       // Ocasional entre plataformas: se busca un golpe REAL de la cancion que
       // caiga dentro del vuelo (hat, clap, caja o nota del bajo), el mas
       // cercano a la cima del arco. Ese golpe queda reclamado: el fondo lo
       // calla y lo suena la esfera al atravesarlo -- o nadie.
-      const p0 = Math.ceil((x0 + 0.12) * 4), p1 = Math.floor((obj - 0.12) * 4);
-      let mejor = null;
+      const p0 = Math.ceil((x0 + 0.08) * 4), p1 = Math.floor((obj - 0.08) * 4);
+      const candidatos = [];
       for (let p = p0; p <= p1; p++) {
         const cc = Math.floor(p / 16), i16 = p % 16;
         const pl = spec(cc); if (!pl) continue;
@@ -532,18 +532,21 @@ function orbes () {
         const golpe = bat && 'hHsc'.includes(bat[i16]) ? bat[i16] : null;
         const nb = pl.bajo && E_BAJO[pl.bajo] ? E_BAJO[pl.bajo][i16] : null;
         if (golpe == null && nb == null) continue;
-        const dt = p / 4 - x0, d = Math.abs(dt - T / 2);
-        if (!mejor || d < mejor.d) mejor = { p, golpe, nb, dt, d, cc };
+        const dt = p / 4 - x0;
+        candidatos.push({ p, golpe, nb, dt, d: Math.abs(dt - T / 2), cc });
       }
-      if (mejor) {
-        const o = { i: r.length, x: +(mejor.p / 4).toFixed(3), y: +arco(mejor.dt).toFixed(3), c: mejor.cc };
-        // se alterna: bajo cuando lo hay cada dos, si no el golpe de bateria
-        salto++;
-        if (mejor.nb != null && (salto % 2 === 0 || mejor.golpe == null)) {
-          o.instr = 'bajo'; o.semi = mejor.nb; PASOS_BAJO.add(mejor.p);
-        } else {
-          o.instr = mejor.golpe; PASOS_BATERIA.add(mejor.p);
-        }
+      // el BAJO manda: es lo que se quiere completar mientras suena la
+      // melodia. En vuelos largos entran hasta dos golpes, separados.
+      candidatos.sort((a, b) => (b.nb != null) - (a.nb != null) || a.d - b.d);
+      const cupo = T >= 0.9 ? 2 : 1;
+      const puestos = [];
+      for (const cand of candidatos) {
+        if (puestos.length >= cupo) break;
+        if (puestos.some(q => Math.abs(q.p - cand.p) < 2)) continue;
+        puestos.push(cand);
+        const o = { i: r.length, x: +(cand.p / 4).toFixed(3), y: +arco(cand.dt).toFixed(3), c: cand.cc };
+        if (cand.nb != null) { o.instr = 'bajo'; o.semi = cand.nb; PASOS_BAJO.add(cand.p); }
+        else { o.instr = cand.golpe; PASOS_BATERIA.add(cand.p); }
         r.push(o);
       }
     }
@@ -853,7 +856,7 @@ export function paso (s, dt) {
       if (s.orbesTocados.has(o.i)) continue;
       if (Math.abs(s.x - o.x) < 0.09 && Math.abs(s.y - o.y) < R) {
         s.orbesTocados.add(o.i); s.orbes++;
-        s.eventos.push({ tipo: 'orbe', x: o.x, y: o.y, n: o.n, c: o.c });
+        s.eventos.push({ tipo: 'orbe', x: o.x, y: o.y, n: o.n, c: o.c, instr: o.instr, semi: o.semi });
       }
     }
     if (s.vy < 0) posarse(s, yAntes);
@@ -1414,6 +1417,12 @@ function arrancarNavegador () {
           // octavas abajo de donde pisa, con la voz de alla. Sin eco: el bajo
           // no lo lleva. Chueca, sale apagada y con el golpe sordo.
           eBajo(ac.currentTime, e.f / 8, e.chueca ? 0.07 : 0.16);
+          // ...y la raiz del arpegio: con los tres orbes del arco, el up16
+          // queda completo -- tocar bien el motor ES tocar el arpegio entero
+          if (!e.chueca) {
+            const ch = acordeEnCompas(Math.floor(e.x / 4));
+            eArp(ac.currentTime, ch.root * 2, 0.11);
+          }
           if (e.chueca) ruido(ac.currentTime, 0.05, 0.09, 'lowpass', 500);
           destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
           chispas(e.x, e.y, e.chueca ? 3 : 7, true, e.chueca ? C.suciaRGB : C.impulsoRGB);

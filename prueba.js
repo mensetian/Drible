@@ -282,6 +282,11 @@ function correr (id) {
     ['los orbes del arpegio se tocan con el cuerpo, y el arco fino los lleva',
       !R.orbes || (rp.orbes >= R.orbes && rAt.orbes < rp.orbes * 0.7),
       R.orbes ? `perfecta ${rp.orbes}/${ORBES.length} · atrasada ${rAt.orbes}` : 'sin orbes: no aplica'],
+    // el evento de cosecha tiene que decir QUE instrumento suena: sin esto el
+    // navegador recibia undefined y el orbe cosechado salia mudo
+    ['todo orbe cosechado dice su instrumento',
+      rp.eventos.filter(e => e.tipo === 'orbe').every(e => e.instr),
+      `${rp.eventos.filter(e => e.tipo === 'orbe').length} cosechados`],
     ['tropezar cuesta esa nota, no el tramo: tocar en la red reengancha',
       rz.meta && rz.tocadas.size >= TOTAL_NOTAS - 3,
       `${rz.tocadas.size}/${TOTAL_NOTAS} sonadas tras caerse una vez`],
