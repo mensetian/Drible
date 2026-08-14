@@ -152,19 +152,94 @@ const CANCIONES = {
       if (c <= 16) return { ...base, kick: [0, 1, 2, 3], snare: [1, 3], clap: [1, 3], hats: OCHOS, abierto: [3.5], bajo: 'octava', fill: c === 16 };
       return { ...base, kick: [0, 2, 2.5], snare: [1, 3], clap: [1, 3], hats: OCHOS, bajo: 'octava' };
     }
+  },
+
+  // AURORA · EL VIAJE — la cancion ENTERA del estudio (64 compases), portada
+  // por actos. Este es el ACTO 1: AMANECER (el tema, dos vueltas), MOTOR (el
+  // build: sin melodia, pura expectativa -- techo y a rodar) y DESPEGUE, el
+  // primer drop con el coro completo. Los actos que faltan (VUELO, GRAVEDAD,
+  // DESPEGUE II, NEBULOSA, EMPUJE, SUPERNOVA, aterrizaje) van entrando de a
+  // uno, cada uno con su mecanica. La ley del estudio: la partitura manda.
+  viaje: {
+    nombre: 'AURORA · EL VIAJE', bpm: 112,
+    rielMin: 1.5,
+    compases: [
+      '-:4',                                              //  0  entrada
+      'E5:2 C5:1 A4:1',                                   //  1  Am  AMANECER: el tema
+      'C5:4',                                             //  2  F
+      'E5:2 G5:1 E5:1',                                   //  3  C
+      'D5:4',                                             //  4  G
+      'E5:2 C5:1 A4:1',                                   //  5  Am  AMANECER II: otra vez,
+      'C5:4',                                             //  6  F   la base crece
+      'E5:2 G5:1 E5:1',                                   //  7  C
+      'D5:4',                                             //  8  G
+      '-:4',                                              //  9  Am  MOTOR: el build.
+      '-:4',                                              // 10  F   Sin melodia: rodar
+      '-:4',                                              // 11  Dm  y aguantar mientras
+      '-:4',                                              // 12  E   la bateria sube
+      'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             // 13  Am  DESPEGUE · DROP 1
+      'E5:.75 D5:.75 C5:.5 D5:1.5 C5:.25 D5:.25',         // 14  F
+      'E5:.75 E5:.75 G5:.5 E5:1 D5:.5 C5:.5',             // 15  C
+      'D5:1.5 B4:.5 D5:2',                                // 16  G
+      'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             // 17  Am
+      'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 18  F
+      'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 19  C
+      'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 20  G
+      'A4:4'                                              // 21  Am  cierre del acto: La
+    ],
+    acordes: [
+      'Am',
+      'Am', 'F', 'C', 'G',
+      'Am', 'F', 'C', 'G',
+      'Am', 'F', 'Dm', 'E',
+      'Am', 'F', 'C', 'G',
+      'Am', 'F', 'C', 'G',
+      'Am'
+    ],
+    secciones: [
+      { x0: 0, n: 'salida' }, { x0: 4, n: 'amanecer' }, { x0: 20, n: 'amanecer II' },
+      { x0: 36, n: 'motor · no toques: rueda' }, { x0: 52, n: 'despegue · drop 1' },
+      { x0: 84, n: 'aterrizaje del acto' }
+    ],
+    // El arreglo, calcado seccion a seccion del estudio: amanecer respira con
+    // el pad, amanecer II mete hats y bajo, el motor sube hasta el redoble, y
+    // el drop entra con todo.
+    plan (c) {
+      if (c < 0 || c >= this.compases.length) return null;
+      const base = { kick: [], snare: [], clap: [], hats: [], abierto: [], bajo: 'nada', pad: true, fill: false };
+      if (c === 0) return { ...base, kick: [0, 1, 2, 3], pad: false, fill: true };
+      if (c <= 2) return base;                                                       // amanecer: pad solo
+      if (c <= 4) return { ...base, hats: CONTRA };
+      if (c <= 6) return { ...base, kick: [0], hats: CONTRA, bajo: 'empuje' };       // amanecer II
+      if (c <= 8) return { ...base, kick: [0, 2], snare: [3], hats: OCHOS, bajo: 'empuje', fill: c === 8 };
+      if (c <= 11) return { ...base, kick: [0, 2], snare: [1, 3], hats: OCHOS, bajo: 'ochos' };  // motor
+      if (c === 12) return { ...base, kick: [0, 1, 2, 3], snare: [1, 1.5, 2, 2.5, 3, 3.5], hats: OCHOS, bajo: 'ochos', fill: true };  // el redoble
+      if (c <= 16) return { ...base, kick: [0, 2.5], snare: [1, 3], hats: OCHOS, abierto: [3.5], bajo: 'octava' };  // drop 1
+      if (c <= 20) return { ...base, kick: [0, 2, 2.5], snare: [1, 3], clap: [1, 3], hats: OCHOS, bajo: 'octava', fill: c === 20 };
+      return { ...base, kick: [0], clap: [1, 3], bajo: 'sus' };                      // cierre
+    }
   }
 };
 
-export const NIVELES = ['esfera', 'aurora'];   // el orden en el menu: nivel 1 y 2
+export const NIVELES = ['esfera', 'aurora', 'viaje'];   // el orden en el menu
 
-// Los dos arreglos comparten la progresion: Am F C G, un acorde por compas.
-const PROG = [
-  { r: 110.00, acorde: [220.00, 261.63, 329.63] },   // Am
-  { r: 87.31, acorde: [174.61, 220.00, 261.63] },    // F
-  { r: 130.81, acorde: [261.63, 329.63, 392.00] },   // C
-  { r: 98.00, acorde: [196.00, 246.94, 293.66] }     // G
-];
-const armonia = c => PROG[((c - 1) % 4 + 4) % 4];
+// Los acordes disponibles: raiz del bajo + triada del pad. Esfera y aurora
+// ciclan Am F C G; el viaje trae progresiones propias por seccion (el estudio
+// usa Dm y E en los builds), asi que cada cancion puede declarar `acordes`,
+// uno por compas, y armonia() los lee de ahi.
+const ACORDE = {
+  Am: { r: 110.00, acorde: [220.00, 261.63, 329.63] },
+  F: { r: 87.31, acorde: [174.61, 220.00, 261.63] },
+  C: { r: 130.81, acorde: [261.63, 329.63, 392.00] },
+  G: { r: 98.00, acorde: [196.00, 246.94, 293.66] },
+  Dm: { r: 73.42, acorde: [146.83, 174.61, 220.00] },
+  E: { r: 82.41, acorde: [164.81, 207.65, 246.94] }
+};
+const armonia = c => {
+  const propios = CANCIONES[CANCION_ID].acordes;
+  if (propios) return ACORDE[propios[Math.max(0, Math.min(c, propios.length - 1))]];
+  return ACORDE[['Am', 'F', 'C', 'G'][((c - 1) % 4 + 4) % 4]];
+};
 
 const CONTRA = [0.5, 1.5, 2.5, 3.5];                                  // el contratiempo
 const OCHOS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5];
@@ -955,6 +1030,10 @@ function arrancarNavegador () {
         const fuerte = NOTAS[e.i].b % 1 === 0;
         lead(ac.currentTime, e.f, Math.max(0.22, 0.46 - Math.abs(e.tarde) * 0.4),
           fuerte ? 0.29 : 0.21, 0, e.chueca);
+        // El eco del estudio (3 semicorcheas despues, bajito), pero como
+        // PREMIO: solo la nota afinada lo deja. La chueca queda seca -- asi el
+        // eco no ensucia el juicio del oido, lo confirma.
+        if (!e.chueca) lead(ac.currentTime + 0.75 * SPB, e.f, 0.14, 0.07);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
         chispas(e.x, e.y, e.chueca ? 3 : 7, true, e.chueca ? C.suciaRGB : C.teclaRGB);
         squash = 1;
@@ -1045,7 +1124,7 @@ function arrancarNavegador () {
     if (!esBoton(e)) return;
     e.preventDefault();
     if (e.repeat) return;
-    if (!corriendo && (e.key === '1' || e.key === '2')) { bajar(+e.key - 1); return; }
+    if (!corriendo && e.key >= '1' && e.key <= String(NIVELES.length)) { bajar(+e.key - 1); return; }
     bajar();
   }, { capture: true });
   addEventListener('keyup', e => { if (esBoton(e)) subir(); }, { capture: true });
@@ -1061,8 +1140,9 @@ function arrancarNavegador () {
   cv.addEventListener('pointerdown', e => {
     e.preventDefault();
     if (!corriendo) {
-      // el renglon del nivel 2 abarca la mitad de abajo del menu
-      bajar(e.offsetY > cv.clientHeight * 0.42 ? 1 : 0);
+      // cada renglon del menu es una franja: 1 arriba, 2 al medio, 3 abajo
+      const y = e.offsetY / cv.clientHeight;
+      bajar(y > 0.37 ? 2 : y > 0.295 ? 1 : 0);
       return;
     }
     bajar();
@@ -1336,8 +1416,10 @@ function arrancarNavegador () {
       cx.fillText(`1 — ${nombreCancion('esfera')} · negras y blancas · 100 BPM`, w / 2, h * 0.26);
       cx.fillStyle = C.esfera;
       cx.fillText(`2 — ${nombreCancion('aurora')} · el galope del coro · 112 BPM`, w / 2, h * 0.33);
+      cx.fillStyle = C.impulso;
+      cx.fillText(`3 — ${nombreCancion('viaje')} · la cancion entera del estudio (acto 1) · 112 BPM`, w / 2, h * 0.40);
       cx.fillStyle = C.tenue; cx.font = '12px system-ui';
-      cx.fillText('teclas 1/2, o toca su renglon · ESPACIO arranca el nivel 1', w / 2, h * 0.39);
+      cx.fillText('teclas 1/2/3, o toca su renglon · ESPACIO arranca el nivel 1', w / 2, h * 0.46);
       cx.font = '13px system-ui';
       [
         'cada tecla azul es una nota: tocala al pisarla',
@@ -1349,7 +1431,7 @@ function arrancarNavegador () {
         'si caes a la red, TOCA: te relanza a la proxima tecla',
         'los trampolines VERDES te devuelven arriba: pisalos',
         'bajo el techo NO se toca'
-      ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.45 + 26 + i * 20));
+      ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));
     } else {
       cx.textAlign = 'left';
       cx.fillStyle = C.red; cx.font = '14px system-ui';

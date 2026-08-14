@@ -25,7 +25,9 @@ const DT = 1 / 240;
 // y que eso pase es justamente el dato que este nivel existe para medir.
 const RASGOS = {
   esfera: { escaleras: false, ligaduras: 0, huecos: 1, techos: 0, resortes: 8, saltos: 30, exigente: false },
-  aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, resortes: 8, saltos: 30, exigente: true }
+  aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, resortes: 8, saltos: 30, exigente: true },
+  // el viaje va por el ACTO 1 (amanecer ×2, motor, drop 1): crece por sesiones
+  viaje: { escaleras: true, ligaduras: 2, huecos: 1, techos: 1, resortes: 8, saltos: 30, exigente: true }
 };
 
 let fallas = 0;
