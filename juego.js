@@ -188,22 +188,56 @@ const CANCIONES = {
       'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 18  F
       'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 19  C
       'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 20  G
-      'A4:4'                                              // 21  Am  cierre del acto: La
+      // VUELO -- el verso: el BAJO es el protagonista (cadencia andaluza), y
+      // el mapa lo dice con el cuerpo: la melodia canta arriba, el bajo espera
+      // abajo, y cada compas es un zigzag entre las dos bandas.
+      'A4!:1 A4:.5 A4:.5 G4:.5 E4:1 E5!:.5',              // 21  Am
+      'G4!:1 G4:.5 G4:.5 B4:.5 G4:1 D5!:.5',              // 22  G
+      'F4!:1 A4:.5 A4:.5 C5:.5 A4:1 C5!:.5',              // 23  F
+      'E4!:1 G#4:.5 B4:.5 G#4:.5 E4:1 B4!:.5',            // 24  E   la andaluza
+      'A4!:1 A4:.5 A4:.5 G4:.5 E4:1 E5!:.5',              // 25  Am  y otra vuelta
+      'G4!:1 G4:.5 G4:.5 B4:.5 G4:1 D5!:.5',              // 26  G
+      'F4!:1 A4:.5 A4:.5 C5:.5 A4:1 C5!:.5',              // 27  F
+      'E4!:1 G#4:.5 B4:.5 G#4:.5 E4:1 B4!:.5',            // 28  E
+      // GRAVEDAD -- el segundo build: puro bajo trepando, y los PISTONES
+      // armandose a la vista. Aca la urgencia empuja a adelantarse, que es
+      // justo lo que el martillo cobra.
+      'D4!:1 D4!:1 F4!:1 D4!:1',                          // 29  Dm
+      'D4!:1 F4!:1 A4!:1 D5!:1',                          // 30  Dm
+      'F4!:1 A4!:1 C5!:1 A4!:1',                          // 31  F
+      'E4!:1 G#4!:1 B4!:1 E5!:1',                         // 32  E   la escalera al drop
+      // DESPEGUE II -- el coro vuelve, y ya te lo sabes: por eso los martillos
+      // caen sobre las notas que anticipas.
+      'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             // 33  Am
+      'E5:.75 D5:.75 C5:.5 D5:1.5 C5:.25 D5:.25',         // 34  F
+      'E5:.75 E5:.75 G5:.5 E5:1 D5:.5 C5:.5',             // 35  C
+      'D5:1.5 B4:.5 D5:2',                                // 36  G
+      'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             // 37  Am
+      'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 38  F
+      'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 39  C
+      'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 40  G
+      'A4:4'                                              // 41  Am  cierre del acto: La
     ],
     acordes: [
       'Am',
-      'Am', 'F', 'C', 'G',
-      'Am', 'F', 'C', 'G',
-      'Am', 'F', 'Dm', 'E',
-      'Am', 'F', 'C', 'G',
-      'Am', 'F', 'C', 'G',
+      'Am', 'F', 'C', 'G',                     // amanecer
+      'Am', 'F', 'C', 'G',                     // amanecer II
+      'Am', 'F', 'Dm', 'E',                    // motor
+      'Am', 'F', 'C', 'G', 'Am', 'F', 'C', 'G',   // drop 1
+      'Am', 'G', 'F', 'E', 'Am', 'G', 'F', 'E',   // vuelo: la andaluza
+      'Dm', 'Dm', 'F', 'E',                    // gravedad
+      'Am', 'F', 'C', 'G', 'Am', 'F', 'C', 'G',   // despegue II
       'Am'
     ],
     secciones: [
       { x0: 0, n: 'salida' }, { x0: 4, n: 'amanecer' }, { x0: 20, n: 'amanecer II' },
-      { x0: 36, n: 'motor · DRIBLEA al beat' }, { x0: 52, n: 'despegue · drop 1' },
-      { x0: 84, n: 'aterrizaje del acto' }
+      { x0: 36, n: 'motor · el bajo' }, { x0: 52, n: 'despegue · drop 1' },
+      { x0: 84, n: 'vuelo · zigzag con el bajo' }, { x0: 116, n: 'gravedad · PISTONES' },
+      { x0: 132, n: 'despegue II' }, { x0: 164, n: 'aterrizaje' }
     ],
+    // Los martillos: densos en el build (uno por arco) y salteados en el coro
+    // (uno cada tres), donde solo cazan al que se va adelante.
+    pistones: [{ x0: 116, x1: 132, cada: 2 }, { x0: 132, x1: 164, cada: 4 }],
     // MOTOR es zona de ARPEGIO: abajo de las teclas de bajo la red se corta
     // (fallar una tecla del motor se paga), y cada arco entre teclas lleva
     // tres orbes con las semicorcheas del up16. El bajo lo toca la esfera,
@@ -226,7 +260,12 @@ const CANCIONES = {
       if (c <= 11) return { drums: 'coro', bajo: 'corchea', pad: true, riser: c === 11 ? 2 : 0 };  // motor
       if (c === 12) return { drums: 'roll', bajo: 'corchea', pad: true };
       if (c <= 20) return { drums: (c - 13) % 4 === 3 ? 'fillTom' : 'coro', bajo: 'drive', arp: 'up16', pad: true, crash: c === 13 };  // drop 1
-      if (c === 21) return { drums: 'outro', bajo: 'pulso', arp: 'glitter', pad: true, crash: true };
+      if (c <= 28) return { drums: c === 28 ? 'fillTom' : 'verso', bajo: 'verso', pad: true };   // vuelo
+      if (c <= 30) return { drums: 'coro', bajo: 'corchea', arp: 'up16', pad: true };            // gravedad
+      if (c === 31) return { drums: 'roll', bajo: 'corchea', arp: 'up16', pad: true, riser: 2 };
+      if (c === 32) return { drums: 'rollBig', bajo: 'corchea', arp: 'up16', pad: true };
+      if (c <= 40) return { drums: (c - 33) % 4 === 3 ? 'fillTom' : 'coroB', bajo: 'drive', arp: 'up16', pad: true, crash: c === 33 };  // despegue II
+      if (c === 41) return { drums: 'outro', bajo: 'pulso', arp: 'glitter', pad: true, crash: true };
       return null;
     }
   }
@@ -242,6 +281,9 @@ const E_BATERIA = {
   hats: 'h...h...h...h.h.',
   preFill: 'h...h...h...s.s.',
   coro: 'k.h.x.h.k.h.x.h.',
+  coroB: 'k.h.x.h.k.h.x.hH',
+  verso: 'k.h.x.h..Hk.x.h.',
+  rollBig: 'K.ss.ss.ssssssss',
   fillTom: 'k.h.x.h.k.u.T.t.',
   roll: 'k.s.s.s.ssssssss',
   outro: 'k.......x.......'
@@ -304,9 +346,16 @@ let RIEL_MIN = 1.5;
 // --- compilador: de la cancion al mapa --------------------------------------
 
 const SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-const semitono = n => SEMI[n[0]] + (+n.slice(1) + 1) * 12;
+const semitono = n => {
+  const sos = n[1] === '#' ? 1 : 0;          // 'G#4': el acorde de E lo pide
+  return SEMI[n[0]] + sos + (+n.slice(1 + sos) + 1) * 12;
+};
 const frecuencia = n => 440 * Math.pow(2, (semitono(n) - 69) / 12);
 const alturaDe = n => Y_GRAVE + (semitono(n) - semitono('E4')) * PASO_TONO;
+// El bajo tiene su propia banda, debajo de la melodia: se ve de un vistazo que
+// es OTRO instrumento, y saltar de una a otra es el zigzag del verso.
+export const Y_BAJO = 0.09;
+const alturaBajo = n => Y_BAJO + (semitono(n) - semitono('E4')) * PASO_TONO * 0.45;
 
 // Tiempo minimo de vuelo para llegar a +dy CAYENDO (no subiendo): si llegas
 // todavia subiendo atravesas la tecla por abajo y la perdes.
@@ -361,7 +410,7 @@ function compilar () {
       notas.push({
         i: notas.length, b, dur, nombre, silencio, bajo,
         f: silencio ? 0 : frecuencia(nombre),
-        y: silencio ? 0 : alturaDe(nombre),
+        y: silencio ? 0 : bajo ? alturaBajo(nombre) : alturaDe(nombre),
         xm: b,                 // el punto exacto: el pulso. Aca la nota sale afinada.
         x0: b, x1: b + dur
       });
@@ -611,6 +660,48 @@ function resortes () {
   return r.sort((a, b) => a.x - b.x);
 }
 export let RESORTES = [];
+
+// PISTONES: martillos que caen sobre la cima del arco. No matan -- te aplastan
+// contra la red, y eso cuesta la nota a la que ibas. Se calibran contra la
+// geometria del salto: el arco tocado A TIEMPO pasa por debajo; el que se
+// adelanta mas de ~0.2 tiempos vuela mas alto y se lo come el martillo. Asi
+// el build castiga justo el error que un build provoca: irse adelante.
+export let PISTONES = [];
+function pistones () {
+  const r = [];
+  for (const z of (CANCIONES[CANCION_ID].pistones || [])) {
+    let n = 0;
+    for (const k of NOTAS) {
+      if (k.silencio || k.xm < z.x0 || k.xm >= z.x1) continue;
+      if (k.escalera || k.riel || k.ligada) continue;
+      const sig = NOTAS[k.i + 1];
+      if (!sig || sig.silencio || sig.riel) continue;
+      const tv = vueloMinimo(sig.y - k.y);
+      let obj = sig.x0 + MIRA;
+      if (obj - k.xm < tv) obj = Math.min(sig.x1 - 0.02, k.xm + tv);
+      const T = obj - k.xm;
+      if (T < 0.5) continue;
+      if (++n % (z.cada || 1)) continue;
+      const vy = Math.min(1.9, (sig.y - k.y) / T + G * T / 2);
+      const tc = vy / G;                                  // cuando llega a la cima
+      if (tc <= 0.05 || tc >= T) continue;
+      const cima = k.y + vy * tc - G * tc * tc / 2;
+      const px = k.xm + tc;
+      if (HUECOS.some(h => px > h.x0 - 0.9 && px < h.x1 + 0.9)) continue;   // lejos de todo abismo
+      r.push({
+        x: +px.toFixed(3),
+        x0: +(px - 0.16).toFixed(3),
+        x1: +(px + 0.16).toFixed(3),
+        y: +(cima + 2 * R + 0.042).toFixed(3)
+      });
+    }
+  }
+  return r;
+}
+
+// Tramos donde la esfera toca el BAJO: ahi el bajo de fondo calla.
+export let ZONAS_BAJO = [];
+export const enZonaBajo = x => ZONAS_BAJO.some(z => x >= z.x0 && x < z.x1);
 export let SECCIONES = [];
 
 // Elegir cancion recompila TODO: la partitura, el mapa y el terreno deducido.
@@ -640,6 +731,9 @@ export function elegirCancion (id) {
   TECHOS = calcularTechos();
   RESORTES = resortes();
   ORBES = orbes();
+  PISTONES = pistones();
+  ZONAS_BAJO = NOTAS.filter(n => n.bajo)
+    .map(n => ({ x0: n.x0 - 0.3, x1: n.x1 + 0.3 }));
   SECCIONES = c.secciones;
 }
 export const nombreCancion = id => CANCIONES[id || CANCION_ID].nombre;
@@ -671,6 +765,7 @@ export function crearSim () {
     resortesUsados: new Set(),
     orbes: 0, orbesTocados: new Set(),   // los orbes cosechados en el aire
     soltoEn: null,          // cuando solto el riel: corre la gracia de repique
+    pistones: new Set(), aplastes: 0,   // martillos ya cobrados
     eventos: []
   };
 }
@@ -865,6 +960,14 @@ export function paso (s, dt) {
   if (s.y < CAIDA_MUERTE) { s.viva = false; s.causa = 'hueco'; return; }
   for (const t of TECHOS) {
     if (s.x > t.x0 && s.x < t.x1 && s.y + 2 * R > t.y) { s.viva = false; s.causa = 'techo'; return; }
+  }
+  for (const p of PISTONES) {
+    if (s.x > p.x0 && s.x < p.x1 && s.y + 2 * R > p.y && !s.pistones.has(p.x)) {
+      s.pistones.add(p.x);
+      s.estado = 'aire'; s.vy = -0.55; s.tecla = -1; s.saliendoDe = -1;
+      s.racha = 0; s.aplastes++;
+      s.eventos.push({ tipo: 'piston', x: s.x, y: s.y });
+    }
   }
   if (s.x >= LARGO) s.meta = true;
 }
@@ -1325,7 +1428,7 @@ function arrancarNavegador () {
         const paso = Math.round(proxBeat * 4);   // el paso global de semicorchea
         const bat = E_BATERIA[p.drums];
         if (bat && bat[i16] && bat[i16] !== '.' && !PASOS_BATERIA.has(paso)) eTambor(bat[i16], t);
-        if (p.bajo && !enArpegio(proxBeat) && !PASOS_BAJO.has(paso)) {
+        if (p.bajo && !enZonaBajo(proxBeat) && !PASOS_BAJO.has(paso)) {
           const n = E_BAJO[p.bajo][i16];
           if (n != null) eBajo(t, (ch.root / 4) * Math.pow(2, n / 12), 0.062 * EG);
         }
@@ -1461,6 +1564,13 @@ function arrancarNavegador () {
         // el saltito sobre el riel: mudo (la nota larga sigue sonando)
         squash = 0.8;
         chispas(e.x, e.y, 4, true);
+      } else if (e.tipo === 'piston') {
+        // el martillo: golpe seco y la esfera clavada contra la red
+        eKick(ac.currentTime, true);
+        ruido(ac.currentTime, 0.12, 0.2, 'lowpass', 420);
+        golpe(ac.currentTime, 90, 0.14, 0.2, 'square');
+        chispas(e.x, e.y, 10, false, C.suciaRGB);
+        squash = 1; flash = 0.5;
       } else if (e.tipo === 'orbe') {
         // la esfera atraveso un orbe: suena el golpe REAL que reclamo -- la
         // nota del arpegio, el hat/clap/caja de la bateria, o la del bajo
@@ -1667,6 +1777,27 @@ function arrancarNavegador () {
     for (const t of TECHOS) {
       cx.fillRect(px(t.x0), py(t.y), (t.x1 - t.x0) * esc, py(0) - py(t.y));
       cx.beginPath(); cx.moveTo(px(t.x0), py(t.y)); cx.lineTo(px(t.x1), py(t.y)); cx.stroke();
+    }
+
+    // PISTONES: se arman a la vista. Bajan a medida que la esfera se acerca --
+    // el que mira sabe lo que viene y aguanta el pulso; el que se adelanta
+    // vuela alto y el martillo lo clava contra la red.
+    for (const p of PISTONES) {
+      if (p.x1 < s.x - 2 || p.x0 > s.x + 7) continue;
+      const falta = p.x - s.x;
+      const baja = Math.max(0, Math.min(1, (2.6 - falta) / 2.6));   // 0 lejos, 1 encima
+      const gastado = s.pistones.has(p.x);
+      const yCabeza = py(p.y) - (1 - baja) * 90;
+      const a0 = px(p.x0), an = (p.x1 - p.x0) * esc;
+      cx.fillStyle = gastado ? 'rgba(150,140,130,0.35)' : `rgba(${C.esferaRGB},${0.35 + 0.5 * baja})`;
+      cx.fillRect(a0 + an * 0.32, 0, an * 0.36, yCabeza);           // el vastago
+      cx.fillRect(a0, yCabeza - 11, an, 11);                        // la cabeza
+      cx.fillStyle = gastado ? 'rgba(150,140,130,0.5)' : C.peligro;
+      cx.fillRect(a0, yCabeza - 3, an, 3);                          // el filo
+      if (!gastado && baja > 0.55) {                                // la sombra: donde pega
+        cx.fillStyle = `rgba(${C.esferaRGB},${0.10 * baja})`;
+        cx.fillRect(a0, yCabeza, an, py(0) - yCabeza);
+      }
     }
 
     // Trampolines. Verdes, anchos, con chevrones que suben y la parabola
@@ -1899,7 +2030,7 @@ function arrancarNavegador () {
       cx.fillStyle = C.esfera;
       cx.fillText(`2 — ${nombreCancion('aurora')} · el galope del coro · 112 BPM`, w / 2, h * 0.33);
       cx.fillStyle = C.impulso;
-      cx.fillText(`3 — ${nombreCancion('viaje')} · la cancion entera del estudio (acto 1) · 112 BPM`, w / 2, h * 0.40);
+      cx.fillText(`3 — ${nombreCancion('viaje')} · la cancion del estudio, actos 1 y 2 · 112 BPM`, w / 2, h * 0.40);
       cx.fillStyle = C.tenue; cx.font = '12px system-ui';
       cx.fillText('teclas 1/2/3, o toca su renglon · ESPACIO arranca el nivel 1', w / 2, h * 0.46);
       cx.font = '13px system-ui';
@@ -1915,6 +2046,7 @@ function arrancarNavegador () {
         'en el MOTOR la esfera toca el BAJO: teclas graves que trepan',
         'los ORBES se tocan con el cuerpo: salto fino = el arco los enhebra',
         'los trampolines VERDES te devuelven arriba: pisalos',
+        'los MARTILLOS naranjas: adelantarse te clava contra la red',
         'bajo el techo NO se toca'
       ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));
     } else {

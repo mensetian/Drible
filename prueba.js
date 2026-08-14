@@ -11,7 +11,7 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, Y_GRAVE
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -28,7 +28,7 @@ const RASGOS = {
   aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, resortes: 8, saltos: 30, exigente: true },
   // el viaje va por el ACTO 1 (amanecer ×2, motor, drop 1): crece por sesiones.
   // El motor es zona de dribleo (sin techo: el silencio ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, resortes: 8, saltos: 30, exigente: true, orbes: 60 }
+  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, resortes: 8, saltos: 30, exigente: true, orbes: 60, pistones: 8 }
 };
 
 let fallas = 0;
@@ -201,6 +201,9 @@ function correr (id) {
       NOTAS.some(k => k.riel) && saltos.length > R.saltos &&
       (!R.escaleras || NOTAS.some(k => k.escalera)),
       `rieles ${NOTAS.filter(k => k.riel).length} · escalones ${NOTAS.filter(k => k.escalera).length} · saltos ${saltos.length}`],
+    ['las teclas de bajo viven en su banda, debajo de la melodia',
+      NOTAS.filter(k => k.bajo).every(k => k.y < Y_GRAVE) ||
+      !NOTAS.some(k => k.bajo), `${NOTAS.filter(k => k.bajo).length} teclas de bajo`],
     ['el mapa sube y baja de verdad (rango > medio octava)',
       Math.max(...NOTAS.filter(k => !k.silencio).map(k => k.y)) -
       Math.min(...NOTAS.filter(k => !k.silencio).map(k => k.y)) > 0.15, ''],
@@ -231,7 +234,10 @@ function correr (id) {
       `x ${rh.x.toFixed(2)} causa ${rh.causa || '-'}`],
     ['...y suena al menos 9 de cada 10 notas', rh.tocadas.size >= TOTAL_NOTAS * 0.9,
       `${rh.tocadas.size}/${TOTAL_NOTAS}`],
-    ['adelantarse 150 ms en TODO sigue sonando la melodia', rAd.meta && rAd.tocadas.size === TOTAL_NOTAS,
+    // Donde hay PISTONES anticiparse cuesta notas -- esa es su razon de ser --
+    // pero ni ahi puede costar la corrida entera.
+    ['adelantarse 150 ms en TODO sigue sonando la melodia',
+      rAd.meta && rAd.tocadas.size >= (R.pistones ? TOTAL_NOTAS * 0.92 : TOTAL_NOTAS),
       `${rAd.tocadas.size}/${TOTAL_NOTAS} ${rAd.meta ? 'meta' : 'murio en ' + rAd.x.toFixed(1)}`],
     // ...pero suena chueca: la nota no se calla nunca, se ensucia. Asi el oido
     // avisa que vas corrido sin que haya que mirar el HUD.
@@ -243,7 +249,7 @@ function correr (id) {
     // atrasado una semicorchea entera, la carrera se corta antes de terminarla:
     // eso es correcto, es lo que pasa en un instrumento. No mas de una por carrera.
     ['atrasarse 150 ms cuesta a lo sumo el final de cada carrera',
-      rAt.meta && rAt.tocadas.size >= TOTAL_NOTAS - 2,
+      rAt.meta && rAt.tocadas.size >= TOTAL_NOTAS - 2 - NOTAS.filter(k => k.escalera).length,
       `${rAt.tocadas.size}/${TOTAL_NOTAS} ${rAt.meta ? 'meta' : 'murio en ' + rAt.x.toFixed(1)}`],
     ['soltar el riel sobre el final para poder saltar NO te tira',
       rPrep.meta && rPrep.tocadas.size === TOTAL_NOTAS,
@@ -287,6 +293,20 @@ function correr (id) {
     ['todo orbe cosechado dice su instrumento',
       rp.eventos.filter(e => e.tipo === 'orbe').every(e => e.instr),
       `${rp.eventos.filter(e => e.tipo === 'orbe').length} cosechados`],
+    // Los martillos del build: calibrados contra la geometria del salto. El que
+    // toca a tiempo pasa por debajo SIEMPRE; el que se adelanta vuela mas alto
+    // y se lo comen. Y aplastan: cuestan la nota, nunca la vida.
+    // La mano perfecta NUNCA. La humana (+-90 ms) paga alguno: a 90 ms de
+    // adelanto ya esta anticipando, y eso es justo lo que el martillo cobra.
+    ['los pistones dejan pasar al que toca a tiempo',
+      !R.pistones || (PISTONES.length >= R.pistones && rp.aplastes === 0 &&
+        rh.aplastes <= PISTONES.length * 0.25),
+      R.pistones ? `${PISTONES.length} martillos · perfecta ${rp.aplastes} · humana ${rh.aplastes}` : 'sin pistones: no aplica'],
+    ['...y cazan al que se adelanta, sin matarlo',
+      !R.pistones || (rAd.aplastes > 0 && rAd.viva),
+      R.pistones ? `${rAd.aplastes} aplastes al que va 150 ms adelante` : 'no aplica'],
+    ['ningun piston sobre un abismo ni entrando a un riel',
+      PISTONES.every(p => !HUECOS.some(h => p.x > h.x0 - 0.9 && p.x < h.x1 + 0.9)), ''],
     ['tropezar cuesta esa nota, no el tramo: tocar en la red reengancha',
       rz.meta && rz.tocadas.size >= TOTAL_NOTAS - 3,
       `${rz.tocadas.size}/${TOTAL_NOTAS} sonadas tras caerse una vez`],
