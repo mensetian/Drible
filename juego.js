@@ -371,6 +371,17 @@ export const COYOTE = 0.18;     // tocaste apenas te fuiste del borde: vale igua
 // con el boton hundido no hay toque nuevo. Asi que soltar sobre el final del
 // riel no te tira -- la nota ya esta tocada, te deja salir como corresponde.
 export const SUELTA = 0.4;
+// El final del riel es una RAMPA: en el ultimo tramo la nota larga levanta a la
+// esfera y la despide. No es adorno -- sube de verdad, y es exactamente el
+// tramo donde soltar ya no te tira. Asi el mapa explica solo por que al final
+// de una nota sostenida salis volando, y donde podes soltar para atacar la que
+// sigue: la rampa ES la zona de suelta, dibujada.
+export const RAMPA = 0.055;
+export const subidaRiel = (k, x) => {
+  if (!k.riel) return 0;
+  const t = (x - (k.x1 - SUELTA)) / SUELTA;
+  return t <= 0 ? 0 : RAMPA * Math.min(1, t) * Math.min(1, t);   // curva, no cuña
+};
 export const REPIQUE = 0.22;   // gracia al soltar un riel: tiempo para repicar (~120 ms)
 export const EN_COLA = 2;       // toques guardados a la vez: dos notas adelantadas
 
@@ -553,7 +564,7 @@ function orbes () {
       }
     }
     // el arco ideal: el mismo que calcula lanzar() desde el toque en el pulso
-    const x0 = n.riel ? n.x1 : n.xm, y0 = n.y;
+    const x0 = n.riel ? n.x1 : n.xm, y0 = n.y + (n.riel ? RAMPA : 0);
     const tv = vueloMinimo(sig.y - y0);
     let obj = sig.x0 + MIRA;
     if (obj - x0 < tv) obj = Math.min(sig.x1 - 0.02, x0 + tv);
@@ -894,7 +905,7 @@ export function paso (s, dt) {
 
   if (s.estado === 'apoyada' && s.tecla >= 0) {
     const k = NOTAS[s.tecla];
-    s.y = k.y;
+    s.y = k.y + subidaRiel(k, s.x);      // el final del riel levanta
     // agarrar el riel tarde tambien desafina: la nota larga entra corrida
     if (k.riel && s.sostiene && s.x >= k.xm && !s.tocadas.has(k.i))
       anotar(s, k, s.x - k.xm, 'riel', { hasta: k.x1 });
@@ -1634,6 +1645,29 @@ function arrancarNavegador () {
     arrancarAudio();
   }
 
+  // Saltar a una seccion: para revisar un tramo sin tocar la cancion entera.
+  // Deja la esfera parada en la primera tecla de la seccion y corre el reloj
+  // del audio hasta ahi, asi lo que se escucha es lo que corresponde.
+  let avisoSeccion = null;
+  function saltarA (bx) {
+    rielCerrar(); eRielCerrar();
+    const k = NOTAS.find(n => !n.silencio && n.x0 >= bx - 0.001) || NOTAS[0];
+    s = crearSim();
+    s.x = Math.max(0, k.x0);
+    s.estado = 'apoyada'; s.tecla = k.i; s.y = k.y; s.saliendoDe = -1;
+    t0 = ac.currentTime - s.x * SPB;
+    proxBeat = Math.floor(s.x * 4) / 4;
+    estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0;
+    finSonado = false;
+  }
+  function irASeccion (d) {
+    if (!corriendo || !SECCIONES.length) return;
+    const aqui = SECCIONES.filter(sec => sec.x0 <= s.x + 0.5).length - 1;
+    const i = Math.max(0, Math.min(SECCIONES.length - 1, aqui + d));
+    saltarA(SECCIONES[i].x0);
+    avisoSeccion = { n: SECCIONES[i].n, t: performance.now() };
+  }
+
   function alMenu () {
     rielCerrar(); eRielCerrar();
     corriendo = false; finSonado = false;
@@ -1659,6 +1693,12 @@ function arrancarNavegador () {
   // En captura y sobre window: asi ningun elemento con foco se come la tecla,
   // que es lo que pasa cuando la pagina se abre embebida o se hizo clic afuera.
   addEventListener('keydown', e => {
+    // revisar: saltar de seccion en seccion sin jugar todo el nivel
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (!e.repeat) irASeccion(e.key === 'ArrowRight' ? 1 : -1);
+      return;
+    }
     if (!esBoton(e)) return;
     e.preventDefault();
     if (e.repeat) return;
@@ -1879,7 +1919,19 @@ function arrancarNavegador () {
       const cBase = k.bajo ? C.impulso : C.tecla;
       cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
       if (limpia || aqui) { cx.shadowColor = limpia ? C.esfera : cBase; cx.shadowBlur = 12; }
-      cx.fillRect(px(k.x0), py(k.y), Math.max(4, (k.x1 - k.x0) * esc), alto);
+      if (k.riel) {
+        // la tabla del riel sigue la RAMPA: plana, y curvandose hacia arriba
+        // en el ultimo tramo. Se ve de donde sale el envion.
+        cx.lineWidth = alto; cx.lineCap = 'butt';
+        cx.strokeStyle = cx.fillStyle;
+        cx.beginPath();
+        cx.moveTo(px(k.x0), py(k.y) + alto / 2);
+        for (let i = 1; i <= 12; i++) {
+          const xx = k.x0 + (k.x1 - k.x0) * i / 12;
+          cx.lineTo(px(xx), py(k.y + subidaRiel(k, xx)) + alto / 2);
+        }
+        cx.stroke();
+      } else cx.fillRect(px(k.x0), py(k.y), Math.max(4, (k.x1 - k.x0) * esc), alto);
       cx.shadowBlur = 0;
       // El riel se ve como SOSTENER, no como otra tecla: rayado que corre a
       // lo largo mientras dura la nota. Y el primero de cada cancion lleva su
@@ -1887,11 +1939,20 @@ function arrancarNavegador () {
       if (k.riel) {
         const a0 = px(k.x0), a1 = px(k.x0) + Math.max(4, (k.x1 - k.x0) * esc);
         const off = (performance.now() / 60) % 12;
+        const aR = px(k.x1 - SUELTA);
         cx.strokeStyle = 'rgba(17,18,20,0.5)'; cx.lineWidth = 2;
         cx.beginPath();
-        for (let xx = a0 + off; xx < a1 - 3; xx += 12) {
+        for (let xx = a0 + off; xx < aR - 3; xx += 12) {
           cx.moveTo(xx, py(k.y) + alto - 1); cx.lineTo(xx + 4, py(k.y) + 1);
         }
+        cx.stroke();
+        // la punta de la rampa: de aca salis despedido (y aca ya podes soltar)
+        const punta = py(k.y + RAMPA);
+        cx.strokeStyle = `rgba(${C.impulsoRGB},${sono ? 0.5 : 0.85})`; cx.lineWidth = 2;
+        cx.beginPath();
+        cx.moveTo(px(k.x1) - 9, punta - 4);
+        cx.lineTo(px(k.x1) - 1, punta - 11);
+        cx.lineTo(px(k.x1) - 1, punta - 3);
         cx.stroke();
         const primero = NOTAS.find(n => n.riel);
         if (primero && k.i === primero.i && !sono) {
@@ -2053,6 +2114,21 @@ function arrancarNavegador () {
       cx.textAlign = 'left';
       cx.fillStyle = C.red; cx.font = '14px system-ui';
       cx.fillText(`${nombreCancion()} · intento ${intento}${mejor ? `   mejor ${mejor}` : ''}`, 12, 22);
+      // el atajo de revision, dicho donde se necesita
+      cx.fillStyle = C.tenue; cx.font = '11px system-ui';
+      cx.fillText('◀ ▶  saltar de seccion', 12, h - 10);
+      if (avisoSeccion) {
+        const dt = (performance.now() - avisoSeccion.t) / 1600;
+        if (dt >= 1) avisoSeccion = null;
+        else {
+          cx.save();
+          cx.textAlign = 'center';
+          cx.globalAlpha = Math.min(1, 3 * (1 - dt));
+          cx.fillStyle = C.impulso; cx.font = 'bold 16px system-ui';
+          cx.fillText(avisoSeccion.n.toUpperCase(), w / 2, 30);
+          cx.restore();
+        }
+      }
       // El puntaje son las LIMPIAS, no las sonadas: si contaran las sonadas,
       // martillar el boton puntuaba igual que tocar bien.
       cx.fillStyle = C.esfera; cx.font = '15px system-ui';

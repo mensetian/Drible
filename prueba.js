@@ -53,9 +53,11 @@ function correr (id) {
     s.sostiene = !!(k && k.riel);
     // el saltito del riel con el gesto REAL de un boton: soltar un frame y
     // volver a tocar (la gracia de repique tiene que aguantar ese hueco)
-    if (k && k.riel && s.tocadas.has(k.i) &&
+    // solo por los orbes que estan SOBRE este riel: los del arco de salida no
+    // se cosechan saltando, se cosechan volando
+    if (k && k.riel && s.tocadas.has(k.i) && s.x < k.x1 - 1.05 &&
         ORBES.some(o => !s.orbesTocados.has(o.i) && o.y > k.y + 0.05 &&
-          o.x - s.x > 0.46 && o.x - s.x < 0.54)) {
+          o.x < k.x1 - 0.5 && o.x - s.x > 0.46 && o.x - s.x < 0.54)) {
       if (!s.repicando) { s.sostiene = false; soltar(s); s.repicando = true; return; }
       s.repicando = false; s.sostiene = true; tocar(s, b); return;
     }
