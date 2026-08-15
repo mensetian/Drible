@@ -11,7 +11,7 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, RESORTES, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, Y_GRAVE
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, Y_GRAVE
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -24,11 +24,11 @@ const DT = 1 / 240;
 // +-90 ms. Aurora si; esfera NO -- a 100 BPM en negras el margen nunca muerde,
 // y que eso pase es justamente el dato que este nivel existe para medir.
 const RASGOS = {
-  esfera: { escaleras: false, ligaduras: 0, huecos: 1, techos: 0, resortes: 8, saltos: 30, exigente: false },
-  aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, resortes: 8, saltos: 30, exigente: true },
+  esfera: { escaleras: false, ligaduras: 0, huecos: 1, techos: 0, saltos: 30, exigente: false },
+  aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, saltos: 30, exigente: true },
   // el viaje va por el ACTO 1 (amanecer ×2, motor, drop 1): crece por sesiones.
   // El motor es zona de dribleo (sin techo: el silencio ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, resortes: 8, saltos: 30, exigente: true, orbes: 60, pistones: 8 }
+  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, saltos: 30, exigente: true, orbes: 60, pistones: 5 }
 };
 
 let fallas = 0;
@@ -46,9 +46,20 @@ function correr (id) {
     return s;
   }
 
+  // Caerse a la red se resuelve TOCANDO (no hay trampolines automaticos):
+  // toda mano razonable lo hace, salvo cerca de un techo, donde se espera.
+  const rescata = (s, b) => {
+    if (s.estado !== 'apoyada' || s.tecla >= 0) return false;
+    if (s.x - s.ultimoToque < 0.35) return true;
+    if (TECHOS.some(t => s.x > t.x0 - 0.8 && s.x < t.x1)) return true;
+    tocar(s, b);
+    return true;
+  };
+
   // la mano perfecta: toca cada tecla apenas la pisa, sostiene los rieles,
   // y sobre un riel sonado da el saltito para cosechar los orbes de arriba
   const perfecta = (s, b) => {
+    if (rescata(s, b)) return;
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     s.sostiene = !!(k && k.riel);
     // el saltito del riel con el gesto REAL de un boton: soltar un frame y
@@ -73,6 +84,7 @@ function correr (id) {
 
   // la mano floja: juega bien pero suelta el riel justo sobre el abismo
   const floja = (s, b) => {
+    if (rescata(s, b)) return;
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     s.sostiene = !!(k && k.riel) && !HUECOS.some(h => s.x > h.x0 && s.x < h.x1);
     if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
@@ -96,6 +108,7 @@ function correr (id) {
     const objetivos = NOTAS.filter(k => !k.silencio && !k.riel).map(k => k.xm + enBeats(ms));
     let j = 0;
     return (s, b) => {
+      if (rescata(s, b)) return;
       const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
       s.sostiene = !!(k && k.riel);
       while (j < objetivos.length && s.x >= objetivos[j]) { tocar(s, b); j++; }
@@ -105,6 +118,7 @@ function correr (id) {
   // la mano que suelta el riel antes de tiempo para poder apretar de nuevo:
   // es el gesto natural para atacar la nota que sigue, y no puede matarte.
   const prepara = (s, b) => {
+    if (rescata(s, b)) return;
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     const suelta = k && k.riel && s.x > k.x1 - SUELTA + 0.05;
     if (suelta && s.sostiene) soltar(s);
@@ -126,21 +140,30 @@ function correr (id) {
 
   // la mano que tropieza: juega perfecto salvo UNA nota que deja pasar, cae a
   // la red, y toca para reengancharse. Mide que un error cueste esa nota y no
-  // el tramo entero hasta el proximo resorte.
+  // el tramo entero hasta el rescate.
   const SALTEADA = NOTAS.filter(k => !k.silencio && !k.riel && !k.escalera && !k.porCaida)[2].i;
   const tropieza = (s, b) => {
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     s.sostiene = !!(k && k.riel);
-    // en la red toca para reengancharse -- salvo cerca de un techo: ahi hasta el
-    // saltito flota hacia adentro y mata, y el jugador que ve el techo no toca
-    if (s.estado === 'apoyada' && s.tecla < 0 && s.x - s.ultimoToque > 0.3 &&
-        !TECHOS.some(t => s.x > t.x0 - 0.8 && s.x < t.x1)) { tocar(s, b); return; }
+    if (rescata(s, b)) return;
     if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i) && k.i !== SALTEADA)
       tocar(s, b);
   };
 
+  // la mano que va por el piso: falla la tecla anterior al primer piston y se
+  // queda rodando hasta que el caño la agarre
+  const porElPiso = (s, b) => {
+    if (PISTONES.length) {
+      const clave = NOTAS.filter(n => !n.silencio && n.xm < PISTONES[0].x).pop();
+      if (s.estado === 'apoyada' && s.tecla === clave.i) { s.sostiene = false; return; }
+      if (s.estado === 'apoyada' && s.tecla < 0 && s.x < PISTONES[0].x1) return;
+    }
+    perfecta(s, b);
+  };
+
   const rp = jugar(perfecta);
   const rz = jugar(tropieza);
+  const rPiso = R.pistones ? jugar(porElPiso) : null;
   const rSpam = jugar(martillo(0.04));
   const rSpam2 = jugar(martillo(0.12));
   const rPrep = jugar(prepara);
@@ -280,7 +303,6 @@ function correr (id) {
         const ant = n && NOTAS[n.i - 1];
         return !ant || t.x0 >= n.x0 + Math.sqrt(2 * ant.y / G);
       }), `${TECHOS.length}`],
-    ['la red rescata: hay resortes repartidos', RESORTES.length >= R.resortes, `${RESORTES.length}`],
     // Un tropiezo no puede costar el tramo: desde la red, tocar te relanza a la
     // proxima tecla. Se pierden a lo sumo la salteada y sus dos vecinas.
     // La zona de dribleo del motor: picar al beat suena el arpegio y no rompe
@@ -298,27 +320,25 @@ function correr (id) {
     // Los martillos del build: calibrados contra la geometria del salto. El que
     // toca a tiempo pasa por debajo SIEMPRE; el que se adelanta vuela mas alto
     // y se lo comen. Y aplastan: cuestan la nota, nunca la vida.
-    // La mano perfecta NUNCA. La humana (+-90 ms) paga alguno: a 90 ms de
-    // adelanto ya esta anticipando, y eso es justo lo que el martillo cobra.
-    ['los pistones dejan pasar al que toca a tiempo',
-      !R.pistones || (PISTONES.length >= R.pistones && rp.aplastes === 0 &&
-        rh.aplastes <= PISTONES.length * 0.25),
-      R.pistones ? `${PISTONES.length} martillos · perfecta ${rp.aplastes} · humana ${rh.aplastes}` : 'sin pistones: no aplica'],
-    ['...y cazan al que se adelanta, sin matarlo',
-      !R.pistones || (rAd.aplastes > 0 && rAd.viva),
-      R.pistones ? `${rAd.aplastes} aplastes al que va 150 ms adelante` : 'no aplica'],
-    ['ningun piston sobre un abismo ni entrando a un riel',
-      PISTONES.every(p => !HUECOS.some(h => p.x > h.x0 - 0.9 && p.x < h.x1 + 0.9)), ''],
+    // El piston no esta en el camino del que TOCA: todo arco (aun tarde)
+    // pasa por encima. Al que rueda por el piso lo dispara -- y lo devuelve
+    // a la cancion, no lo mata.
+    ['los pistones dejan pasar a todo el que salta',
+      !R.pistones || (PISTONES.length >= R.pistones && rp.pistonazos === 0 &&
+        rh.pistonazos === 0 && rAt.pistonazos === 0),
+      R.pistones ? `${PISTONES.length} caños · perfecta ${rp.pistonazos} · humana ${rh.pistonazos} · atrasada ${rAt.pistonazos}` : 'sin pistones: no aplica'],
+    ['...y al que va por el piso lo disparan de vuelta a la cancion',
+      !R.pistones || (rPiso.pistonazos >= 1 && rPiso.viva && rPiso.meta),
+      R.pistones ? `${rPiso.pistonazos} disparos · ${rPiso.meta ? 'meta' : 'murio en ' + rPiso.x.toFixed(1)}` : 'no aplica'],
+    ['ningun piston bajo una tecla baja, sobre un abismo o bajo un techo',
+      PISTONES.every(p => !HUECOS.some(h => p.x > h.x0 - 0.9 && p.x < h.x1 + 0.9) &&
+        !TECHOS.some(t => p.x > t.x0 - 0.5 && p.x < t.x1 + 0.5) &&
+        !NOTAS.some(k => !k.silencio && k.y < p.y + 0.13 && k.x1 > p.x0 && k.x0 < p.x1)), ''],
     ['tropezar cuesta esa nota, no el tramo: tocar en la red reengancha',
       rz.meta && rz.tocadas.size >= TOTAL_NOTAS - 3,
       `${rz.tocadas.size}/${TOTAL_NOTAS} sonadas tras caerse una vez`],
-    // un punto exacto se esquiva sin querer, o se salta creyendo que es obstaculo
-    ['los trampolines son una zona pisable, no un punto',
-      RESORTES.every(r => r.x1 - r.x0 >= 0.6),
-      `${Math.min(...RESORTES.map(r => r.x1 - r.x0)).toFixed(2)} de ancho el mas angosto`],
-    ['ningun resorte queda bajo un techo o sobre un abismo',
-      RESORTES.every(r => !HUECOS.some(h => r.x > h.x0 && r.x < h.x1) &&
-        !TECHOS.some(t => r.x > t.x0 && r.x < t.x1)), '']
+    // sin trampolines automaticos, caerse se resuelve tocando: la mano que
+    // tropieza (arriba) es la prueba de que ese camino funciona
   ];
 
   console.log(`\n=== ${id.toUpperCase()} · ${BPM} BPM ===`);
