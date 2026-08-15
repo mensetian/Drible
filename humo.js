@@ -26,7 +26,10 @@ const nodoAudio = () => new Proxy({}, {
 });
 
 class AudioContextFalso {
-  constructor () { this.currentTime = 0; this.sampleRate = 44100; this.destination = nodoAudio(); this.state = 'running'; }
+  constructor () { this.sampleRate = 44100; this.destination = nodoAudio(); this.state = 'running'; }
+  // el reloj avanza con los cuadros: asi se recorre de verdad el camino donde
+  // la imagen consume los golpes agendados (el latido del fondo)
+  get currentTime () { return reloj / 1000; }
   resume () {}
   createGain () { return nodoAudio(); }
   createOscillator () { return nodoAudio(); }

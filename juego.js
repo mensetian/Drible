@@ -309,6 +309,11 @@ const acordeEstudio = sym => ({
   root: E_RAIZ[sym[0]],
   ints: sym.endsWith('m') ? [0, 3, 7] : [0, 4, 7]
 });
+export const nombreAcorde = c => {
+  const a = CANCIONES[CANCION_ID].acordes;
+  if (a) return a[Math.max(0, Math.min(c, a.length - 1))];
+  return ['Am', 'F', 'C', 'G'][((c - 1) % 4 + 4) % 4];
+};
 const acordeEnCompas = c => {
   const a = CANCIONES[CANCION_ID].acordes || ['Am'];
   return acordeEstudio(a[Math.max(0, Math.min(c, a.length - 1))]);
@@ -1118,6 +1123,19 @@ function arrancarNavegador () {
   const avisos = [], marcas = [];     // cuanto te corriste, dicho y dibujado
   let squash = 0, flash = 0, rielVoz = null;
   let giro = 0, asiento = 0, asientoV = 0;   // el peso: rodadura y aterrizaje
+  // LA RESPIRACION. El fondo era un relleno plano: la musica pasaba y la imagen
+  // no se enteraba. Ahora el bombo lo hunde (el mismo sidechain que ya hunde al
+  // bajo), el pad lo enciende, el acorde lo tiñe y la racha lo satura.
+  const golpesVista = [], padsVista = [];
+  // Las teclas son un instrumento, no un piso: se hunden con el peso de la
+  // esfera y vuelven solas. La que se esta pisando comparte el mismo resorte
+  // que la esfera --por eso bajan juntas-- y al soltarla vuelve sola.
+  const teclaHundida = new Map();
+  let pump = 0, padLuz = 0, tinte = [70, 90, 150], brilloRacha = 0;
+  const TINTE = {
+    Am: [70, 95, 165], F: [160, 110, 70], C: [80, 150, 130],
+    G: [120, 95, 175], Dm: [130, 65, 120], E: [175, 80, 65]
+  };
   // el color tambien deja de ser un si/no: va del limpio al sucio de a poco
   const mezcla = (a, b, t) => a.split(',').map((v, i) =>
     Math.round(+v + (+b.split(',')[i] - +v) * t)).join(',');
@@ -1490,7 +1508,10 @@ function arrancarNavegador () {
         const ch = acordeEnCompas(c);
         const paso = Math.round(proxBeat * 4);   // el paso global de semicorchea
         const bat = E_BATERIA[p.drums];
-        if (bat && bat[i16] && bat[i16] !== '.' && !PASOS_BATERIA.has(paso)) eTambor(bat[i16], t);
+        if (bat && bat[i16] && bat[i16] !== '.' && !PASOS_BATERIA.has(paso)) {
+          eTambor(bat[i16], t);
+          if ('kKx'.includes(bat[i16])) golpesVista.push(t);
+        }
         if (p.bajo && !enZonaBajo(proxBeat) && !PASOS_BAJO.has(paso)) {
           const n = E_BAJO[p.bajo][i16];
           if (n != null) eBajo(t, (ch.root / 4) * Math.pow(2, n / 12), 0.062 * EG);
@@ -1504,7 +1525,10 @@ function arrancarNavegador () {
           }
         }
         if (i16 === 0) {
-          if (p.pad) ePad(t, ch.ints.map(sm => ch.root * Math.pow(2, sm / 12)), 0.014 * EG, 4 * SPB);
+          if (p.pad) {
+            ePad(t, ch.ints.map(sm => ch.root * Math.pow(2, sm / 12)), 0.014 * EG, 4 * SPB);
+            padsVista.push(t);
+          }
           if (p.crash) eCrash(t);
           if (p.riser) eRiser(t, p.riser * 4 * SPB);
         }
@@ -1523,8 +1547,8 @@ function arrancarNavegador () {
       const plan = planCompas(c);
       if (plan) {
         const arm = armonia(c);
-        if (u === 0 && plan.pad) acordePad(t, arm.acorde, 4 * SPB);
-        if (plan.kick.includes(u)) kick(t);
+        if (u === 0 && plan.pad) { acordePad(t, arm.acorde, 4 * SPB); padsVista.push(t); }
+        if (plan.kick.includes(u)) { kick(t); golpesVista.push(t); }
         if (plan.snare.includes(u)) snare(t);
         if (plan.clap.includes(u)) clap(t);
         if (plan.hats.includes(u)) hat(t, plan.abierto.includes(u));
@@ -1681,6 +1705,7 @@ function arrancarNavegador () {
     t0 = ac.currentTime + 0.7;
     proxBeat = 0;
     estela.length = 0;
+    golpesVista.length = 0; padsVista.length = 0;
     desvios.length = 0;
     marcas.length = 0;
     avisos.length = 0;
@@ -1691,6 +1716,7 @@ function arrancarNavegador () {
 
   function empezar (id) {
     elegirCancion(id);
+    golpesVista.length = 0; padsVista.length = 0;
     intento = 1; mejor = 0;
     s = crearSim();
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0;
@@ -1711,6 +1737,7 @@ function arrancarNavegador () {
     t0 = ac.currentTime - s.x * SPB;
     proxBeat = Math.floor(s.x * 4) / 4;
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0;
+    golpesVista.length = 0; padsVista.length = 0;
     finSonado = false;
   }
   function irASeccion (d) {
@@ -1723,6 +1750,7 @@ function arrancarNavegador () {
 
   function alMenu () {
     rielCerrar(); eRielCerrar();
+    golpesVista.length = 0; padsVista.length = 0;
     corriendo = false; finSonado = false;
     s = crearSim();
   }
@@ -1850,8 +1878,40 @@ function arrancarNavegador () {
     const px = wx => (wx - s.x + 2.4) * esc;
     const py = wy => y0 - wy * esc;
 
+    // Respirar. Los golpes se agendaron con el audio, asi que la imagen late
+    // EXACTAMENTE con lo que se escucha, no con un reloj propio que se corre.
+    if (ac && corriendo) {
+      const ahoraAc = ac.currentTime;
+      while (golpesVista.length && golpesVista[0] <= ahoraAc) { golpesVista.shift(); pump = 1; }
+      while (padsVista.length && padsVista[0] <= ahoraAc) { padsVista.shift(); padLuz = 1; }
+    }
+    pump = Math.max(0, pump - dtSeg * 4.2);
+    padLuz = Math.max(0, padLuz - dtSeg * 0.5);
+    // la racha ilumina: jugar limpio se VE, y romperla apaga el mundo
+    const objRacha = corriendo ? Math.min(1, s.racha / 12) : 0;
+    brilloRacha += (objRacha - brilloRacha) * Math.min(1, dtSeg * 2.5);
+    const acordeAhora = TINTE[nombreAcorde(Math.floor(s.x / 4))] || TINTE.Am;
+    for (let i = 0; i < 3; i++)                       // el acorde no salta: funde
+      tinte[i] += (acordeAhora[i] - tinte[i]) * Math.min(1, dtSeg * 2.2);
+    if (corriendo) {
+      const luz = (0.5 + 0.5 * padLuz) * (1 - 0.45 * pump) * (0.55 + 0.45 * brilloRacha);
+      const gr = cx.createLinearGradient(0, 0, 0, y0 + esc * 0.4);
+      const rgb = tinte.map(v => Math.round(v)).join(',');
+      gr.addColorStop(0, `rgba(${rgb},${0.34 * luz})`);
+      gr.addColorStop(0.62, `rgba(${rgb},${0.11 * luz})`);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = gr; cx.fillRect(0, 0, w, y0 + esc * 0.4);
+      // la esfera es la fuente de luz: el bombo la hace latir
+      const rl = esc * (1.1 + 0.5 * pump);
+      const halo = cx.createRadialGradient(px(s.x), py(s.y + R), 0, px(s.x), py(s.y + R), rl);
+      halo.addColorStop(0, `rgba(${C.esferaRGB},${0.13 + 0.12 * pump})`);
+      halo.addColorStop(1, `rgba(${C.esferaRGB},0)`);
+      cx.fillStyle = halo;
+      cx.fillRect(px(s.x) - rl, py(s.y + R) - rl, rl * 2, rl * 2);
+    }
+
     // la red, con sus abismos
-    cx.strokeStyle = C.red; cx.lineWidth = 2;
+    cx.strokeStyle = `rgba(232,230,224,${0.14 + 0.12 * padLuz})`; cx.lineWidth = 2;
     const cortes = [0, ...HUECOS.flatMap(g => [g.x0, g.x1]), LARGO + 6];
     for (let i = 0; i < cortes.length; i += 2) {
       cx.beginPath(); cx.moveTo(px(cortes[i]), py(0)); cx.lineTo(px(cortes[i + 1]), py(0)); cx.stroke();
@@ -1969,6 +2029,7 @@ function arrancarNavegador () {
       const limpia = s.limpias.has(k.i);          // sonar no es lo mismo que afinar
       const aqui = s.tecla === k.i;               // estas parado en esta: toca YA
       const alto = k.riel ? 7 : 5;
+      const hh = teclaHundida.get(k.i) || 0;      // cuanto la hundio la esfera
       // las teclas de bajo son VERDES: otro instrumento, otro color
       const cBase = k.bajo ? C.impulso : C.tecla;
       cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
@@ -1979,13 +2040,13 @@ function arrancarNavegador () {
         cx.lineWidth = alto; cx.lineCap = 'butt';
         cx.strokeStyle = cx.fillStyle;
         cx.beginPath();
-        cx.moveTo(px(k.x0), py(k.y) + alto / 2);
+        cx.moveTo(px(k.x0), py(k.y + hh) + alto / 2);
         for (let i = 1; i <= 12; i++) {
           const xx = k.x0 + (k.x1 - k.x0) * i / 12;
-          cx.lineTo(px(xx), py(k.y + subidaRiel(k, xx)) + alto / 2);
+          cx.lineTo(px(xx), py(k.y + hh + subidaRiel(k, xx)) + alto / 2);
         }
         cx.stroke();
-      } else cx.fillRect(px(k.x0), py(k.y), Math.max(4, (k.x1 - k.x0) * esc), alto);
+      } else cx.fillRect(px(k.x0), py(k.y + hh), Math.max(4, (k.x1 - k.x0) * esc), alto);
       cx.shadowBlur = 0;
       // El riel se ve como SOSTENER, no como otra tecla: rayado que corre a
       // lo largo mientras dura la nota. Y el primero de cada cancion lleva su
@@ -1997,11 +2058,11 @@ function arrancarNavegador () {
         cx.strokeStyle = 'rgba(17,18,20,0.5)'; cx.lineWidth = 2;
         cx.beginPath();
         for (let xx = a0 + off; xx < aR - 3; xx += 12) {
-          cx.moveTo(xx, py(k.y) + alto - 1); cx.lineTo(xx + 4, py(k.y) + 1);
+          cx.moveTo(xx, py(k.y + hh) + alto - 1); cx.lineTo(xx + 4, py(k.y + hh) + 1);
         }
         cx.stroke();
         // la punta de la rampa: de aca salis despedido (y aca ya podes soltar)
-        const punta = py(k.y + RAMPA);
+        const punta = py(k.y + hh + RAMPA);
         cx.strokeStyle = `rgba(${C.impulsoRGB},${sono ? 0.5 : 0.85})`; cx.lineWidth = 2;
         cx.beginPath();
         cx.moveTo(px(k.x1) - 9, punta - 4);
@@ -2095,7 +2156,9 @@ function arrancarNavegador () {
     estela.push({ x: s.x, y: s.y + R });
     if (estela.length > 72) estela.shift();
     cx.lineCap = 'round';
-    for (const [ancho, alfa] of [[9, 0.1], [3, 0.42]]) {
+    // el haz crece con la racha: estar en zona se VE, y romperla lo apaga
+    for (const [ancho, alfa] of [[9 + 7 * brilloRacha, 0.1 + 0.09 * brilloRacha],
+                                 [3 + 1.6 * brilloRacha, 0.42 + 0.3 * brilloRacha]]) {
       for (let i = 1; i < estela.length; i++) {
         const f = i / estela.length;
         cx.strokeStyle = `rgba(${C.esferaRGB},${f * f * alfa})`;
@@ -2129,6 +2192,11 @@ function arrancarNavegador () {
     asientoV += (-484 * asiento - 15.4 * asientoV) * dtSeg;
     asiento += asientoV * dtSeg;
     if (s.estado !== 'apoyada') { asiento *= 0.86; asientoV *= 0.86; }
+    for (const [i, v] of teclaHundida) {
+      const nv = v * Math.pow(0.015, dtSeg);
+      if (Math.abs(nv) < 0.0004) teclaHundida.delete(i); else teclaHundida.set(i, nv);
+    }
+    if (s.estado === 'apoyada' && s.tecla >= 0) teclaHundida.set(s.tecla, asiento);
     const cayendo = s.estado === 'aire' ? Math.min(0.28, Math.abs(s.vy) * 0.16) : 0;
     const k = squash * 0.3 - cayendo;           // <0 estira, >0 aplasta
     const cxb = px(s.x), cyb = py(s.y + asiento + R * (1 - k));
