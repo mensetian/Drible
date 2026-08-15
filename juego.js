@@ -1181,14 +1181,18 @@ function arrancarNavegador () {
     src2.start();
     rodada = { bq, g };
   }
+  let vaiven = 0;
   function rodadaSeguir () {
     if (!rodada) return;
+    vaiven += 0.017;
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     const sonando = corriendo && s.viva && !s.meta && s.estado === 'apoyada';
     const obj = !sonando ? 0.0001 : k ? (k.riel ? 0.05 : 0.035) : 0.018;
     rodada.g.gain.setTargetAtTime(obj, ac.currentTime, 0.035);
+    // el roce respira: una superficie real no da un tono fijo
+    const vv = 1 + 0.13 * Math.sin(vaiven) + 0.05 * Math.sin(vaiven * 2.7);
     rodada.bq.frequency.setTargetAtTime(
-      k ? Math.min(3800, 650 + (k.y - Y_GRAVE) * 5600) : 700, ac.currentTime, 0.06);
+      (k ? Math.min(3800, 650 + (k.y - Y_GRAVE) * 5600) : 700) * vv, ac.currentTime, 0.06);
   }
 
   function golpe (t, f, dur, gan, tipo = 'sine') {
@@ -1684,7 +1688,10 @@ function arrancarNavegador () {
         squash = 1;
       } else if (e.tipo === 'posar') {
         // el golpe suena y PESA: cuanto mas fuerte cae, mas se hunde
-        ruido(ac.currentTime, 0.03, 0.04 + 0.05 * Math.min(1, e.impacto), 'lowpass', 900);
+        // el golpe cambia con la altura de la tecla y nunca es identico dos
+        // veces: lo exacto es lo que suena a maquina
+        ruido(ac.currentTime, 0.03, 0.04 + 0.05 * Math.min(1, e.impacto), 'lowpass',
+          700 + (e.y - Y_GRAVE) * 2600 + Math.random() * 260);
         squash = 0.5 + 0.5 * Math.min(1, e.impacto);
         asientoV = -Math.min(1.1, e.impacto) * 0.5;
       } else if (e.tipo === 'red') {
@@ -2150,26 +2157,13 @@ function arrancarNavegador () {
     cx.strokeStyle = C.esfera; cx.lineWidth = 2;
     cx.beginPath(); cx.moveTo(px(LARGO), py(0)); cx.lineTo(px(LARGO), py(0.9)); cx.stroke();
 
-    // estela
-    // El haz: es lo que dibuja la corrida y lo mejor que tenia esfera. Va en dos
-    // pasadas -- un halo ancho y tenue, y el hilo brillante encima.
-    estela.push({ x: s.x, y: s.y + R });
-    if (estela.length > 72) estela.shift();
-    cx.lineCap = 'round';
-    // el haz crece con la racha: estar en zona se VE, y romperla lo apaga
-    for (const [ancho, alfa] of [[9 + 7 * brilloRacha, 0.1 + 0.09 * brilloRacha],
-                                 [3 + 1.6 * brilloRacha, 0.42 + 0.3 * brilloRacha]]) {
-      for (let i = 1; i < estela.length; i++) {
-        const f = i / estela.length;
-        cx.strokeStyle = `rgba(${C.esferaRGB},${f * f * alfa})`;
-        cx.lineWidth = f * ancho;
-        cx.beginPath();
-        cx.moveTo(px(estela[i - 1].x), py(estela[i - 1].y));
-        cx.lineTo(px(estela[i].x), py(estela[i].y));
-        cx.stroke();
-      }
-    }
-    cx.lineCap = 'butt';
+    // EL RASTRO. Era un cometa: una cola conica que se afinaba hasta un hilo
+    // brillante, y encima crecia con la racha. Leia como bicho, no como
+    // movimiento. Ahora son fantasmas de la propia esfera --el desenfoque de
+    // toda la vida-- y SOLO en el aire: una pelota que rueda no deja cometa.
+    if (s.estado === 'aire') estela.push({ x: s.x, y: s.y + R });
+    else if (estela.length) estela.shift();
+    if (estela.length > 13) estela.shift();
     // particulas
     for (let i = particulas.length - 1; i >= 0; i--) {
       const p = particulas[i];
@@ -2197,20 +2191,42 @@ function arrancarNavegador () {
       if (Math.abs(nv) < 0.0004) teclaHundida.delete(i); else teclaHundida.set(i, nv);
     }
     if (s.estado === 'apoyada' && s.tecla >= 0) teclaHundida.set(s.tecla, asiento);
-    const cayendo = s.estado === 'aire' ? Math.min(0.28, Math.abs(s.vy) * 0.16) : 0;
-    const k = squash * 0.3 - cayendo;           // <0 estira, >0 aplasta
+    // se estira EN LA DIRECCION en que va, no siempre para arriba: es lo que
+    // hace que un cuerpo parezca cuerpo y no un icono que cambia de tamaño
+    const estira = s.estado === 'aire' ? Math.min(0.26, Math.abs(s.vy) * 0.15) : 0;
+    const k = squash * 0.3;
     const cxb = px(s.x), cyb = py(s.y + asiento + R * (1 - k));
-    const rx = R * esc * (1 + k), ry = R * esc * (1 - k);
+    const ang = Math.atan2(-s.vy * (s.estado === 'aire' ? 1 : 0), 1);
+    const rx = R * esc * (1 + k + estira), ry = R * esc * (1 - k - estira);
+
+    // LA SOMBRA. Dice a que altura vas y donde vas a caer, que era informacion
+    // que solo estaba en la fisica. Ademas ancla la esfera al mundo: sin ella
+    // flota, con ella pesa.
+    const alt = Math.max(0, s.y);
+    const cerca = Math.max(0.12, 1 - alt / 0.62);
+    cx.fillStyle = `rgba(0,0,0,${0.42 * cerca})`;
+    cx.beginPath();
+    cx.ellipse(cxb, py(0) + 1, R * esc * (0.55 + 0.85 * cerca), R * esc * 0.30 * cerca, 0, 0, Math.PI * 2);
+    cx.fill();
+
+    // los fantasmas del rastro, detras de la esfera
+    for (let i = 0; i < estela.length; i++) {
+      const f = (i + 1) / estela.length;
+      cx.fillStyle = `rgba(${C.esferaRGB},${f * f * 0.13})`;
+      cx.beginPath();
+      cx.ellipse(px(estela[i].x), py(estela[i].y), R * esc * (0.35 + 0.55 * f), R * esc * (0.35 + 0.55 * f), 0, 0, Math.PI * 2);
+      cx.fill();
+    }
     const sordo = s.x < s.bloqueo;              // el boton no responde, y se ve
     cx.fillStyle = sordo ? C.sucia : C.esfera;
     cx.shadowColor = sordo ? C.sucia : C.esfera; cx.shadowBlur = sordo ? 4 : 12;
     cx.beginPath();
-    cx.ellipse(cxb, cyb, rx, ry, 0, 0, Math.PI * 2);
+    cx.ellipse(cxb, cyb, rx, ry, ang, 0, Math.PI * 2);
     cx.fill();
     cx.shadowBlur = 0;
     // la costura: es lo unico que deja VER que gira
     cx.save();
-    cx.beginPath(); cx.ellipse(cxb, cyb, rx, ry, 0, 0, Math.PI * 2); cx.clip();
+    cx.beginPath(); cx.ellipse(cxb, cyb, rx, ry, ang, 0, Math.PI * 2); cx.clip();
     cx.translate(cxb, cyb); cx.rotate(giro);
     cx.strokeStyle = 'rgba(120,60,10,0.45)'; cx.lineWidth = 2;
     cx.beginPath(); cx.moveTo(-rx, 0); cx.lineTo(rx, 0); cx.stroke();
