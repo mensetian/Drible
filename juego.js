@@ -840,10 +840,16 @@ function queSuena (s, k) {
 // audible al instante, que es como se entera un guitarrista de que llego tarde.
 function anotar (s, obj, dev, tipo, extra = {}) {
   const chueca = Math.abs(dev) > AFINADO;
+  // El PUNTAJE es binario (afinaste o no), pero el SONIDO no puede serlo: un
+  // instrumento no tiene dos estados, se ensucia de a poco. `suc` es cuanto te
+  // corriste, de 0 (justo en el pulso) a 1 (el doble de la ventana): con eso la
+  // voz se desafina, se apaga y raspa en proporcion. El escalon --a los 95 ms
+  // perfecto, a los 97 roto-- era lo que sonaba a maquina.
+  const suc = Math.min(1, Math.abs(dev) / (AFINADO * 2));
   s.tocadas.add(obj.i);
   if (chueca) s.racha = 0;
   else { s.limpias.add(obj.i); s.racha++; s.mejorRacha = Math.max(s.mejorRacha, s.racha); }
-  s.eventos.push({ tipo, f: obj.f, x: s.x, y: s.y, i: obj.i, tarde: dev, chueca, ...extra });
+  s.eventos.push({ tipo, f: obj.f, x: s.x, y: s.y, i: obj.i, tarde: dev, chueca, suc, ...extra });
 }
 
 // El toque efectivo sobre una tecla. `xt` es DONDE se apreto el boton, que no
@@ -878,9 +884,10 @@ function posarse (s, yAntes) {
     if (yAntes >= k.y - 1e-9 && s.y <= k.y && k.y > mejorY) { mejor = k; mejorY = k.y; }
   }
   if (mejor) {
+    const impacto = Math.abs(s.vy);          // con cuanta fuerza pego: el peso
     s.estado = 'apoyada'; s.tecla = mejor.i; s.y = mejor.y; s.vy = 0;
     s.coyote = null; s.saliendoDe = -1;
-    s.eventos.push({ tipo: 'posar', x: s.x, y: mejor.y, riel: !!mejor.riel });
+    s.eventos.push({ tipo: 'posar', x: s.x, y: mejor.y, riel: !!mejor.riel, impacto });
     // caiste ligado desde la nota anterior: la caida misma la toca, y sigue
     if (mejor.porCaida && s.ligadaDe === mejor.i - 1) {
       s.ligadaDe = -1;
@@ -1110,6 +1117,10 @@ function arrancarNavegador () {
   const estela = [], particulas = [], destellos = [], desvios = [];
   const avisos = [], marcas = [];     // cuanto te corriste, dicho y dibujado
   let squash = 0, flash = 0, rielVoz = null;
+  let giro = 0, asiento = 0, asientoV = 0;   // el peso: rodadura y aterrizaje
+  // el color tambien deja de ser un si/no: va del limpio al sucio de a poco
+  const mezcla = (a, b, t) => a.split(',').map((v, i) =>
+    Math.round(+v + (+b.split(',')[i] - +v) * t)).join(',');
 
   const ahora = () => ac ? (ac.currentTime - t0) / SPB : 0;
 
@@ -1130,9 +1141,36 @@ function arrancarNavegador () {
       voz.connect(master);
     }
     ac.resume();
+    rodadaAbrir();
     t0 = ac.currentTime + 0.12;
     proxBeat = 0;
     finSonado = false;
+  }
+
+  // La rodadura: mientras la esfera apoya, roza. Es lo que separa "se desliza
+  // sobre iconos" de "hay una pelota tocando una superficie". Va bajita y
+  // sigue la altura de la tecla: agudo arriba, sordo abajo.
+  let rodada = null;
+  function rodadaAbrir () {
+    if (rodada) return;
+    const n = ac.sampleRate | 0, buf = ac.createBuffer(1, n, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src2 = ac.createBufferSource(); src2.buffer = buf; src2.loop = true;
+    const bq = ac.createBiquadFilter(); bq.type = 'bandpass'; bq.frequency.value = 1200; bq.Q.value = 0.8;
+    const g = ac.createGain(); g.gain.value = 0.0001;
+    src2.connect(bq).connect(g).connect(master);
+    src2.start();
+    rodada = { bq, g };
+  }
+  function rodadaSeguir () {
+    if (!rodada) return;
+    const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+    const sonando = corriendo && s.viva && !s.meta && s.estado === 'apoyada';
+    const obj = !sonando ? 0.0001 : k ? (k.riel ? 0.05 : 0.035) : 0.018;
+    rodada.g.gain.setTargetAtTime(obj, ac.currentTime, 0.035);
+    rodada.bq.frequency.setTargetAtTime(
+      k ? Math.min(3800, 650 + (k.y - Y_GRAVE) * 5600) : 700, ac.currentTime, 0.06);
   }
 
   function golpe (t, f, dur, gan, tipo = 'sine') {
@@ -1303,15 +1341,17 @@ function arrancarNavegador () {
   // cuadrada sonando y decayendo a lo largo de toda la nota -- no otra voz.
   // Se guarda para poder soltarla si el jugador corta el riel antes.
   let rielVozE = null;
-  function eRielAbrir (f, dur, gan = 0.13) {
+  function eRielAbrir (f, dur, gan = 0.13, suc = 0) {
     const t = ac.currentTime;
-    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(18000, t);
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(18000 * Math.pow(0.07, suc), t);
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(gan, t + 0.004);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     lp.connect(voz);
     const o = ac.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(f, t);
+    o.detune.value = 60 * suc;
     o.connect(g).connect(lp); o.start(t); o.stop(t + dur + 0.05);
     rielVozE = { o, g };
   }
@@ -1327,29 +1367,41 @@ function arrancarNavegador () {
 
   // La voz del jugador: solo suena si el jugador la toca. Con `desde` no se
   // vuelve a atacar, se desliza desde la nota anterior: eso es un ligado.
-  // `chueca` = llegaste fuera de la ventana afinada. La nota suena igual --nunca
-  // se castiga con silencio-- pero sale desafinada y apagada, como una cuerda
-  // mal pisada. Es la unica forma de que el oido, y no el HUD, te diga que vas
-  // corrido.
-  function lead (t, f, dur = 0.4, gan = 0.26, desde = 0, chueca = false) {
-    // En las canciones portadas del estudio, la nota AFINADA usa la voz del
-    // estudio calcada: cuadrada limpia, brillante, ataque de 4 ms. La chueca
-    // sigue con la voz apagada y batida de siempre -- ese es el feedback.
-    if (CANCIONES[CANCION_ID].estudio && !chueca) {
+  // `suc` = cuanto te corriste, de 0 a 1. La nota suena SIEMPRE --nunca se
+  // castiga con silencio-- pero se ensucia en proporcion: se desafina, se
+  // apaga y raspa, como una cuerda cada vez peor pisada. Es continuo a
+  // proposito: un instrumento no tiene dos estados, y el escalon --perfecto a
+  // los 95 ms, roto a los 97-- era lo que delataba a la maquina.
+  function lead (t, f, dur = 0.4, gan = 0.26, desde = 0, suc = 0) {
+    // En las canciones portadas del estudio, la nota justa en el pulso es la
+    // voz del estudio calcada: cuadrada limpia, brillante, ataque de 4 ms.
+    if (CANCIONES[CANCION_ID].estudio) {
       // Espejo del estudio: alla casi toda nota melodica dura UNA semicorchea
       // (los puntos de su notacion son silencios), asi que la nota es un blip
       // corto de cuadrada -- por eso el eco se recorta nitido detras. Y el
       // ligado ataca fresco: en el estudio no hay glissando.
-      const durE = Math.min(dur, 0.16);
+      // La suciedad la mueve entera: se acorta, pierde brillo, se desafina y
+      // aparece una segunda voz batiendo contra la primera. Justo en el pulso
+      // es exactamente la del estudio.
+      const durE = Math.min(dur, 0.16) * (1 - 0.3 * suc);
       const ge = ac.createGain(), lpe = ac.createBiquadFilter();
-      lpe.type = 'lowpass'; lpe.frequency.setValueAtTime(18000, t);
+      lpe.type = 'lowpass';
+      lpe.frequency.setValueAtTime(18000 * Math.pow(0.07, suc), t);
       ge.gain.setValueAtTime(0.0001, t);
-      ge.gain.linearRampToValueAtTime(gan * 0.45, t + Math.min(0.004, durE * 0.5));
+      ge.gain.linearRampToValueAtTime(gan * 0.45 * (1 - 0.3 * suc),
+        t + Math.min(0.004 + 0.012 * suc, durE * 0.5));
       ge.gain.exponentialRampToValueAtTime(0.0001, t + durE);
       lpe.connect(voz);
       const o = ac.createOscillator(); o.type = 'square';
-      o.frequency.setValueAtTime(f, t);
+      o.frequency.setValueAtTime(f, t); o.detune.value = 60 * suc;
       o.connect(ge).connect(lpe); o.start(t); o.stop(t + durE + 0.02);
+      if (suc > 0.25) {                        // el batido y la uña que raspa
+        const g2 = ac.createGain(); g2.gain.value = 0.5 * suc;
+        const o2 = ac.createOscillator(); o2.type = 'square';
+        o2.frequency.setValueAtTime(f, t); o2.detune.value = -75 * suc;
+        o2.connect(g2).connect(ge); o2.start(t); o2.stop(t + durE + 0.02);
+        ruido(t, 0.025, 0.06 * suc, 'bandpass', 900, 1.2);
+      }
       return;
     }
     const lp = ac.createBiquadFilter(), g = ac.createGain();
@@ -1358,16 +1410,16 @@ function arrancarNavegador () {
     // mas aguda salia mas brillante que la anterior, y arriba la melodia se
     // volvia un silbido. Un instrumento de verdad no se pone mas brillante
     // porque toques mas agudo: el cuerpo del instrumento no cambia.
-    lp.type = 'lowpass'; lp.Q.value = chueca ? 1 : 2.2;
-    lp.frequency.setValueAtTime(Math.min(chueca ? 1500 : 4600, f * 6), t);
+    lp.type = 'lowpass'; lp.Q.value = 2.2 - 1.2 * suc;
+    lp.frequency.setValueAtTime(Math.min(4600 - 3100 * suc, f * 6), t);
     lp.frequency.exponentialRampToValueAtTime(
-      Math.max(220, Math.min(chueca ? 480 : 1100, f * 1.6)), t + dur * 0.85);
+      Math.max(220, Math.min(1100 - 620 * suc, f * 1.6)), t + dur * 0.85);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(gan * (chueca ? 0.7 : 1), t + ataque);
+    g.gain.exponentialRampToValueAtTime(gan * (1 - 0.3 * suc), t + ataque);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     g.connect(lp).connect(voz);
     // el pico del ataque: sin esto la nota entra sin uña y suena plana
-    if (!desde) ruido(t, 0.02, chueca ? 0.09 : 0.045, 'bandpass', chueca ? 900 : 2600, 1.2);
+    if (!desde) ruido(t, 0.02, 0.045 + 0.045 * suc, 'bandpass', 2600 - 1700 * suc, 1.2);
     // Triangulo de cuerpo + un poco de sierra para el filo + sub una octava
     // abajo. La cuadrada sola era la chicharra. Chueca, las voces se van para
     // lados distintos: eso es lo que bate y molesta.
@@ -1375,7 +1427,7 @@ function arrancarNavegador () {
       [['triangle', 1, 1, -45], ['sawtooth', 1, 0.32, -45], ['sine', 0.5, 0.5, 28]]) {
       const o = ac.createOscillator(), gv = ac.createGain();
       o.type = tipo; gv.gain.value = v;
-      if (chueca) o.detune.value = des;
+      o.detune.value = des * suc;              // las voces se separan de a poco
       if (desde) {
         o.frequency.setValueAtTime(desde * mul, t);
         o.frequency.exponentialRampToValueAtTime(f * mul, t + 0.035);
@@ -1384,16 +1436,16 @@ function arrancarNavegador () {
     }
   }
 
-  function rielAbrir (f, chueca = false) {
+  function rielAbrir (f, suc = 0) {
     rielCerrar();
     const t = ac.currentTime;
     const g = ac.createGain(), lp = ac.createBiquadFilter();
     lp.type = 'lowpass'; lp.Q.value = 1.6;
-    lp.frequency.value = Math.min(chueca ? 1200 : 3400, f * 5);
+    lp.frequency.value = Math.min(3400 - 2200 * suc, f * 5);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(chueca ? 0.15 : 0.2, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.2 - 0.05 * suc, t + 0.03);
     g.connect(lp).connect(voz);
-    if (chueca) ruido(t, 0.05, 0.09, 'bandpass', 900, 1.2);
+    if (suc > 0.25) ruido(t, 0.05, 0.09 * suc, 'bandpass', 900, 1.2);
     // Vibrato que entra despues del ataque. Una nota larga sin vibrato es un
     // tono de test: es lo que sonaba plano cuando se sostenia un riel.
     const lfo = ac.createOscillator(), lfoG = ac.createGain();
@@ -1406,7 +1458,7 @@ function arrancarNavegador () {
       [['triangle', 1, 1, -45], ['sawtooth', 1, 0.3, -45], ['sine', 0.5, 0.5, 28]]) {
       const o = ac.createOscillator(), gv = ac.createGain();
       o.type = tipo; o.frequency.value = f * mul; gv.gain.value = v;
-      if (chueca) o.detune.value = des;
+      o.detune.value = des * suc;
       lfoG.connect(o.detune);
       o.connect(gv).connect(g); o.start(); osc.push(o);
     }
@@ -1516,7 +1568,7 @@ function arrancarNavegador () {
     if (marcas.length > 16) marcas.shift();
     const signo = ms > 0 ? '+' : '−';
     avisos.push({
-      x: e.x, y: e.y, t: performance.now(), chueca: e.chueca,
+      x: e.x, y: e.y, t: performance.now(), chueca: e.chueca, suc: e.suc,
       txt: e.chueca ? `${ms > 0 ? 'TARDE' : 'ANTES'} ${signo}${Math.abs(ms)}`
         : Math.abs(ms) <= 25 ? 'PERFECTO' : `${signo}${Math.abs(ms)}`
     });
@@ -1530,16 +1582,14 @@ function arrancarNavegador () {
           // tecla de bajo: la esfera esta tocando el bajo del estudio -- dos
           // octavas abajo de donde pisa, con la voz de alla. Sin eco: el bajo
           // no lo lleva. Chueca, sale apagada y con el golpe sordo.
-          eBajo(ac.currentTime, e.f / 8, e.chueca ? 0.07 : 0.16);
+          eBajo(ac.currentTime, e.f / 8, 0.16 - 0.09 * e.suc);
           // ...y la raiz del arpegio: con los tres orbes del arco, el up16
           // queda completo -- tocar bien el motor ES tocar el arpegio entero
-          if (!e.chueca) {
-            const ch = acordeEnCompas(Math.floor(e.x / 4));
-            eArp(ac.currentTime, ch.root * 2, 0.11);
-          }
-          if (e.chueca) ruido(ac.currentTime, 0.05, 0.09, 'lowpass', 500);
-          destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
-          chispas(e.x, e.y, e.chueca ? 3 : 7, true, e.chueca ? C.suciaRGB : C.impulsoRGB);
+          const ch = acordeEnCompas(Math.floor(e.x / 4));
+          eArp(ac.currentTime, ch.root * 2, 0.11 * (1 - e.suc));
+          if (e.suc > 0.25) ruido(ac.currentTime, 0.05, 0.09 * e.suc, 'lowpass', 500);
+          destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
+          chispas(e.x, e.y, Math.round(7 - 4 * e.suc), true, mezcla(C.impulsoRGB, C.suciaRGB, e.suc));
           squash = 1;
           continue;
         }
@@ -1547,30 +1597,30 @@ function arrancarNavegador () {
         // lo que sonaba plano -- un instrumento tiene dinamica, un beep no.
         const fuerte = NOTAS[e.i].b % 1 === 0;
         lead(ac.currentTime, e.f, Math.max(0.22, 0.46 - Math.abs(e.tarde) * 0.4),
-          fuerte ? 0.29 : 0.21, 0, e.chueca);
+          fuerte ? 0.29 : 0.21, 0, e.suc);
         // El eco, IDENTICO al estudio: alla lo lleva toda nota no prolongada
         // (en su notacion los puntos son silencios, asi que casi todas), 3
         // semicorcheas despues, al 30%. Aca: toda nota que no sea riel. La
         // chueca lo arrastra chueco: el eco repite lo que sono.
         if (!NOTAS[e.i].riel)
-          lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.3, 0, e.chueca);
-        destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
-        chispas(e.x, e.y, e.chueca ? 3 : 7, true, e.chueca ? C.suciaRGB : C.teclaRGB);
+          lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.3, 0, e.suc);
+        destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
+        chispas(e.x, e.y, Math.round(7 - 4 * e.suc), true, mezcla(C.teclaRGB, C.suciaRGB, e.suc));
         squash = 1;
       } else if (e.tipo === 'ligada') {
-        lead(ac.currentTime, e.f, 0.5, 0.15, e.desde, e.chueca);
+        lead(ac.currentTime, e.f, 0.5, 0.15, e.desde, e.suc);
         if (!NOTAS[e.i].riel)
-          lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, 0.15 * 0.3, 0, e.chueca);
-        destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
-        chispas(e.x, e.y, 5, false, e.chueca ? C.suciaRGB : C.teclaRGB);
+          lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, 0.15 * 0.3, 0, e.suc);
+        destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
+        chispas(e.x, e.y, 5, false, mezcla(C.teclaRGB, C.suciaRGB, e.suc));
         squash = 0.8;
       } else if (e.tipo === 'riel') {
-        if (CANCIONES[CANCION_ID].estudio && !e.chueca)
-          eRielAbrir(e.f, Math.max(0.3, (e.hasta - e.x) * SPB));
-        else rielAbrir(e.f, e.chueca);
+        if (CANCIONES[CANCION_ID].estudio)
+          eRielAbrir(e.f, Math.max(0.3, (e.hasta - e.x) * SPB), 0.13, e.suc);
+        else rielAbrir(e.f, e.suc);
         aviso(e);
-        destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: e.chueca });
-        chispas(e.x, e.y, e.chueca ? 4 : 10, true, e.chueca ? C.suciaRGB : C.teclaRGB);
+        destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
+        chispas(e.x, e.y, Math.round(10 - 6 * e.suc), true, mezcla(C.teclaRGB, C.suciaRGB, e.suc));
       } else if (e.tipo === 'saltoRiel') {
         // el saltito sobre el riel: mudo (la nota larga sigue sonando)
         squash = 0.8;
@@ -1593,7 +1643,7 @@ function arrancarNavegador () {
           const ch = acordeEnCompas(e.c);
           eBajo(ac.currentTime, (ch.root / 4) * Math.pow(2, e.semi / 12), 0.09 * EG);
         } else eTambor(e.instr, ac.currentTime);
-        destellos.push({ x: e.x, y: e.y, t: performance.now(), chueca: false });
+        destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
         chispas(e.x, e.y, 6, true, e.instr === 'arp' ? C.teclaRGB : C.esferaRGB);
       } else if (e.tipo === 'falso') {
         // martillaste: cuerda muerta. El boton queda sordo hasta que se acomode.
@@ -1609,7 +1659,10 @@ function arrancarNavegador () {
         chispas(e.x, 0, 12, true);
         squash = 1;
       } else if (e.tipo === 'posar') {
-        ruido(ac.currentTime, 0.03, 0.05, 'lowpass', 900); squash = 0.7;
+        // el golpe suena y PESA: cuanto mas fuerte cae, mas se hunde
+        ruido(ac.currentTime, 0.03, 0.04 + 0.05 * Math.min(1, e.impacto), 'lowpass', 900);
+        squash = 0.5 + 0.5 * Math.min(1, e.impacto);
+        asientoV = -Math.min(1.1, e.impacto) * 0.5;
       } else if (e.tipo === 'red') {
         ruido(ac.currentTime, 0.09, 0.09, 'lowpass', 700); squash = 0.9;
         chispas(e.x, 0, 5);
@@ -1739,6 +1792,7 @@ function arrancarNavegador () {
     if (!corriendo) { dibujar(dtSeg); return; }
 
     agendarMusica();
+    rodadaSeguir();
     const b = ahora();
     if (b < 0) { dibujar(dtSeg); return; }
 
@@ -2015,7 +2069,8 @@ function arrancarNavegador () {
     for (let i = destellos.length - 1; i >= 0; i--) {
       const d = destellos[i], e = (performance.now() - d.t) / 420;
       if (e > 1) { destellos.splice(i, 1); continue; }
-      cx.strokeStyle = `rgba(${d.chueca ? C.suciaRGB : C.esferaRGB},${(1 - e) * (d.chueca ? 0.5 : 0.9)})`;
+      const sd = d.suc || 0;
+      cx.strokeStyle = `rgba(${mezcla(C.esferaRGB, C.suciaRGB, sd)},${(1 - e) * (0.9 - 0.4 * sd)})`;
       cx.lineWidth = 2.5 * (1 - e);
       cx.beginPath(); cx.arc(px(d.x), py(d.y), (0.05 + e * 0.42) * esc, 0, Math.PI * 2); cx.stroke();
     }
@@ -2062,16 +2117,38 @@ function arrancarNavegador () {
       cx.beginPath(); cx.arc(px(p.x), py(p.y), 2.2 * p.vida, 0, Math.PI * 2); cx.fill();
     }
 
-    // la esfera
+    // LA ESFERA. Rueda de verdad (una pelota que no gira no pesa), se hunde al
+    // aterrizar con un resorte --el golpe no termina en el frame en que toca--
+    // y se estira cayendo. Todo esto es solo dibujo: la fisica sigue exacta,
+    // que es lo que sostiene la calibracion de martillos y orbes.
     squash = Math.max(0, squash - dtSeg * 7);
-    const k = squash * 0.3;
+    // rodadura sin patinar: dtheta = dx / R. A la mitad de la velocidad real,
+    // porque a cinco vueltas por segundo el ojo ya no ve giro, ve parpadeo.
+    if (corriendo && s.viva && !s.meta) giro += (dtSeg / SPB) / R * 0.5;
+    // el resorte del aterrizaje: se hunde y vuelve, no se congela
+    asientoV += (-484 * asiento - 15.4 * asientoV) * dtSeg;
+    asiento += asientoV * dtSeg;
+    if (s.estado !== 'apoyada') { asiento *= 0.86; asientoV *= 0.86; }
+    const cayendo = s.estado === 'aire' ? Math.min(0.28, Math.abs(s.vy) * 0.16) : 0;
+    const k = squash * 0.3 - cayendo;           // <0 estira, >0 aplasta
+    const cxb = px(s.x), cyb = py(s.y + asiento + R * (1 - k));
+    const rx = R * esc * (1 + k), ry = R * esc * (1 - k);
     const sordo = s.x < s.bloqueo;              // el boton no responde, y se ve
     cx.fillStyle = sordo ? C.sucia : C.esfera;
     cx.shadowColor = sordo ? C.sucia : C.esfera; cx.shadowBlur = sordo ? 4 : 12;
     cx.beginPath();
-    cx.ellipse(px(s.x), py(s.y + R * (1 - k)), R * esc * (1 + k), R * esc * (1 - k), 0, 0, Math.PI * 2);
+    cx.ellipse(cxb, cyb, rx, ry, 0, 0, Math.PI * 2);
     cx.fill();
     cx.shadowBlur = 0;
+    // la costura: es lo unico que deja VER que gira
+    cx.save();
+    cx.beginPath(); cx.ellipse(cxb, cyb, rx, ry, 0, 0, Math.PI * 2); cx.clip();
+    cx.translate(cxb, cyb); cx.rotate(giro);
+    cx.strokeStyle = 'rgba(120,60,10,0.45)'; cx.lineWidth = 2;
+    cx.beginPath(); cx.moveTo(-rx, 0); cx.lineTo(rx, 0); cx.stroke();
+    cx.fillStyle = 'rgba(255,255,255,0.35)';
+    cx.beginPath(); cx.arc(rx * 0.45, -ry * 0.42, Math.max(1.5, rx * 0.17), 0, Math.PI * 2); cx.fill();
+    cx.restore();
 
     if (flash > 0) {
       flash = Math.max(0, flash - dtSeg * 3);
