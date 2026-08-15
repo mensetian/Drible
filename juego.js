@@ -399,6 +399,7 @@ export const EN_COLA = 2;       // toques guardados a la vez: dos notas adelanta
 // claramente corrido, no lo humanamente impreciso. Con +-66 ms una mano decente
 // escuchaba chueco un tercio de las veces -- eso se siente injusto, no dificil.
 export const AFINADO = 0.18;    // +-96 ms: la nota sale limpia. Mas lejos, chueca.
+export const PERFECTO = 0.4;    // el tercio de adentro: clavada, y se celebra
 // La firma de la trampa no es adelantarse, es la RAFAGA: dos toques pegados que
 // no suenan. Nadie toca dos veces en 60 ms queriendo; el que martilla, si.
 export const MARTILLO = 0.1;    // toques mas juntos que esto, y en falso, castigan
@@ -753,6 +754,7 @@ export function crearSim () {
     ultimoToque: -Infinity, // para distinguir un toque adelantado de una rafaga
     tocadas: new Set(),
     limpias: new Set(),     // las que ademas sonaron afinadas: ese es el puntaje
+    perfectas: new Set(),   // y las clavadas en el centro: la maestria
     racha: 0, mejorRacha: 0, falsos: 0,
     orbes: 0, orbesTocados: new Set(),   // los orbes cosechados en el aire
     soltoEn: null,          // cuando solto el riel: corre la gracia de repique
@@ -820,6 +822,11 @@ function queSuena (s, k) {
 // audible al instante, que es como se entera un guitarrista de que llego tarde.
 function anotar (s, obj, dev, tipo, extra = {}) {
   const chueca = Math.abs(dev) > AFINADO;
+  // ...y el otro extremo. El juego sabia castigar con matices y premiaba
+  // plano: clavarla en el centro sonaba igual que llegar "suficiente". PERFECTO
+  // es el tercio interior de la ventana, y tiene ceremonia propia.
+  const perfecto = !chueca && Math.abs(dev) <= AFINADO * PERFECTO;
+  if (perfecto) s.perfectas.add(obj.i);
   // El PUNTAJE es binario (afinaste o no), pero el SONIDO no puede serlo: un
   // instrumento no tiene dos estados, se ensucia de a poco. `suc` es cuanto te
   // corriste, de 0 (justo en el pulso) a 1 (el doble de la ventana): con eso la
@@ -829,7 +836,7 @@ function anotar (s, obj, dev, tipo, extra = {}) {
   s.tocadas.add(obj.i);
   if (chueca) s.racha = 0;
   else { s.limpias.add(obj.i); s.racha++; s.mejorRacha = Math.max(s.mejorRacha, s.racha); }
-  s.eventos.push({ tipo, f: obj.f, x: s.x, y: s.y, i: obj.i, tarde: dev, chueca, suc, ...extra });
+  s.eventos.push({ tipo, f: obj.f, x: s.x, y: s.y, i: obj.i, tarde: dev, chueca, suc, perfecto, ...extra });
 }
 
 // El toque efectivo sobre una tecla. `xt` es DONDE se apreto el boton, que no
@@ -1084,12 +1091,39 @@ function arrancarNavegador () {
 
   let s = crearSim();
   let intento = 1, mejor = 0;
+
+  // LO QUE QUEDA ENTRE PARTIDAS. Morir sin un numero es morir dos veces: no
+  // sabes si estuviste cerca. Se guarda hasta donde llegaste y cuantas limpias
+  // hiciste, por cancion, y se dice al morir. Es el unico enganche que se
+  // permite el juego -- nada de monedas ni de energia.
+  const MEM = 'drible:record:';
+  const leerRecord = id => {
+    try { return JSON.parse(localStorage.getItem(MEM + id)) || null; } catch (_) { return null; }
+  };
+  function guardarRecord (id, pct, limpias) {
+    const r = leerRecord(id) || { pct: 0, limpias: 0 };
+    if (pct <= r.pct && limpias <= r.limpias) return r;
+    const n = { pct: Math.max(pct, r.pct), limpias: Math.max(limpias, r.limpias) };
+    try { localStorage.setItem(MEM + id, JSON.stringify(n)); } catch (_) {}
+    return n;
+  }
   let ac = null, master = null, voz = null, t0 = 0, proxBeat = 0;
   let corriendo = false, finSonado = false;
 
   const estela = [], particulas = [], destellos = [], desvios = [];
   const avisos = [], marcas = [];     // cuanto te corriste, dicho y dibujado
   let squash = 0, flash = 0, rielVoz = null;
+  // LA CEREMONIA DEL ACIERTO. El juego sabia castigar con matices --la voz se
+  // ensucia de a poco-- y premiaba plano: clavar una nota en el centro se veia
+  // igual que llegar apenas adentro. El anillo y la retencion son el premio
+  // que faltaba: se ve, se siente en el cuerpo de la esfera, y no dice nada.
+  const aros = [];
+  let retencion = 0;
+  function celebrar (e) {
+    if (!e.perfecto) return;
+    aros.push({ x: e.x, y: e.y, t: performance.now() });
+    retencion = 0.05;                 // 50 ms de peso: el golpe se APOYA
+  }
   let giro = 0, asiento = 0, asientoV = 0;   // el peso: rodadura y aterrizaje
   // LA RESPIRACION. El fondo era un relleno plano: la musica pasaba y la imagen
   // no se enteraba. Ahora el bombo lo hunde (el mismo sidechain que ya hunde al
@@ -1108,7 +1142,16 @@ function arrancarNavegador () {
   const mezcla = (a, b, t) => a.split(',').map((v, i) =>
     Math.round(+v + (+b.split(',')[i] - +v) * t)).join(',');
 
-  const ahora = () => ac ? (ac.currentTime - t0) / SPB : 0;
+  // LA LATENCIA DEL APARATO. En un telefono el sonido sale entre 50 y 150 ms
+  // despues de que lo pedimos: el jugador toca cuando OYE, o sea tarde, y un
+  // juego afinado en la PC se siente roto en el celular. La calibracion mide
+  // ese retraso y el reloj del JUEGO se atrasa lo mismo -- la musica se agenda
+  // igual que siempre (ahoraAudio), pero la esfera y la vista corren detras,
+  // asi que lo que ves coincide con lo que escuchas.
+  let desfase = 0;                       // segundos
+  try { desfase = Math.max(0, Math.min(0.35, +localStorage.getItem('drible:desfase') || 0)); } catch (_) {}
+  const ahoraAudio = () => ac ? (ac.currentTime - t0) / SPB : 0;
+  const ahora = () => ac ? (ac.currentTime - t0 - desfase) / SPB : 0;
 
   // --- sintesis --------------------------------------------------------------
 
@@ -1471,7 +1514,7 @@ function arrancarNavegador () {
   // El motor del estudio: un paso de semicorchea por vez, patron por capa.
   // Es el MISMO recorrido que hace estudio/index.html, para que suene igual.
   function agendarEstudio (spec) {
-    const b = ahora();
+    const b = ahoraAudio();
     while (proxBeat < b + 2) {
       const t = t0 + proxBeat * SPB;
       const c = Math.floor(proxBeat / 4), i16 = Math.round((proxBeat - c * 4) * 4);
@@ -1512,7 +1555,7 @@ function arrancarNavegador () {
   function agendarMusica () {
     const spec = CANCIONES[CANCION_ID].estudio;
     if (spec) { agendarEstudio(spec); return; }
-    const b = ahora();
+    const b = ahoraAudio();
     while (proxBeat < b + 2) {
       const t = t0 + proxBeat * SPB;
       const c = Math.floor(proxBeat / 4), u = proxBeat - c * 4;
@@ -1587,6 +1630,7 @@ function arrancarNavegador () {
           destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
           chispas(e.x, e.y, Math.round(7 - 4 * e.suc), true, mezcla(C.impulsoRGB, C.suciaRGB, e.suc));
           squash = 1;
+          celebrar(e);
           continue;
         }
         // acento: la nota que cae en el pulso pega mas fuerte. Todas iguales es
@@ -1603,6 +1647,7 @@ function arrancarNavegador () {
         destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
         chispas(e.x, e.y, Math.round(7 - 4 * e.suc), true, mezcla(C.teclaRGB, C.suciaRGB, e.suc));
         squash = 1;
+        celebrar(e);
       } else if (e.tipo === 'ligada') {
         lead(ac.currentTime, e.f, 0.5, 0.15, e.desde, e.suc);
         if (!NOTAS[e.i].riel)
@@ -1617,6 +1662,7 @@ function arrancarNavegador () {
         aviso(e);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
         chispas(e.x, e.y, Math.round(10 - 6 * e.suc), true, mezcla(C.teclaRGB, C.suciaRGB, e.suc));
+        celebrar(e);
       } else if (e.tipo === 'saltoRiel') {
         // el saltito sobre el riel: mudo (la nota larga sigue sonando)
         squash = 0.8;
@@ -1677,7 +1723,17 @@ function arrancarNavegador () {
   };
   let avisoMuerte = null;
   function morirOReiniciar () {
-    avisoMuerte = PORQUE[s.causa] ? { txt: PORQUE[s.causa], t: performance.now() } : null;
+    // Cuanto de la cancion tocaste, contra tu propio techo. El porcentaje es
+    // el que hace que el reintento salga solo: "me faltaba poco" es una frase
+    // que solo existe si el juego te dice cuanto faltaba.
+    const pct = Math.min(100, Math.round(s.x / LARGO * 100));
+    const antes = leerRecord(CANCION_ID);
+    guardarRecord(CANCION_ID, pct, s.limpias.size);
+    avisoMuerte = {
+      txt: PORQUE[s.causa] || null,
+      pct, record: antes ? antes.pct : 0, nuevo: !antes || pct > antes.pct,
+      t: performance.now()
+    };
     rielCerrar(); eRielCerrar();
     mejor = Math.max(mejor, s.limpias.size);
     intento++;
@@ -1689,6 +1745,7 @@ function arrancarNavegador () {
     desvios.length = 0;
     marcas.length = 0;
     avisos.length = 0;
+    aros.length = 0;
     flash = 1;
   }
 
@@ -1700,9 +1757,76 @@ function arrancarNavegador () {
     golpesVista.length = 0; padsVista.length = 0;
     intento = 1; mejor = 0;
     s = crearSim();
-    estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0;
+    estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
     corriendo = true;
     arrancarAudio();
+  }
+
+  // CALIBRAR. Suenan 16 golpes y vos tocas encima. Lo que se mide no es tu
+  // pulso sino el retraso del aparato: si TODOS tus toques llegan 90 ms tarde,
+  // no es que toques mal, es que el sonido salio 90 ms tarde. Se guarda la
+  // MEDIANA -- un toque perdido no puede mover el resultado, y el promedio si
+  // se lo lleva puesto.
+  let calib = null;
+  function calibrar () {
+    arrancarAudio();
+    const t = ac.currentTime + 1.4, P = 0.6;          // 100 BPM, una cuenta comoda
+    const clics = [];
+    for (let i = 0; i < 16; i++) {
+      const tc = t + i * P;
+      clics.push(tc);
+      kick(tc);
+      if (i % 4 === 0) golpe(tc, 1500, 0.045, 0.16, 'square');
+    }
+    calib = { clics, devs: [], desde: t, fin: t + 15 * P + 0.45, listo: null };
+  }
+  function tocarCalib () {
+    if (!calib || calib.listo) return;
+    const t = ac.currentTime;
+    let d = Infinity;
+    for (const c of calib.clics) if (Math.abs(t - c) < Math.abs(d)) d = t - c;
+    if (Math.abs(d) < 0.3) calib.devs.push(d);
+  }
+  function cerrarCalib () {
+    const d = calib.devs.slice().sort((a, b) => a - b);
+    const m = d.length ? d[d.length >> 1] : 0;
+    // solo se compensa el ATRASO: adelantarse es cosa tuya, no del aparato
+    desfase = !d.length || Math.abs(m) < 0.012 ? 0 : Math.max(0, Math.min(0.35, m));
+    try { localStorage.setItem('drible:desfase', String(desfase)); } catch (_) {}
+    calib.listo = { ms: Math.round(desfase * 1000), n: d.length };
+  }
+  function dibujarCalib (w, h) {
+    cx.textAlign = 'center';
+    cx.fillStyle = C.peligro; cx.font = '17px system-ui';
+    cx.fillText('CALIBRAR — toca con lo que ESCUCHAS', w / 2, h * 0.2);
+    cx.fillStyle = C.tenue; cx.font = '13px system-ui';
+    cx.fillText('no mires la pantalla: seguí el golpe con el oído', w / 2, h * 0.2 + 24);
+    if (calib.listo) {
+      cx.fillStyle = C.impulso; cx.font = 'bold 40px system-ui';
+      cx.fillText(`${calib.listo.ms} ms`, w / 2, h * 0.47);
+      cx.fillStyle = C.esfera; cx.font = '14px system-ui';
+      cx.fillText(calib.listo.n >= 5
+        ? `guardado — ${calib.listo.n} toques medidos`
+        : 'muy pocos toques: probá de nuevo', w / 2, h * 0.47 + 26);
+      return;
+    }
+    const falta = Math.max(0, calib.desde - ac.currentTime);
+    cx.fillStyle = C.esfera; cx.font = 'bold 30px system-ui';
+    cx.fillText(falta > 0 ? '…' : `${calib.devs.length}`, w / 2, h * 0.47);
+    cx.fillStyle = C.tenue; cx.font = '12px system-ui';
+    cx.fillText(falta > 0 ? 'preparate' : 'toques', w / 2, h * 0.47 + 22);
+    // las marcas: donde cayo cada toque respecto del golpe
+    const mw = 200, my = h * 0.62;
+    cx.fillStyle = C.tenue; cx.fillRect(w / 2 - mw / 2, my, mw, 2);
+    cx.fillStyle = 'rgba(255,255,255,0.9)'; cx.fillRect(w / 2 - 1, my - 8, 2, 18);
+    for (const d of calib.devs) {
+      const v = Math.max(-1, Math.min(1, d / 0.3));
+      cx.fillStyle = `rgba(${C.esferaRGB},0.75)`;
+      cx.fillRect(w / 2 + v * mw / 2 - 1, my - 6, 2, 14);
+    }
+    cx.fillStyle = C.tenue; cx.font = '10px system-ui';
+    cx.fillText('antes', w / 2 - mw / 2 - 22, my + 5);
+    cx.fillText('tarde', w / 2 + mw / 2 + 22, my + 5);
   }
 
   // Saltar a una seccion: para revisar un tramo sin tocar la cancion entera.
@@ -1771,9 +1895,9 @@ function arrancarNavegador () {
     s = crearSim();
     s.x = Math.max(0, k.x0);
     s.estado = 'apoyada'; s.tecla = k.i; s.y = k.y; s.saliendoDe = -1;
-    t0 = ac.currentTime - s.x * SPB;
-    proxBeat = Math.floor(s.x * 4) / 4;
-    estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0;
+    t0 = ac.currentTime - desfase - s.x * SPB;   // el juego va s.x; el audio, adelante
+    proxBeat = Math.floor(ahoraAudio() * 4) / 4;
+    estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     finSonado = false;
   }
@@ -1795,6 +1919,8 @@ function arrancarNavegador () {
   // En el menu, un toque pelado (espacio, click) arranca el nivel 1; el nivel
   // se elige con 1/2 en el teclado o tocando su renglon.
   function bajar (nivel = 0) {
+    if (calib) { tocarCalib(); return; }
+    if (nivel === 'calibrar') { calibrar(); return; }
     if (!corriendo) { empezar(NIVELES[nivel] || NIVELES[0]); return; }
     if (s.meta) { alMenu(); return; }
     s.sostiene = true;
@@ -1820,7 +1946,8 @@ function arrancarNavegador () {
     if (!esBoton(e)) return;
     e.preventDefault();
     if (e.repeat) return;
-    if (!corriendo && e.key >= '1' && e.key <= String(NIVELES.length)) { bajar(+e.key - 1); return; }
+    if (!corriendo && !calib && (e.key === 'c' || e.key === 'C')) { bajar('calibrar'); return; }
+    if (!corriendo && !calib && e.key >= '1' && e.key <= String(NIVELES.length)) { bajar(+e.key - 1); return; }
     bajar();
   }, { capture: true });
   addEventListener('keyup', e => { if (esBoton(e)) subir(); }, { capture: true });
@@ -1836,9 +1963,11 @@ function arrancarNavegador () {
   cv.addEventListener('pointerdown', e => {
     e.preventDefault();
     if (!corriendo) {
-      // cada renglon del menu es una franja: 1 arriba, 2 al medio, 3 abajo
+      if (calib) { bajar(); return; }
+      // cada renglon del menu es una franja: 1 arriba, 2 al medio, 3 abajo,
+      // y el pie de pagina es calibrar
       const y = e.offsetY / cv.clientHeight;
-      bajar(y > 0.37 ? 2 : y > 0.295 ? 1 : 0);
+      bajar(y > 0.80 ? 'calibrar' : y > 0.37 ? 2 : y > 0.295 ? 1 : 0);
       return;
     }
     bajar();
@@ -1854,6 +1983,11 @@ function arrancarNavegador () {
     requestAnimationFrame(cuadro);
     const dtSeg = Math.min(0.05, (t - antes) / 1000);
     antes = t;
+    if (calib) {
+      if (!calib.listo && ac.currentTime > calib.fin) cerrarCalib();
+      else if (calib.listo && ac.currentTime > calib.fin + 3.2) calib = null;
+      dibujar(dtSeg); return;
+    }
     if (!corriendo) { dibujar(dtSeg); return; }
 
     agendarMusica();
@@ -1867,7 +2001,10 @@ function arrancarNavegador () {
 
     procesar();
     if (!s.viva) { golpe(ac.currentTime, 90, 0.3, 0.4, 'sawtooth'); ruido(ac.currentTime, 0.2, 0.28); morirOReiniciar(); }
-    if (s.meta && !finSonado) { finSonado = true; rielCerrar(); eRielCerrar(); sonarFinal(); }
+    if (s.meta && !finSonado) {
+      finSonado = true; rielCerrar(); eRielCerrar(); sonarFinal();
+      guardarRecord(CANCION_ID, 100, s.limpias.size);
+    }
     dibujar(dtSeg);
   }
   requestAnimationFrame(cuadro);
@@ -1904,6 +2041,33 @@ function arrancarNavegador () {
     cx.beginPath(); cx.moveTo(MX(0), arriba + alto + 14); cx.lineTo(MX(LARGO), arriba + alto + 14); cx.stroke();
   }
 
+  // EL INFORME POR SECCION. Una corrida que termina y se evapora no deja nada.
+  // Esto dice donde tocaste bien y donde te caiste, con los nombres del arreglo
+  // --motor, vuelo, gravedad--, que es como el jugador ya piensa la cancion.
+  function dibujarInforme (w, h) {
+    if (!SECCIONES.length) return;
+    const tramos = SECCIONES.map((z, i) => {
+      const x1 = i + 1 < SECCIONES.length ? SECCIONES[i + 1].x0 : LARGO;
+      const dentro = NOTAS.filter(n => !n.silencio && n.xm >= z.x0 && n.xm < x1);
+      return { n: z.n, total: dentro.length, lim: dentro.filter(n => s.limpias.has(n.i)).length };
+    }).filter(t => t.total);
+    if (!tramos.length) return;
+    const bw = Math.min(110, (w - 40) / tramos.length);
+    const base = h * 0.84, alto = 50;
+    cx.textAlign = 'center';
+    tramos.forEach((t, i) => {
+      const x = w / 2 + (i - (tramos.length - 1) / 2) * bw;
+      const p = t.lim / t.total;
+      cx.fillStyle = 'rgba(232,230,224,0.09)';
+      cx.fillRect(x - bw * 0.3, base - alto, bw * 0.6, alto);
+      cx.fillStyle = p >= 1 ? C.impulso : p >= 0.8 ? C.esfera : p >= 0.5 ? C.tecla : C.sucia;
+      cx.fillRect(x - bw * 0.3, base - alto * p, bw * 0.6, alto * p);
+      cx.fillStyle = C.tenue; cx.font = '10px system-ui';
+      cx.fillText(`${Math.round(p * 100)}%`, x, base - alto - 5);
+      cx.fillText(t.n.length > 12 ? t.n.slice(0, 11) + '…' : t.n, x, base + 13);
+    });
+  }
+
   function dibujar (dtSeg) {
     const w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
     if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
@@ -1918,7 +2082,9 @@ function arrancarNavegador () {
     // Respirar. Los golpes se agendaron con el audio, asi que la imagen late
     // EXACTAMENTE con lo que se escucha, no con un reloj propio que se corre.
     if (ac && corriendo) {
-      const ahoraAc = ac.currentTime;
+      // se consumen con el desfase puesto: el mundo late cuando el golpe se
+      // ESCUCHA, no cuando se agendo
+      const ahoraAc = ac.currentTime - desfase;
       while (golpesVista.length && golpesVista[0] <= ahoraAc) { golpesVista.shift(); pump = 1; }
       while (padsVista.length && padsVista[0] <= ahoraAc) { padsVista.shift(); padLuz = 1; }
     }
@@ -2143,6 +2309,16 @@ function arrancarNavegador () {
       cx.lineWidth = 2.5 * (1 - e);
       cx.beginPath(); cx.arc(px(d.x), py(d.y), (0.05 + e * 0.42) * esc, 0, Math.PI * 2); cx.stroke();
     }
+    // el anillo de la clavada: mas ancho, mas rapido y blanco -- se distingue
+    // del destello comun de un vistazo, que es todo lo que tiene que hacer
+    for (let i = aros.length - 1; i >= 0; i--) {
+      const a = aros[i], e = (performance.now() - a.t) / 520;
+      if (e > 1) { aros.splice(i, 1); continue; }
+      const q = 1 - Math.pow(1 - e, 3);            // sale disparado y frena
+      cx.strokeStyle = `rgba(255,252,240,${(1 - e) * 0.75})`;
+      cx.lineWidth = 3.5 * (1 - e);
+      cx.beginPath(); cx.arc(px(a.x), py(a.y), (0.06 + q * 0.85) * esc, 0, Math.PI * 2); cx.stroke();
+    }
     // el aviso de cuanto te corriste, sobre la nota misma
     cx.textAlign = 'center';
     for (let i = avisos.length - 1; i >= 0; i--) {
@@ -2181,7 +2357,10 @@ function arrancarNavegador () {
     // aterrizar con un resorte --el golpe no termina en el frame en que toca--
     // y se estira cayendo. Todo esto es solo dibujo: la fisica sigue exacta,
     // que es lo que sostiene la calibracion de martillos y orbes.
-    squash = Math.max(0, squash - dtSeg * 7);
+    // la retencion: en la clavada el aplastado se SOSTIENE un instante antes de
+    // soltarse. Es lo que hace que el golpe pese en vez de pasar
+    if (retencion > 0) retencion -= dtSeg;
+    else squash = Math.max(0, squash - dtSeg * 7);
     // rodadura sin patinar: dtheta = dx / R. A la mitad de la velocidad real,
     // porque a cinco vueltas por segundo el ojo ya no ve giro, ve parpadeo.
     if (corriendo && s.viva && !s.meta) giro += (dtSeg / SPB) / R * 0.5;
@@ -2245,17 +2424,22 @@ function arrancarNavegador () {
 
     // HUD
     if (!corriendo) {
+      if (calib) { dibujarCalib(w, h); hud.textContent = ''; return; }
       cx.textAlign = 'center';
       cx.fillStyle = C.peligro; cx.font = '17px system-ui';
       cx.fillText('DRIBLE — elegi el nivel', w / 2, h * 0.16);
       // Dos canciones, mismo margen de error: si el nivel 1 sale facil y el 2
       // no, la dificultad era la cancion, no el margen.
+      const marca = id => {
+        const r = leerRecord(id);
+        return r ? `   ${r.pct >= 100 ? '★ completa' : r.pct + '%'} · ♪ ${r.limpias}` : '';
+      };
       cx.fillStyle = C.tecla; cx.font = '15px system-ui';
-      cx.fillText(`1 — ${nombreCancion('esfera')} · negras y blancas · 100 BPM`, w / 2, h * 0.26);
+      cx.fillText(`1 — ${nombreCancion('esfera')} · negras y blancas · 100 BPM${marca('esfera')}`, w / 2, h * 0.26);
       cx.fillStyle = C.esfera;
-      cx.fillText(`2 — ${nombreCancion('aurora')} · el galope del coro · 112 BPM`, w / 2, h * 0.33);
+      cx.fillText(`2 — ${nombreCancion('aurora')} · el galope del coro · 112 BPM${marca('aurora')}`, w / 2, h * 0.33);
       cx.fillStyle = C.impulso;
-      cx.fillText(`3 — ${nombreCancion('viaje')} · la cancion del estudio, actos 1 y 2 · 112 BPM`, w / 2, h * 0.40);
+      cx.fillText(`3 — ${nombreCancion('viaje')} · la cancion entera del estudio${marca('viaje')}`, w / 2, h * 0.40);
       cx.fillStyle = C.tenue; cx.font = '12px system-ui';
       cx.fillText('teclas 1/2/3, o toca su renglon · ESPACIO arranca el nivel 1', w / 2, h * 0.46);
       cx.font = '13px system-ui';
@@ -2267,6 +2451,12 @@ function arrancarNavegador () {
         'martillar no sirve: el boton se queda sordo',
         'si caes a la red, TOCA para volver arriba'
       ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));
+      // En un telefono el sonido sale tarde y el juego se siente roto sin que
+      // sea culpa tuya. Esta linea es la diferencia entre "no me sale" y "no
+      // estaba calibrado".
+      cx.fillStyle = C.impulso; cx.font = '13px system-ui';
+      cx.fillText(desfase ? `C — calibrar el sonido   (ahora: ${Math.round(desfase * 1000)} ms)`
+        : 'C — calibrar el sonido   (recomendado en el telefono)', w / 2, h * 0.86);
     } else {
       cx.textAlign = 'left';
       cx.fillStyle = C.red; cx.font = '14px system-ui';
@@ -2278,10 +2468,20 @@ function arrancarNavegador () {
         const dt = (performance.now() - avisoMuerte.t) / 2600;
         if (dt >= 1) avisoMuerte = null;
         else {
+          const a = avisoMuerte;
           cx.save();
           cx.textAlign = 'center'; cx.globalAlpha = Math.min(1, 4 * (1 - dt));
-          cx.fillStyle = C.esfera; cx.font = 'bold 15px system-ui';
-          cx.fillText(avisoMuerte.txt, w / 2, h * 0.30);
+          if (a.txt) {
+            cx.fillStyle = C.esfera; cx.font = 'bold 15px system-ui';
+            cx.fillText(a.txt, w / 2, h * 0.24);
+          }
+          // el numero, grande: es lo que te hace tocar otra vez
+          cx.fillStyle = a.nuevo ? C.impulso : C.peligro;
+          cx.font = 'bold 34px system-ui';
+          cx.fillText(`${a.pct}%`, w / 2, h * 0.33);
+          cx.fillStyle = C.tenue; cx.font = '13px system-ui';
+          cx.fillText(a.nuevo && a.record ? `nuevo record — antes ${a.record}%`
+            : a.record ? `tu record: ${a.record}%` : 'tu primera vuelta', w / 2, h * 0.33 + 20);
           cx.restore();
         }
       }
@@ -2342,10 +2542,24 @@ function arrancarNavegador () {
       }
       if (s.meta) {
         dibujarMapa(w, h);                         // la cancion entera, de una mirada
-        cx.textAlign = 'center'; cx.fillStyle = C.peligro; cx.font = '18px system-ui';
-        cx.fillText(`${s.limpias.size} limpias · ${chuecas} chuecas · racha ${s.mejorRacha}`, w / 2, h * 0.18);
+        // El RANGO: la maestria como premio, y nada mas que eso. Sin monedas,
+        // sin energia -- lo unico que se desbloquea es saber que lo hiciste.
+        const tot = TOTAL_NOTAS || 1;
+        const pl = s.limpias.size / tot;
+        const todoOrbe = !ORBES.length || s.orbes >= ORBES.length;
+        const rango = pl >= 1 && todoOrbe ? 'AURORA' : pl >= 0.95 ? 'VIRTUOSO'
+          : pl >= 0.85 ? 'MUSICO' : pl >= 0.7 ? 'AFINADO' : 'LLEGASTE';
+        cx.textAlign = 'center';
+        cx.fillStyle = rango === 'AURORA' ? C.impulso : C.peligro;
+        cx.font = 'bold 30px system-ui';
+        cx.fillText(rango, w / 2, h * 0.11);
+        cx.fillStyle = C.peligro; cx.font = '14px system-ui';
+        cx.fillText(`${s.limpias.size}/${tot} limpias · ${s.perfectas.size} clavadas · ` +
+          `${chuecas} chuecas · racha ${s.mejorRacha}` +
+          (ORBES.length ? ` · ${s.orbes}/${ORBES.length} orbes` : ''), w / 2, h * 0.11 + 24);
+        dibujarInforme(w, h);
         cx.fillStyle = C.tenue; cx.font = '13px system-ui';
-        cx.fillText('toca para volver al menu', w / 2, h * 0.18 + 22);
+        cx.fillText('toca para volver al menu', w / 2, h * 0.95);
       }
     }
     hud.textContent = '';
