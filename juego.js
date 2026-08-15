@@ -1704,7 +1704,15 @@ function arrancarNavegador () {
     s.eventos.length = 0;
   }
 
+  // Morir sin saber por que es lo mas frustrante que puede pasar: el juego lo
+  // sabe (s.causa) y hasta ahora se lo guardaba.
+  const PORQUE = {
+    techo: 'te aplasto el techo — bajo el techo NO se toca',
+    hueco: 'soltaste el riel sobre el vacio — ahi hay que mantener'
+  };
+  let avisoMuerte = null;
   function morirOReiniciar () {
+    avisoMuerte = PORQUE[s.causa] ? { txt: PORQUE[s.causa], t: performance.now() } : null;
     rielCerrar(); eRielCerrar();
     mejor = Math.max(mejor, s.limpias.size);
     intento++;
@@ -1723,6 +1731,7 @@ function arrancarNavegador () {
 
   function empezar (id) {
     elegirCancion(id);
+    armarLecciones();
     golpesVista.length = 0; padsVista.length = 0;
     intento = 1; mejor = 0;
     s = crearSim();
@@ -1734,6 +1743,64 @@ function arrancarNavegador () {
   // Saltar a una seccion: para revisar un tramo sin tocar la cancion entera.
   // Deja la esfera parada en la primera tecla de la seccion y corre el reloj
   // del audio hasta ahi, asi lo que se escucha es lo que corresponde.
+  // ENSEÑAR EN EL MOMENTO. El menu era un muro de once renglones que nadie
+  // lee. Cada verbo se explica solo, encima de la primera cosa que lo pide, y
+  // deja de aparecer apenas el jugador demuestra que lo sabe: la leccion se
+  // gasta cuando se aprende, como corresponde.
+  const aprendidas = new Set();
+  let lecciones = [];
+  function armarLecciones () {
+    const primera = f => NOTAS.find(n => !n.silencio && f(n));
+    const L = [];
+    const nota = primera(n => !n.riel && !n.piso && !n.porCaida && !n.bajo);
+    if (nota) L.push({ id: 'tocar', x: nota.xm, y: nota.y, txt: 'TOCA al pisarla',
+      ok: st => st.limpias.has(nota.i) });
+    const riel = primera(n => n.riel);
+    if (riel) L.push({ id: 'riel', x: riel.xm, y: riel.y, txt: 'MANTENE apretado',
+      ok: st => st.limpias.has(riel.i) });
+    const lig = primera(n => n.porCaida);
+    if (lig && NOTAS[lig.i - 1]) L.push({ id: 'ligada', x: NOTAS[lig.i - 1].xm,
+      y: NOTAS[lig.i - 1].y, txt: 'esta no se toca: dejate caer',
+      ok: st => st.tocadas.has(lig.i) });
+    const grave = primera(n => n.bajo);
+    if (grave) L.push({ id: 'bajo', x: grave.xm, y: grave.y, txt: 'abajo toca el BAJO',
+      ok: st => st.limpias.has(grave.i) });
+    if (ORBES.length) L.push({ id: 'orbe', x: ORBES[0].x, y: ORBES[0].y,
+      txt: 'atravesalo: es una nota', ok: st => st.orbesTocados.has(ORBES[0].i) });
+    if (RESORTES.length) L.push({ id: 'resorte', x: RESORTES[0].x, y: 0,
+      txt: 'pisalo y volves arriba', ok: st => st.resortesUsados.has(RESORTES[0].x) });
+    if (TECHOS.length) L.push({ id: 'techo', x: TECHOS[0].x0, y: TECHOS[0].y,
+      txt: 'bajo el techo NO se toca', ok: st => st.viva });
+    if (PISTONES.length) L.push({ id: 'piston', x: PISTONES[0].x, y: PISTONES[0].y,
+      txt: 'no te adelantes o te clava', ok: st => !st.pistones.has(PISTONES[0].x) });
+    if (HUECOS.length) L.push({ id: 'abismo', x: HUECOS[0].x0, y: 0,
+      txt: 'sobre el vacio NO sueltes', ok: st => st.viva });
+    lecciones = L.filter(l => !aprendidas.has(l.id)).sort((a, b) => a.x - b.x);
+  }
+  function dibujarLecciones (px, py) {
+    for (const l of lecciones) {
+      if (aprendidas.has(l.id)) continue;
+      const d = l.x - s.x;
+      if (d > 2.6 || d < -0.7) {
+        if (d < -0.7 && l.ok(s)) aprendidas.add(l.id);   // lo hizo: no se repite
+        continue;
+      }
+      const a = Math.min(1, Math.min((2.6 - d) / 0.8, (d + 0.7) / 0.5));
+      cx.save();
+      cx.globalAlpha = Math.max(0, a);
+      cx.textAlign = 'center';
+      cx.fillStyle = C.peligro; cx.font = 'bold 13px system-ui';
+      cx.fillText(l.txt, px(l.x), py(l.y) - 30);
+      cx.strokeStyle = `rgba(${C.esferaRGB},0.85)`; cx.lineWidth = 2;
+      cx.beginPath();
+      cx.moveTo(px(l.x), py(l.y) - 24); cx.lineTo(px(l.x), py(l.y) - 13);
+      cx.moveTo(px(l.x) - 4, py(l.y) - 18); cx.lineTo(px(l.x), py(l.y) - 12);
+      cx.lineTo(px(l.x) + 4, py(l.y) - 18);
+      cx.stroke();
+      cx.restore();
+    }
+  }
+
   let avisoSeccion = null;
   function saltarA (bx) {
     rielCerrar(); eRielCerrar();
@@ -2076,12 +2143,6 @@ function arrancarNavegador () {
         cx.lineTo(px(k.x1) - 1, punta - 11);
         cx.lineTo(px(k.x1) - 1, punta - 3);
         cx.stroke();
-        const primero = NOTAS.find(n => n.riel);
-        if (primero && k.i === primero.i && !sono) {
-          cx.fillStyle = C.peligro; cx.font = 'bold 11px system-ui'; cx.textAlign = 'center';
-          cx.fillText('MANTENE', px(k.xm), py(k.y) - 16);
-          cx.fillText('▼', px(k.xm), py(k.y) - 5);
-        }
       }
       // EL PUNTO EXACTO. La tecla entera es la ventana en la que la nota suena;
       // esta marca es donde sale afinada. Son cosas distintas y hasta ahora solo
@@ -2174,6 +2235,8 @@ function arrancarNavegador () {
       cx.beginPath(); cx.arc(px(p.x), py(p.y), 2.2 * p.vida, 0, Math.PI * 2); cx.fill();
     }
 
+    dibujarLecciones(px, py);
+
     // LA ESFERA. Rueda de verdad (una pelota que no gira no pesa), se hunde al
     // aterrizar con un resorte --el golpe no termina en el frame en que toca--
     // y se estira cayendo. Todo esto es solo dibujo: la fisica sigue exacta,
@@ -2256,20 +2319,13 @@ function arrancarNavegador () {
       cx.fillStyle = C.tenue; cx.font = '12px system-ui';
       cx.fillText('teclas 1/2/3, o toca su renglon · ESPACIO arranca el nivel 1', w / 2, h * 0.46);
       cx.font = '13px system-ui';
+      // Un solo boton y tres reglas. Todo lo demas lo enseña el mapa cuando
+      // pasa: un muro de once renglones no lo lee nadie.
       [
-        'cada tecla azul es una nota: tocala al pisarla',
-        'caes ANTES de la marca blanca: roda, y golpea al cruzar la linea',
-        'a tiempo suena afinada; corrida suena chueca',
-        'martillar el boton no sirve: se queda sordo',
-        'las largas (rayadas) se MANTIENEN: el riel te lanza solo al final',
-        'sobre un riel sonado, TOCA otra vez: saltito a los orbes de arriba',
-        'las que cuelgan de un arco no se tocan: dejate caer',
-        'si caes a la red, TOCA: te relanza a la proxima tecla',
-        'en el MOTOR la esfera toca el BAJO: teclas graves que trepan',
-        'los ORBES se tocan con el cuerpo: salto fino = el arco los enhebra',
-        'los trampolines VERDES te devuelven arriba: pisalos',
-        'los MARTILLOS naranjas: adelantarse te clava contra la red',
-        'bajo el techo NO se toca'
+        'un boton: TOCA cada tecla justo al pisarla',
+        'a tiempo suena afinada; corrida se ensucia',
+        'martillar no sirve: el boton se queda sordo',
+        'si caes a la red, TOCA para volver arriba'
       ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));
     } else {
       cx.textAlign = 'left';
@@ -2278,6 +2334,17 @@ function arrancarNavegador () {
       // el atajo de revision, dicho donde se necesita
       cx.fillStyle = C.tenue; cx.font = '11px system-ui';
       cx.fillText('◀ ▶  saltar de seccion', 12, h - 10);
+      if (avisoMuerte) {
+        const dt = (performance.now() - avisoMuerte.t) / 2600;
+        if (dt >= 1) avisoMuerte = null;
+        else {
+          cx.save();
+          cx.textAlign = 'center'; cx.globalAlpha = Math.min(1, 4 * (1 - dt));
+          cx.fillStyle = C.esfera; cx.font = 'bold 15px system-ui';
+          cx.fillText(avisoMuerte.txt, w / 2, h * 0.30);
+          cx.restore();
+        }
+      }
       if (avisoSeccion) {
         const dt = (performance.now() - avisoSeccion.t) / 1600;
         if (dt >= 1) avisoSeccion = null;
