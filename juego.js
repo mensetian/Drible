@@ -132,7 +132,7 @@ const CANCIONES = {
       'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             //  9  Am  el coro otra vez
       'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 10  F   ahora sube
       'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 11  C   la cima del coro
-      'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 12  G
+      'D5:2 B4:.5 C5:.5 D5:1',                            // 12  G
       '-:4',                                              // 13  Am  SILENCIO: rodar
       'C5:1 D5:1 E5:1 G5:1',                              // 14  F   el final trepa
       'D5:.5 B4:.5 D5:3',                                 // 15  C
@@ -189,7 +189,7 @@ const CANCIONES = {
       'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             // 17  Am
       'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 18  F
       'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 19  C
-      'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 20  G
+      'D5:2 B4:.5 C5:.5 D5:1',                            // 20  G
       // VUELO -- el verso: el BAJO es el protagonista (cadencia andaluza), y
       // el mapa lo dice con el cuerpo: la melodia canta arriba, el bajo espera
       // abajo, y cada compas es un zigzag entre las dos bandas.
@@ -217,7 +217,7 @@ const CANCIONES = {
       'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             // 37  Am
       'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 38  F
       'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 39  C
-      'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 40  G
+      'D5:2 B4:.5 C5:.5 D5:1',                            // 40  G
       // NEBULOSA -- el respiro. La melodia es el FANTASMA del coro: hilos
       // largos con huecos enormes. Y aca vive el riesgo/premio: son rieles de
       // la segunda mitad, o sea que abajo no hay red. Sostener vale la vida, y
@@ -246,7 +246,7 @@ const CANCIONES = {
       'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             // 57  Am
       'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 58  F
       'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 59  C
-      'D5:1.5 B4:.5 C5:.5 D5:1.5',                        // 60  G
+      'D5:2 B4:.5 C5:.5 D5:1',                            // 60  G
       // AURORA · aterrizaje -- la vuelta de la victoria. Sin obstaculos: los
       // rieles del final NO llevan abismo (ver sinAbismo), porque el premio no
       // se cobra con un susto.
@@ -786,7 +786,11 @@ function pistones () {
       // cabeza va pasada la cima, del lado que baja: ahi la esfera CAE sobre
       // el caño en vez de rozarlo, que es lo que se siente como pisarlo.
       const vy = Math.min(1.9, (sig.y - k.y) / T + G * T / 2);
-      const dt = Math.min(T * 0.72, vy / G + 0.2);
+      // ...del lado que BAJA, siempre: con el minimo de afuera, un vuelo corto
+      // dejaba la cabeza en la subida, donde la esfera pasa rozando por debajo
+      // y nunca la pisa -- un caño impisable que ademas se lleva mudo un golpe
+      // del arreglo. Si el arco no da para la bajada, mejor no poner caño.
+      const dt = Math.max(vy / G + 0.1, Math.min(T * 0.72, vy / G + 0.2));
       if (dt <= 0.15 || dt >= T - 0.08) continue;
       const tope = +(k.y + vy * dt - G * dt * dt / 2).toFixed(3);
       if (tope < 2 * R + 0.06) continue;          // tan bajo que ya es la red
@@ -858,7 +862,20 @@ export function elegirCancion (id) {
   HUECOS = NOTAS
     .filter(n => n.riel && n.b >= LARGO / 2 && n.x1 - n.x0 > 1.2 && !trasSilencio(n) &&
       !libre.some(z => n.x0 < z.x1 && n.x1 > z.x0))
-    .map(n => ({ x0: +(n.x0 + 0.7).toFixed(3), x1: +(n.x1 - 0.1).toFixed(3) }));
+    .map(n => {
+      // ...y no puede empezar antes de que la esfera alcance a TOCAR LA RED. Si
+      // fallaste la nota anterior salis de su borde con vy=0 y caes; desde la
+      // banda de la melodia esa caida tarda mas de 0.85 tiempos, y con el hueco
+      // clavado a 0.7 cruzabas el cero ya adentro. Se moria sin un solo toque
+      // posible: en el aire el boton no responde (salvo el coyote, que vence
+      // mucho antes) y el riel queda MAS ARRIBA, asi que la esfera le pasa por
+      // debajo. Un fallo costaba la corrida entera en vez de la nota.
+      const ant = NOTAS[n.i - 1];
+      const caida = ant && !ant.silencio ? Math.sqrt(2 * ant.y / G) + 0.25 : 0.7;
+      return { x0: +(n.x0 + Math.max(0.7, caida)).toFixed(3), x1: +(n.x1 - 0.1).toFixed(3) };
+    })
+    // si de tan corrido el abismo ya no es un abismo, no hay abismo
+    .filter(h => h.x1 - h.x0 > 0.3);
   // La zona de dribleo se sostiene PICANDO: entre pad y pad la red se corta.
   // Pasarla sin driblear no existe -- rodar te lleva al abismo. Picar corrido
   // no te tira (el bote se corrige al proximo pad): el espacio perdona, el
@@ -1182,14 +1199,41 @@ function aplicar (s, xt = s.x) {
     // ...pero nunca a traves de un techo: ese arco se estrella. Si la proxima
     // tecla queda del otro lado de un silencio con techo, el toque es el
     // saltito de siempre; pasado el techo, el proximo toque si relanza.
+    // ...y solo a una tecla a la que se llegue CAYENDO. Sin esto el rescate
+    // resolvia el impulso para estar a la altura de la tecla justo sobre su
+    // borde, y a una tecla cercana y alta eso es un cohete: se llega todavia
+    // subiendo, se la atraviesa por abajo, y la esfera sigue de largo hasta
+    // dos tiempos despues -- de cabeza contra el techo del silencio siguiente.
+    // Es la misma razon por la que existe vueloMinimo; lanzar() ya la usaba y
+    // el rescate no. Si no hay ninguna alcanzable, queda el saltito de abajo.
+    // ...y se apunta MAS ADENTRO si al borde no se llega, igual que lanzar():
+    // a un riel largo se sube donde se pueda, aunque sea tarde (la nota entra
+    // corrida, que es el precio justo). Apuntar siempre al borde hacia una
+    // tecla alta y cercana pedia un cohete: se llegaba todavia subiendo, se la
+    // atravesaba por abajo y la esfera seguia de largo hasta el techo del
+    // silencio siguiente. Y rendirse cuando el borde no daba dejaba a la esfera
+    // rodando debajo de un riel de cuatro tiempos, derecho a su abismo.
+    const donde = n => Math.max(n.x0 + MIRA, s.x + vueloMinimo(n.y - s.y));
+    // Lo que importa es DONDE SE ATERRIZA, no donde empieza la tecla: si no,
+    // un riel de cuatro tiempos bajo el que ya estas parado queda invisible
+    // para el rescate --su borde quedo atras-- y la esfera se queda rodando
+    // debajo de la unica tecla a la que podia subir, derecho a su abismo.
     const k = NOTAS.find(n =>
-      !n.silencio && n.x0 + MIRA > s.x + 0.2 &&
+      !n.silencio && donde(n) > s.x + 0.2 && donde(n) <= n.x1 - 0.02 &&
       !TECHOS.some(t => (n.x0 > t.x0 - 0.3 && n.x0 < t.x1) || (t.x0 > s.x && t.x0 < n.x0)));
-    s.estado = 'aire';
     if (k) {
-      const T = Math.max(0.2, k.x0 + MIRA - s.x);
+      s.estado = 'aire';
+      const T = Math.max(0.2, donde(k) - s.x);
       s.vy = Math.min(1.9, (k.y - s.y) / T + G * T / 2);
-    } else s.vy = 0.62;
+    } else if (!TECHOS.some(t => t.x0 > s.x - 0.1 && t.x0 < s.x + 1.2)) {
+      s.estado = 'aire';
+      s.vy = 0.62;              // el saltito de siempre: ni sube ni cuesta nada
+    }
+    // ...pero si hay un techo por delante NO hay saltito: el saltito dura un
+    // tiempo entero y te deposita justo debajo, que es lo unico que el techo
+    // castiga. Tocar ahi no puede matarte por algo que todavia no se ve; el
+    // toque se gasta y se sigue rodando, que es exactamente lo que el techo
+    // pide. Antes esto mataba al que se caia una nota antes de un silencio.
     s.eventos.push({ tipo: 'saltoRed' });
     return true;
   }
@@ -1946,6 +1990,7 @@ function arrancarNavegador () {
     rielCerrar(); eRielCerrar();
     mejor = Math.max(mejor, s.limpias.size);
     intento++;
+    ensayo = false;      // morir reinicia en x=0, y eso ya es empezar de cero
     s = crearSim();
     t0 = ac.currentTime + 0.7;
     proxBeat = 0;
@@ -1999,11 +2044,19 @@ function arrancarNavegador () {
   }
   function cerrarCalib () {
     const d = calib.devs.slice().sort((a, b) => a - b);
-    const m = d.length ? d[d.length >> 1] : 0;
+    // Sin toques suficientes NO se escribe nada. Abrir la calibracion y no
+    // tocar (o tocar dos veces) borraba la medicion buena que ya estaba
+    // guardada, y encima la pantalla decia "guardado": la forma mas facil de
+    // romper el juego era mirar la pantalla que existe para arreglarlo.
+    if (d.length < 5) {
+      calib.listo = { ms: Math.round(desfase * 1000), n: d.length, guardado: false };
+      return;
+    }
+    const m = d[d.length >> 1];
     // solo se compensa el ATRASO: adelantarse es cosa tuya, no del aparato
-    desfase = !d.length || Math.abs(m) < 0.012 ? 0 : Math.max(0, Math.min(0.35, m));
+    desfase = Math.abs(m) < 0.012 ? 0 : Math.max(0, Math.min(0.35, m));
     try { localStorage.setItem('drible:desfase', String(desfase)); } catch (_) {}
-    calib.listo = { ms: Math.round(desfase * 1000), n: d.length };
+    calib.listo = { ms: Math.round(desfase * 1000), n: d.length, guardado: true };
   }
   function dibujarCalib (w, h) {
     cx.textAlign = 'center';
@@ -2014,10 +2067,10 @@ function arrancarNavegador () {
     if (calib.listo) {
       cx.fillStyle = C.impulso; cx.font = 'bold 40px system-ui';
       cx.fillText(`${calib.listo.ms} ms`, w / 2, h * 0.47);
-      cx.fillStyle = C.esfera; cx.font = '14px system-ui';
-      cx.fillText(calib.listo.n >= 5
+      cx.fillStyle = calib.listo.guardado ? C.esfera : C.sucia; cx.font = '14px system-ui';
+      cx.fillText(calib.listo.guardado
         ? `guardado — ${calib.listo.n} toques medidos`
-        : 'muy pocos toques: probá de nuevo', w / 2, h * 0.47 + 26);
+        : `muy pocos toques — sigue valiendo ${calib.listo.ms} ms`, w / 2, h * 0.47 + 26);
       return;
     }
     const falta = Math.max(0, calib.desde - ac.currentTime);
@@ -2198,7 +2251,20 @@ function arrancarNavegador () {
   let antes = performance.now();
   function cuadro (t) {
     requestAnimationFrame(cuadro);
-    const dtSeg = Math.min(0.05, (t - antes) / 1000);
+    // DOS RELOJES QUE NO PUEDEN SEPARARSE. El mundo avanza integrando cuadros
+    // (rAF) y la musica se agenda con el reloj del audio. Si el navegador deja
+    // de dar cuadros --pestaña escondida, telefono dormido, un tiron de 20 fps--
+    // el audio sigue corriendo y el mundo no: quedaban segundos de desfase para
+    // siempre, y al volver el agendador recorria de golpe todo lo salteado y lo
+    // disparaba junto (cientos de golpes en un cuadro). El tiempo que el mundo
+    // no vivio se le devuelve a t0: la musica ESPERA al mundo, y el desfase es
+    // cero por construccion.
+    const crudo = (t - antes) / 1000;
+    const dtSeg = Math.min(0.05, crudo);
+    if (ac && crudo > dtSeg) {
+      t0 += crudo - dtSeg;
+      proxBeat = Math.max(proxBeat, Math.floor(ahoraAudio() * 4) / 4);
+    }
     antes = t;
     if (calib) {
       if (!calib.listo && ac.currentTime > calib.fin) cerrarCalib();

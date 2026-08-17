@@ -29,7 +29,7 @@ const RASGOS = {
   // el viaje es la cancion ENTERA del estudio: 64 compases y 139 s. Los unicos
   // techos son los dos vacios de NEBULOSA -- los silencios cortos ya no tiran a
   // la red, se sobrevuelan, y el motor es zona de dribleo (ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 2, saltos: 30, exigente: true, orbes: 120, pistones: 6 }
+  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 2, saltos: 30, exigente: true, orbes: 120, pistones: 5 }
 };
 
 let fallas = 0;
@@ -163,7 +163,34 @@ function correr (id) {
     perfecta(s, b);
   };
 
+  // la mano que falla JUSTO antes del abismo: deja pasar cada tecla que entra a
+  // un riel con vacio debajo. Desde ahi sale del borde con vy=0 y cae -- y
+  // tiene que alcanzar a tocar la red ANTES de que empiece el hueco. Si no, es
+  // muerte sin salida: en el aire el boton no responde (el coyote vence mucho
+  // antes) y el riel queda MAS ARRIBA, asi que la esfera le pasa por debajo.
+  // Un fallo costaba la corrida entera en vez de la nota, que es exactamente
+  // lo que este juego promete que no pasa.
+  // (solo teclas de MELODIA: si la anterior es a su vez un riel con abismo,
+  // soltarla es el otro pecado --el que SI mata-- y lo mide la mano floja)
+  //
+  // Se prueban las teclas que dan a un peligro: la que entra a un riel con
+  // vacio debajo, y la que entra a un silencio con techo (ahi el saltito de
+  // rescate dura un tiempo entero y te deposita justo abajo del techo). Barrer
+  // las 277 notas una por una encuentra lo mismo y tarda 17 s: se corre a mano
+  // cuando se toca el motor, no en cada cambio de la partitura.
+  const ANTES_DEL_HUECO = new Set([
+    ...HUECOS.map(h => NOTAS.find(n => n.riel && h.x0 >= n.x0 - 0.01 && h.x1 <= n.x1 + 0.01)),
+    ...NOTAS.filter(n => n.silencio && !n.piso && TECHOS.some(t => t.x0 > n.x0 && t.x0 < n.x0 + n.dur))
+  ].filter(n => n && n.i > 0 && !NOTAS[n.i - 1].silencio && !NOTAS[n.i - 1].riel)
+    .map(n => n.i - 1));
+  const alBorde = (s, b) => {
+    const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+    if (k && ANTES_DEL_HUECO.has(k.i)) { s.sostiene = false; return; }
+    perfecta(s, b);
+  };
+
   const rp = jugar(perfecta);
+  const rBorde = jugar(alBorde);
   const rz = jugar(tropieza);
   const rPiso = R.pistones ? jugar(porElPiso) : null;
   const rSpam = jugar(martillo(0.04));
@@ -315,6 +342,16 @@ function correr (id) {
     ['tocar de mas mata bajo el techo del silencio',
       !R.techos || (!rt.viva && rt.causa === 'techo'),
       T0 ? `x ${rt.x.toFixed(2)} causa ${rt.causa || 'sigue viva'}` : 'sin techos: no aplica'],
+    ['fallar la nota anterior a un peligro NO mata: se toca la red o se rueda',
+      rBorde.viva && rBorde.meta,
+      `${ANTES_DEL_HUECO.size} bordes probados · ${rBorde.meta ? 'meta' : 'murio en ' + rBorde.x.toFixed(1) + ' ' + rBorde.causa}`],
+    // y la version estructural, que no depende de que una mano dé con el caso
+    ['ningun abismo empieza antes de que la caida alcance la red',
+      HUECOS.every(h => {
+        const riel = NOTAS.find(n => n.riel && h.x0 >= n.x0 - 0.01 && h.x1 <= n.x1 + 0.01);
+        const ant = riel && NOTAS[riel.i - 1];
+        return !ant || ant.silencio || ant.x1 + Math.sqrt(2 * ant.y / G) <= h.x0 + 1e-9;
+      }), ''],
     ['soltar el riel sobre el abismo mata',
       !rf.viva && rf.causa === 'hueco' && HUECOS.some(h => rf.x > h.x0 && rf.x < h.x1 + 1),
       `x ${rf.x.toFixed(2)} causa ${rf.causa || 'sigue viva'}`],
@@ -351,8 +388,12 @@ function correr (id) {
     // bien los cobra casi todos, el que va corrido se los pierde. Fallarlos no
     // castiga (pasas por arriba o por abajo y seguis), y pegarles tampoco puede
     // descolocarte: por eso nadie muere por un caño.
-    ['los pistones se pisan: tocar a tiempo es caerles encima',
-      !R.pistones || (PISTONES.length >= R.pistones && rp.pistonazos >= PISTONES.length * 0.6),
+    // TODOS, no la mayoria: un caño que ni la mano perfecta puede pisar es un
+    // caño impisable, y encima se lleva mudo un golpe del arreglo (lo reclama y
+    // nadie lo toca nunca). Habia uno asi, con la cabeza en el lado que SUBE
+    // del arco: la esfera le pasaba 0.0002 por debajo.
+    ['los pistones se pisan: tocar a tiempo es caerles encima a TODOS',
+      !R.pistones || (PISTONES.length >= R.pistones && rp.pistonazos === PISTONES.length),
       R.pistones ? `${PISTONES.length} caños · perfecta ${rp.pistonazos} · humana ${rh.pistonazos} · atrasada ${rAt.pistonazos}` : 'sin pistones: no aplica'],
     ['...y ninguna mano se muere por un piston',
       [rp, rh, rAt, rAd].every(r => r.meta),
