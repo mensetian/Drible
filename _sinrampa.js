@@ -542,7 +542,7 @@ function compilar () {
     const n = notas[i], sig = notas[i + 1];
     if (n.silencio || sig.silencio || !n.bajo || n.escalera || n.riel) continue;
     const hay = sig.x0 + MIRA - n.xm;
-    if (vueloMinimo(sig.y - n.y) + HOLGURA <= hay) continue;
+    continue; // RAMPA DESACTIVADA
     n.y = +Math.max(n.y, sig.y - alcanceEn(hay - HOLGURA)).toFixed(4);
   }
   // QUE SILENCIOS SE VUELAN. Una frase que respira no tiene por que tirarte a
@@ -750,25 +750,14 @@ const calcularTechos = () => NOTAS
 export let TECHOS = [];
 
 
-// PISTONES: caños que suben de la red en los builds. La version anterior se
-// escondia debajo de todos los arcos para no molestar -- y asi no molestaba
-// nada: nadie los tocaba nunca, eran decorado. Ahora el caño sube HASTA EL
-// ARCO: la cabeza queda justo donde cae el salto tocado a tiempo, y hay que
-// CAERLE ENCIMA. Al pisarla suena un golpe REAL de la bateria del arreglo (el
-// mismo trato que los orbes: el fondo lo calla, lo toca la esfera o no suena)
-// y el caño te devuelve a la linea, asi que pegarle nunca te descoloca.
-//
-// Fallarlo no castiga: si llegaste temprano volas por encima, si llegaste
-// tarde pasas por abajo, y en los dos casos seguis tu camino sin el golpe. Es
-// premio por precision, no trampa. Al que va por el PISO --fallo la tecla y
-// rueda-- el vastago lo agarra de abajo y lo DISPARA hacia la proxima tecla:
-// ahi si hay castigo (racha cortada, un rato sordo), pero te devuelve a la
-// cancion en vez de sacarte.
+// PISTONES: caños que suben de la red en los builds. No estan en tu camino
+// si tocaste: el arco de un salto (aun tarde) pasa por encima. Al que va por
+// el PISO --fallo la tecla y rueda-- lo agarran de abajo y lo DISPARAN hacia
+// la proxima tecla alcanzable: castigo (la nota quedo atras, la racha se
+// corto, un rato sordo) pero te devuelven a la cancion en vez de sacarte.
 export let PISTONES = [];
-export const ROCE = 0.13;          // debajo de esto vas rasante: te agarra el vastago
 function pistones () {
   const r = [];
-  const spec = CANCIONES[CANCION_ID].estudio;
   for (const z of (CANCIONES[CANCION_ID].pistones || [])) {
     let n = 0;
     for (const k of NOTAS) {
@@ -782,39 +771,23 @@ function pistones () {
       const T = obj - k.xm;
       if (T < 0.6) continue;
       if (++n % (z.cada || 1)) continue;
-      // El arco del salto tocado EN EL PULSO, que es el que se premia. La
-      // cabeza va pasada la cima, del lado que baja: ahi la esfera CAE sobre
-      // el caño en vez de rozarlo, que es lo que se siente como pisarlo.
+      // el caño va en el hueco horizontal entre esta tecla y la siguiente
+      const x = +(k.x1 + Math.max(0.15, (sig.x0 - k.x1) / 2)).toFixed(3);
+      const dt = x - k.xm;
+      if (dt <= 0.1 || dt >= T) continue;
+      // el tope queda DEBAJO del arco tocado a tiempo (y de los tardios, que
+      // vuelan mas bajo pero por encima del que rueda) y ENCIMA del que rueda
       const vy = Math.min(1.9, (sig.y - k.y) / T + G * T / 2);
-      const dt = Math.min(T * 0.72, vy / G + 0.2);
-      if (dt <= 0.15 || dt >= T - 0.08) continue;
-      const tope = +(k.y + vy * dt - G * dt * dt / 2).toFixed(3);
-      if (tope < 2 * R + 0.06) continue;          // tan bajo que ya es la red
-      const x = +(k.xm + dt).toFixed(3);
-      const x0 = +(x - 0.15).toFixed(3), x1 = +(x + 0.15).toFixed(3);
+      const arco = k.y + vy * dt - G * dt * dt / 2;
+      const tope = +Math.min(arco - 0.075, 0.26).toFixed(3);
+      if (tope < 2 * R + 0.015) continue;
+      const x0 = +(x - 0.14).toFixed(3), x1 = +(x + 0.14).toFixed(3);
       if (HUECOS.some(h => x > h.x0 - 0.9 && x < h.x1 + 0.9)) continue;
       if (TECHOS.some(t => x > t.x0 - 0.5 && x < t.x1 + 0.5)) continue;
-      // ninguna tecla puede quedar dentro del caño: parado en ella te dispararia
+      // ninguna tecla baja puede pisar el caño: parado en ella te dispararia
       if (NOTAS.some(k2 => !k2.silencio && k2.y < tope + 2 * R + 0.02 &&
           k2.x1 > x0 - 0.02 && k2.x0 < x1 + 0.02)) continue;
-      // El golpe que reclama: el mas cercano de la bateria que nadie haya
-      // pedido todavia. Sin golpe no hay piston -- un caño mudo es decorado,
-      // y de eso justamente veniamos.
-      let mr = null;
-      if (spec) {
-        for (let p = Math.ceil((x - 0.3) * 4); p <= Math.floor((x + 0.3) * 4); p++) {
-          if (PASOS_BATERIA.has(p)) continue;
-          const pl = spec(Math.floor(p / 16)); if (!pl) continue;
-          const bat = E_BATERIA[pl.drums];
-          const golpe = bat && 'xscHh'.includes(bat[p % 16]) ? bat[p % 16] : null;
-          if (!golpe) continue;
-          const d = Math.abs(p / 4 - x);
-          if (!mr || d < mr.d) mr = { p, golpe, d };
-        }
-      }
-      if (!mr) continue;
-      PASOS_BATERIA.add(mr.p);
-      r.push({ x, x0, x1, y: tope, instr: mr.golpe });
+      r.push({ x, x0, x1, y: tope });
     }
   }
   return r;
@@ -1101,64 +1074,29 @@ export function paso (s, dt) {
         s.eventos.push({ tipo: 'orbe', x: o.x, y: o.y, n: o.n, c: o.c, instr: o.instr, semi: o.semi });
       }
     }
-    // CAERLE ENCIMA AL CAÑO. Se cobra antes de posarse: la cabeza esta en el
-    // aire, sobre el hueco entre teclas, asi que no compite con ninguna.
-    if (s.vy <= 0) pisarPiston(s, yAntes);
     if (s.vy < 0) posarse(s, yAntes);
   }
-  // ...y el vastago, para el que viene rasante por la red
-  if (s.y < ROCE) rozarPiston(s);
 
   if (s.y < CAIDA_MUERTE) { s.viva = false; s.causa = 'hueco'; return; }
   for (const t of TECHOS) {
     if (s.x > t.x0 && s.x < t.x1 && s.y + 2 * R > t.y) { s.viva = false; s.causa = 'techo'; return; }
   }
+  for (const p of PISTONES) {
+    if (s.x > p.x0 && s.x < p.x1 && s.y < p.y && !s.pistones.has(p.x)) {
+      s.pistones.add(p.x); s.pistonazos++;
+      s.racha = 0;
+      s.bloqueo = Math.max(s.bloqueo, s.x + CASTIGO);
+      s.estado = 'aire'; s.tecla = -1; s.saliendoDe = -1; s.soltoEn = null;
+      const sig = NOTAS.find(n => !n.silencio && !s.tocadas.has(n.i) &&
+        n.x0 + MIRA - s.x >= vueloMinimo(n.y - s.y));
+      if (sig) {
+        const T = Math.max(0.25, sig.x0 + MIRA - s.x);
+        s.vy = Math.min(1.9, (sig.y - s.y) / T + G * T / 2);
+      } else s.vy = 1.1;
+      s.eventos.push({ tipo: 'piston', x: s.x, y: s.y });
+    }
+  }
   if (s.x >= LARGO) s.meta = true;
-}
-
-// El impulso que hace falta, desde donde estas, para llegar a la proxima tecla
-// que todavia se pueda tocar. Es lo que usa el caño para devolverte a la linea.
-function haciaLaProxima (s, minimo = 1.1) {
-  const sig = NOTAS.find(n => !n.silencio && !s.tocadas.has(n.i) &&
-    n.x0 + MIRA - s.x >= vueloMinimo(n.y - s.y));
-  if (!sig) return minimo;
-  const T = Math.max(0.25, sig.x0 + MIRA - s.x);
-  return Math.min(1.9, (sig.y - s.y) / T + G * T / 2);
-}
-
-// PISARLO: el premio. Le caiste encima, o sea que el salto salio a tiempo. El
-// caño suena su golpe, se hunde, y te deja de nuevo en la linea de vuelo -- no
-// puede descolocarte, porque entonces acertarle seria un castigo.
-function pisarPiston (s, yAntes) {
-  for (const p of PISTONES) {
-    if (s.pistones.has(p.x)) continue;
-    if (s.x <= p.x0 || s.x >= p.x1) continue;
-    if (yAntes < p.y || s.y > p.y) continue;
-    s.pistones.add(p.x); s.pistonazos++;
-    s.y = p.y;
-    // te deja EXACTAMENTE en la linea de vuelo hacia la proxima tecla: si
-    // acertarle te descolocara, acertarle seria un castigo
-    s.vy = haciaLaProxima(s, s.vy);
-    s.eventos.push({ tipo: 'piston', modo: 'encima', x: s.x, y: p.y, instr: p.instr });
-    return;
-  }
-}
-
-// ROZARLO: el rescate. Venis rodando por la red --fallaste la tecla-- y el
-// vastago te agarra de abajo y te DISPARA de vuelta a la cancion. Cuesta la
-// racha y un rato de sordera, pero es mejor que quedarse afuera del tema.
-function rozarPiston (s) {
-  for (const p of PISTONES) {
-    if (s.pistones.has(p.x)) continue;
-    if (s.x <= p.x0 || s.x >= p.x1) continue;
-    s.pistones.add(p.x); s.pistonazos++;
-    s.racha = 0;
-    s.bloqueo = Math.max(s.bloqueo, s.x + CASTIGO);
-    s.estado = 'aire'; s.tecla = -1; s.saliendoDe = -1; s.soltoEn = null;
-    s.vy = haciaLaProxima(s);
-    s.eventos.push({ tipo: 'piston', modo: 'abajo', x: s.x, y: s.y, instr: p.instr });
-    return;
-  }
 }
 
 // Gasta un toque en el estado actual. Devuelve si sono una nota; si no sono,
@@ -1861,19 +1799,12 @@ function arrancarNavegador () {
         squash = 0.8;
         chispas(e.x, e.y, 4, true);
       } else if (e.tipo === 'piston') {
-        // el caño suena SU golpe de la bateria (el fondo lo callo, lo toca la
-        // esfera), y el aire comprimido encima
-        if (e.instr) eTambor(e.instr, ac.currentTime);
-        ruido(ac.currentTime, e.modo === 'encima' ? 0.1 : 0.16, 0.18, 'bandpass', 700, 1.1);
-        if (e.modo === 'encima') {
-          golpe(ac.currentTime, 320, 0.09, 0.11, 'triangle');
-          destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
-        } else {
-          eKick(ac.currentTime, true);
-          golpe(ac.currentTime, 120, 0.2, 0.18, 'square');
-          golpe(ac.currentTime + 0.03, 240, 0.14, 0.1, 'triangle');
-        }
-        chispas(e.x, e.y, e.modo === 'encima' ? 8 : 12, true, C.esferaRGB);
+        // el caño te DISPARA: golpe de aire comprimido y silbido que sube
+        eKick(ac.currentTime, true);
+        ruido(ac.currentTime, 0.16, 0.22, 'bandpass', 700, 1.1);
+        golpe(ac.currentTime, 120, 0.2, 0.18, 'square');
+        golpe(ac.currentTime + 0.03, 240, 0.14, 0.1, 'triangle');
+        chispas(e.x, e.y, 12, true, C.esferaRGB);
         squash = 1;
       } else if (e.tipo === 'orbe') {
         // la esfera atraveso un orbe: suena el golpe REAL que reclamo -- la
@@ -2059,7 +1990,7 @@ function arrancarNavegador () {
     if (TECHOS.length) L.push({ id: 'techo', x: TECHOS[0].x0, y: TECHOS[0].y,
       txt: 'bajo el techo NO se toca', ok: st => st.viva });
     if (PISTONES.length) L.push({ id: 'piston', x: PISTONES[0].x, y: PISTONES[0].y,
-      txt: 'CAELE ENCIMA: suena y te empuja', ok: st => st.pistones.has(PISTONES[0].x) });
+      txt: 'SALTA con la nota: al que rueda lo dispara', ok: st => !st.pistones.has(PISTONES[0].x) });
     if (HUECOS.length) L.push({ id: 'abismo', x: HUECOS[0].x0, y: 0,
       txt: 'sobre el vacio NO sueltes', ok: st => st.viva });
     lecciones = L.filter(l => !aprendidas.has(l.id)).sort((a, b) => a.x - b.x);
@@ -2336,27 +2267,21 @@ function arrancarNavegador () {
       cx.beginPath(); cx.moveTo(px(t.x0), py(t.y)); cx.lineTo(px(t.x1), py(t.y)); cx.stroke();
     }
 
-    // PISTONES: suben de la red a medida que te acercas, hasta la altura del
-    // arco. La cabeza es una PLATAFORMA -- hay que caerle encima --, asi que se
-    // dibuja como una plataforma (chata, verde, invitando) y no como un filo.
+    // PISTONES: suben de la red a medida que te acercas -- se arman a la
+    // vista. El tope queda debajo de todo arco tocado: saltar ES esquivar.
     for (const p of PISTONES) {
       if (p.x1 < s.x - 2 || p.x0 > s.x + 7) continue;
       const falta = p.x - s.x;
       const sube = Math.max(0, Math.min(1, (2.8 - falta) / 2.2));
       const gastado = s.pistones.has(p.x);
-      const alto = Math.max(3, (py(0) - py(p.y)) * (gastado ? 0.18 : sube));
+      const alto = Math.max(3, (py(0) - py(p.y)) * (gastado ? 0.22 : sube));
       const a0 = px(p.x0), an = (p.x1 - p.x0) * esc;
       const yTope = py(0) - alto;
-      cx.fillStyle = gastado ? 'rgba(150,140,130,0.35)' : `rgba(${C.esferaRGB},${0.22 + 0.3 * sube})`;
-      cx.fillRect(a0 + an * 0.34, yTope, an * 0.32, alto);      // el vastago
-      cx.fillStyle = gastado ? 'rgba(150,140,130,0.5)' : C.impulso;
-      cx.fillRect(a0, yTope - 3, an, 6);                        // la plataforma
-      if (!gastado && sube > 0.6) {                             // la flecha: caele
-        cx.fillStyle = `rgba(${C.impulsoRGB},${(sube - 0.6) * 1.6})`;
-        cx.beginPath();
-        cx.moveTo(a0 + an / 2 - 5, yTope - 14); cx.lineTo(a0 + an / 2 + 5, yTope - 14);
-        cx.lineTo(a0 + an / 2, yTope - 7); cx.closePath(); cx.fill();
-      }
+      cx.fillStyle = gastado ? 'rgba(150,140,130,0.4)' : `rgba(${C.esferaRGB},${0.38 + 0.45 * sube})`;
+      cx.fillRect(a0 + an * 0.3, yTope, an * 0.4, alto);        // el vastago
+      cx.fillRect(a0, yTope - 2, an, 7);                        // la cabeza
+      cx.fillStyle = gastado ? 'rgba(150,140,130,0.55)' : C.peligro;
+      cx.fillRect(a0, yTope - 2, an, 2.5);                      // el filo
     }
 
     // Los ORBES: cuerpos de verdad. Viven flotando sobre el arco del pique

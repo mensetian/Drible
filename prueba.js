@@ -11,7 +11,7 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, Y_GRAVE
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, Y_GRAVE, HOLGURA
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -26,9 +26,10 @@ const DT = 1 / 240;
 const RASGOS = {
   esfera: { escaleras: false, ligaduras: 0, huecos: 1, techos: 0, saltos: 30, exigente: false },
   aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, saltos: 30, exigente: true },
-  // el viaje va por el ACTO 1 (amanecer ×2, motor, drop 1): crece por sesiones.
-  // El motor es zona de dribleo (sin techo: el silencio ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 14, techos: 0, saltos: 30, exigente: true, orbes: 60, pistones: 5 }
+  // el viaje es la cancion ENTERA del estudio: 64 compases y 139 s. Los unicos
+  // techos son los dos vacios de NEBULOSA -- los silencios cortos ya no tiran a
+  // la red, se sobrevuelan, y el motor es zona de dribleo (ahi se JUEGA).
+  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 2, saltos: 30, exigente: true, orbes: 120, pistones: 6 }
 };
 
 let fallas = 0;
@@ -97,7 +98,8 @@ function correr (id) {
       .map((k, n) => k.xm + (((n * 7919) % 31) / 30 - 0.5) * 2 * amplitud);
     let j = 0;
     return (s, b) => {
-        const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+      if (rescata(s, b)) return;
+      const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
       s.sostiene = !!(k && k.riel);
       while (j < objetivos.length && s.x >= objetivos[j]) { tocar(s, b); j++; }
     };
@@ -192,6 +194,20 @@ function correr (id) {
     return k.x1 + vueloMinimo(sig.y - k.y) > sig.x1 - 0.05 + 1e-9;
   });
 
+  // Y tocando EN EL PULSO hay que aterrizar ANTES del pulso siguiente. Si el
+  // vuelo te deja llegando despues, la nota que sigue no se puede tocar a
+  // tiempo por mucho que se afine la mano: nace chueca, y si te pasas de la
+  // ventana el motor la da por perdida (lanzar() la saltea para no arrastrarte
+  // corrido el resto del tramo). Desde afuera eso se ve como "esa tecla no
+  // suena, o es imposible" -- que es exactamente lo que pasaba al salir de un
+  // build: subir de la banda del bajo a la melodia pide 0.83 tiempos y la
+  // partitura da media negra. Los rieles no cuentan: su borde ES su salida.
+  const apretadas = saltos.filter(k => {
+    const sig = NOTAS[k.i + 1];
+    if (!sig || sig.silencio) return false;
+    return sig.xm - k.xm - vueloMinimo(sig.y - k.y) < 0.05 - 1e-9;
+  });
+
   const malCentradas = NOTAS.filter(k => !k.silencio &&
     (k.xm <= k.x0 + 0.03 || k.xm >= k.x1 - 0.03));
   // las que se entran rodando (carreras, y la que sigue a una) no aterrizan: no
@@ -210,6 +226,9 @@ function correr (id) {
       estrechas.map(k => `${k.nombre}@${k.b}:${(k.x1 - k.x0).toFixed(3)}`).join(' ')],
     ['todo salto llega cayendo a la tecla siguiente', !inalcanzables.length,
       inalcanzables.map(k => k.nombre + '@' + k.b).join(' ')],
+    ['...y tocando en el pulso se aterriza antes del pulso siguiente',
+      !apretadas.length,
+      apretadas.map(k => `${k.nombre}${k.bajo ? '!' : ''}@${k.b} (${(NOTAS[k.i + 1].xm - k.xm - vueloMinimo(NOTAS[k.i + 1].y - k.y)).toFixed(3)})`).join(' ')],
     // El punto afinado no puede caer en el canto de la plataforma: ahi aterrizar
     // y golpear son el mismo instante, y eso no es tocar, es adivinar.
     ['el punto exacto cae adentro de la plataforma, no en el canto',
@@ -226,9 +245,19 @@ function correr (id) {
       NOTAS.some(k => k.riel) && saltos.length > R.saltos &&
       (!R.escaleras || NOTAS.some(k => k.escalera)),
       `rieles ${NOTAS.filter(k => k.riel).length} · escalones ${NOTAS.filter(k => k.escalera).length} · saltos ${saltos.length}`],
-    ['las teclas de bajo viven en su banda, debajo de la melodia',
-      NOTAS.filter(k => k.bajo).every(k => k.y < Y_GRAVE) ||
-      !NOTAS.some(k => k.bajo), `${NOTAS.filter(k => k.bajo).length} teclas de bajo`],
+    // ...salvo las que TREPAN para salir al drop: esa rampa es a proposito (sin
+    // ella el salto de la banda de abajo a la melodia es fisicamente imposible),
+    // y tiene que ser una minoria -- si trepara la mitad, no hay dos bandas.
+    ['las teclas de bajo viven en su banda, salvo la rampa de salida',
+      (() => {
+        const bajos = NOTAS.filter(k => k.bajo);
+        if (!bajos.length) return true;
+        const trepan = bajos.filter(k => k.y >= Y_GRAVE);
+        return trepan.length <= bajos.length * 0.25 &&
+          // y las que trepan son siempre las ULTIMAS de su carrera
+          trepan.every(k => { const sig = NOTAS[k.i + 1]; return sig && (!sig.bajo || sig.y >= k.y); });
+      })(),
+      `${NOTAS.filter(k => k.bajo).length} teclas de bajo · ${NOTAS.filter(k => k.bajo && k.y >= Y_GRAVE).length} en rampa`],
     ['el mapa sube y baja de verdad (rango > medio octava)',
       Math.max(...NOTAS.filter(k => !k.silencio).map(k => k.y)) -
       Math.min(...NOTAS.filter(k => !k.silencio).map(k => k.y)) > 0.15, ''],
@@ -317,20 +346,24 @@ function correr (id) {
     ['todo orbe cosechado dice su instrumento',
       rp.eventos.filter(e => e.tipo === 'orbe').every(e => e.instr),
       `${rp.eventos.filter(e => e.tipo === 'orbe').length} cosechados`],
-    // Los martillos del build: calibrados contra la geometria del salto. El que
-    // toca a tiempo pasa por debajo SIEMPRE; el que se adelanta vuela mas alto
-    // y se lo comen. Y aplastan: cuestan la nota, nunca la vida.
-    // El piston no esta en el camino del que TOCA: todo arco (aun tarde)
-    // pasa por encima. Al que rueda por el piso lo dispara -- y lo devuelve
-    // a la cancion, no lo mata.
-    ['los pistones dejan pasar a todo el que salta',
-      !R.pistones || (PISTONES.length >= R.pistones && rp.pistonazos === 0 &&
-        rh.pistonazos === 0 && rAt.pistonazos === 0),
+    // LOS PISTONES SE PISAN. La cabeza esta puesta sobre el arco del salto
+    // tocado a tiempo, asi que acertar el ritmo ES caerle encima: el que toca
+    // bien los cobra casi todos, el que va corrido se los pierde. Fallarlos no
+    // castiga (pasas por arriba o por abajo y seguis), y pegarles tampoco puede
+    // descolocarte: por eso nadie muere por un caño.
+    ['los pistones se pisan: tocar a tiempo es caerles encima',
+      !R.pistones || (PISTONES.length >= R.pistones && rp.pistonazos >= PISTONES.length * 0.6),
       R.pistones ? `${PISTONES.length} caños · perfecta ${rp.pistonazos} · humana ${rh.pistonazos} · atrasada ${rAt.pistonazos}` : 'sin pistones: no aplica'],
+    ['...y ninguna mano se muere por un piston',
+      [rp, rh, rAt, rAd].every(r => r.meta),
+      [rp, rh, rAt, rAd].map(r => r.meta ? 'meta' : 'murio ' + r.x.toFixed(0)).join(' · ')],
     ['...y al que va por el piso lo disparan de vuelta a la cancion',
       !R.pistones || (rPiso.pistonazos >= 1 && rPiso.viva && rPiso.meta),
       R.pistones ? `${rPiso.pistonazos} disparos · ${rPiso.meta ? 'meta' : 'murio en ' + rPiso.x.toFixed(1)}` : 'no aplica'],
-    ['ningun piston bajo una tecla baja, sobre un abismo o bajo un techo',
+    // el caño suena un golpe REAL del arreglo, como los orbes: sin eso es
+    // decorado, que es de donde veniamos
+    ['todo piston reclama un golpe de la bateria', PISTONES.every(p => p.instr), ''],
+    ['ningun piston dentro de una tecla, sobre un abismo o bajo un techo',
       PISTONES.every(p => !HUECOS.some(h => p.x > h.x0 - 0.9 && p.x < h.x1 + 0.9) &&
         !TECHOS.some(t => p.x > t.x0 - 0.5 && p.x < t.x1 + 0.5) &&
         !NOTAS.some(k => !k.silencio && k.y < p.y + 0.13 && k.x1 > p.x0 && k.x0 < p.x1)), ''],
