@@ -161,10 +161,13 @@ for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'aurora'], ['3', 'viaje']])
   });
   // el HUD tiene que seguir diciendo donde estas y como revisar: si el nombre
   // de la cancion desaparece del cartel, algo se rompio sin tirar excepcion
-  probar(`${nivel}: el HUD sigue en pie despues de saltar`, () => {
+  probar(`${nivel}: el HUD sigue en pie, y la corrida queda marcada ENSAYO`, () => {
     correrCuadros(5);
     exigir(dijo('saltar de seccion'), 'se perdio el atajo de revision');
     exigir(dijo('intento'), 'se perdio el cartel de la cancion');
+    // saltar de seccion no puede puntuar: si no se avisa, un record sacado
+    // saltando al 90% pasa por bueno
+    exigir(dijo('ENSAYO'), 'saltar de seccion no marco la corrida como ensayo');
   });
 }
 

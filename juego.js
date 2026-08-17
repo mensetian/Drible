@@ -1937,10 +1937,10 @@ function arrancarNavegador () {
     // que solo existe si el juego te dice cuanto faltaba.
     const pct = Math.min(100, Math.round(s.x / LARGO * 100));
     const antes = leerRecord(CANCION_ID);
-    guardarRecord(CANCION_ID, pct, s.limpias.size);
+    if (!ensayo) guardarRecord(CANCION_ID, pct, s.limpias.size);
     avisoMuerte = {
-      txt: PORQUE[s.causa] || null,
-      pct, record: antes ? antes.pct : 0, nuevo: !antes || pct > antes.pct,
+      txt: PORQUE[s.causa] || null, ensayo,
+      pct, record: antes ? antes.pct : 0, nuevo: !ensayo && (!antes || pct > antes.pct),
       t: performance.now()
     };
     rielCerrar(); eRielCerrar();
@@ -1963,6 +1963,7 @@ function arrancarNavegador () {
   function empezar (id) {
     elegirCancion(id);
     armarLecciones();
+    ensayo = false;                 // arrancar de cero es el unico concierto
     golpesVista.length = 0; padsVista.length = 0;
     intento = 1; mejor = 0;
     s = crearSim();
@@ -2097,6 +2098,12 @@ function arrancarNavegador () {
     }
   }
 
+  // ENSAYO Y CONCIERTO. Saltar de seccion es para revisar un tramo sin tocar
+  // la cancion entera -- pero entonces la corrida ya no empezo en el principio,
+  // y su porcentaje no significa nada. Un record que se saca saltando al 90%
+  // no es un record: es una trampa contra uno mismo. Desde el primer salto la
+  // corrida queda marcada como ENSAYO y no puntua hasta que se arranque de cero.
+  let ensayo = false;
   let avisoSeccion = null;
   function saltarA (bx) {
     rielCerrar(); eRielCerrar();
@@ -2112,6 +2119,7 @@ function arrancarNavegador () {
   }
   function irASeccion (d) {
     if (!corriendo || !SECCIONES.length) return;
+    ensayo = true;
     const aqui = SECCIONES.filter(sec => sec.x0 <= s.x + 0.5).length - 1;
     const i = Math.max(0, Math.min(SECCIONES.length - 1, aqui + d));
     saltarA(SECCIONES[i].x0);
@@ -2212,7 +2220,7 @@ function arrancarNavegador () {
     if (!s.viva) { golpe(ac.currentTime, 90, 0.3, 0.4, 'sawtooth'); ruido(ac.currentTime, 0.2, 0.28); morirOReiniciar(); }
     if (s.meta && !finSonado) {
       finSonado = true; rielCerrar(); eRielCerrar(); sonarFinal();
-      guardarRecord(CANCION_ID, 100, s.limpias.size);
+      if (!ensayo) guardarRecord(CANCION_ID, 100, s.limpias.size);
     }
     dibujar(dtSeg);
   }
@@ -2558,6 +2566,22 @@ function arrancarNavegador () {
         }
       }
     }
+    // EL PULSO DE ANTICIPACION. Un anillo que se cierra sobre la proxima nota y
+    // llega a su tamaño justo cuando hay que tocarla. Hasta ahora el momento
+    // exacto se aprendia chocando: se llegaba tarde, sonaba chueco, y se
+    // corregia de oido. Con esto se aprende MIRANDO, que es como se lee una
+    // partitura. Solo la que sigue: dos anillos a la vez ya no dicen cuando.
+    if (corriendo && !s.meta) {
+      const prox = NOTAS.find(n => !n.silencio && !s.tocadas.has(n.i) && n.xm > s.x - 0.02);
+      if (prox && prox.xm - s.x < 2.2) {
+        const q = Math.max(0, (prox.xm - s.x) / 2.2);       // 1 lejos, 0 justo
+        cx.strokeStyle = `rgba(${C.teclaRGB},${0.5 * (1 - q) * (1 - q)})`;
+        cx.lineWidth = 1.5;
+        cx.beginPath();
+        cx.arc(px(prox.xm), py(prox.y), (0.07 + q * 0.75) * esc, 0, Math.PI * 2);
+        cx.stroke();
+      }
+    }
     // destellos de nota
     for (let i = destellos.length - 1; i >= 0; i--) {
       const d = destellos[i], e = (performance.now() - d.t) / 420;
@@ -2722,6 +2746,10 @@ function arrancarNavegador () {
       // el atajo de revision, dicho donde se necesita
       cx.fillStyle = C.tenue; cx.font = '11px system-ui';
       cx.fillText('◀ ▶  saltar de seccion', 12, h - 10);
+      if (ensayo) {                 // y que se sepa que esto no puntua
+        cx.fillStyle = C.sucia; cx.font = 'bold 11px system-ui';
+        cx.fillText('ENSAYO', w - 62, h - 10);
+      }
       if (avisoMuerte) {
         const dt = (performance.now() - avisoMuerte.t) / 2600;
         if (dt >= 1) avisoMuerte = null;
@@ -2738,7 +2766,8 @@ function arrancarNavegador () {
           cx.font = 'bold 34px system-ui';
           cx.fillText(`${a.pct}%`, w / 2, h * 0.33);
           cx.fillStyle = C.tenue; cx.font = '13px system-ui';
-          cx.fillText(a.nuevo && a.record ? `nuevo record — antes ${a.record}%`
+          cx.fillText(a.ensayo ? 'ensayo: no cuenta para el record'
+            : a.nuevo && a.record ? `nuevo record — antes ${a.record}%`
             : a.record ? `tu record: ${a.record}%` : 'tu primera vuelta', w / 2, h * 0.33 + 20);
           cx.restore();
         }
