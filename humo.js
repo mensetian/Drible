@@ -39,16 +39,22 @@ class AudioContextFalso {
   createBuffer () { return nodoAudio(); }
 }
 
+// Se anota TODO lo que el juego escribe en pantalla: es la unica forma de
+// afirmar que una pantalla se dibujo de verdad y no que el cuadro paso de
+// largo sin explotar.
+const textos = [];
 const ctx2d = new Proxy({}, {
   get (t, k) {
     if (k === 'createLinearGradient' || k === 'createRadialGradient')
       return () => ({ addColorStop: () => {} });
     if (k === 'measureText') return () => ({ width: 10 });
+    if (k === 'fillText' || k === 'strokeText') return s => { textos.push(String(s)); };
     if (k in t) return t[k];
     return () => {};
   },
   set (t, k, v) { t[k] = v; return true; }
 });
+const dijo = frag => textos.some(t => t.includes(frag));
 
 const lienzo = {
   width: 900, height: 500, clientWidth: 900, clientHeight: 500, style: {}, tabIndex: 0,
@@ -84,13 +90,55 @@ const correrCuadros = (n, ms = 16) => {
 
 let fallas = 0;
 const probar = (que, fn) => {
+  textos.length = 0;
   try { fn(); console.log('  ok    ' + que); }
   catch (e) { fallas++; console.log(' FALLA  ' + que + '\n         ' + e.message); }
+};
+const exigir = (cond, msg) => { if (!cond) throw new Error(msg); };
+const tocar1 = () => {
+  disparar('keydown', { key: ' ', code: 'Space', preventDefault () {}, repeat: false });
+  disparar('keyup', { key: ' ', code: 'Space', preventDefault () {} });
 };
 
 console.log('\n=== HUMO: la capa de navegador ===');
 
-probar('el menu se dibuja', () => correrCuadros(3));
+probar('el menu se dibuja', () => {
+  correrCuadros(3);
+  exigir(dijo('elegi el nivel'), 'el menu no escribio su titulo');
+  exigir(dijo('calibrar'), 'el menu no ofrece calibrar');
+});
+
+// La calibracion es la pantalla que decide si el juego se siente roto en un
+// telefono, y no la tocaba ninguna prueba.
+probar('calibrar: suena, se tocan los golpes, y guarda un numero', () => {
+  disparar('keydown', { key: 'c', code: 'KeyC', preventDefault () {}, repeat: false });
+  correrCuadros(6, 120);
+  for (let i = 0; i < 14; i++) { tocar1(); correrCuadros(5, 120); }
+  exigir(dijo('toca con lo que ESCUCHAS'), 'no se abrio la pantalla de calibrar');
+  correrCuadros(40, 200);            // hasta pasado el final de la cuenta
+  exigir(textos.some(t => / ms$/.test(t)), 'la calibracion no dio un resultado en ms');
+  correrCuadros(30, 200);            // y vuelve sola al menu
+  exigir(dijo('elegi el nivel'), 'no volvio al menu despues de calibrar');
+});
+
+// Llegar a la meta: se salta a la ultima seccion y se deja rodar por la red
+// (sin tocar nada) hasta cruzar el final. Asi se dibuja el informe final, que
+// tampoco lo ejercitaba nadie.
+probar('esfera: llegar a la meta dibuja el rango y el informe por seccion', () => {
+  disparar('keydown', { key: '1', code: 'Digit1', preventDefault () {}, repeat: false });
+  correrCuadros(20);
+  for (let i = 0; i < 16; i++) {
+    disparar('keydown', { key: 'ArrowRight', preventDefault () {}, repeat: false });
+    correrCuadros(3);
+  }
+  correrCuadros(700);
+  exigir(dijo('toca para volver al menu'), 'no se dibujo la pantalla de meta');
+  exigir(dijo('LLEGASTE') || dijo('AFINADO') || dijo('MUSICO') || dijo('VIRTUOSO') || dijo('AURORA'),
+    'la meta no mostro ningun rango');
+  tocar1();
+  correrCuadros(5);
+  exigir(dijo('elegi el nivel'), 'desde la meta no se vuelve al menu');
+});
 
 for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'aurora'], ['3', 'viaje']]) {
   probar(`${nivel}: arranca, juega, y sobrevive 400 cuadros`, () => {
@@ -111,9 +159,12 @@ for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'aurora'], ['3', 'viaje']])
     disparar('keydown', { key: 'ArrowLeft', preventDefault () {}, repeat: false });
     correrCuadros(20);
   });
-  probar(`${nivel}: vuelve al menu`, () => {
-    disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
+  // el HUD tiene que seguir diciendo donde estas y como revisar: si el nombre
+  // de la cancion desaparece del cartel, algo se rompio sin tirar excepcion
+  probar(`${nivel}: el HUD sigue en pie despues de saltar`, () => {
     correrCuadros(5);
+    exigir(dijo('saltar de seccion'), 'se perdio el atajo de revision');
+    exigir(dijo('intento'), 'se perdio el cartel de la cancion');
   });
 }
 

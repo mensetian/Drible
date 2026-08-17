@@ -1325,6 +1325,15 @@ function arrancarNavegador () {
   // que la esfera --por eso bajan juntas-- y al soltarla vuelve sola.
   const teclaHundida = new Map();
   let pump = 0, padLuz = 0, tinte = [70, 90, 150], brilloRacha = 0;
+  // Las tres capas del horizonte: cuanto se mueven (f), cuanto se achatan (k),
+  // a que altura arrancan y cada cuantas notas toman un pico. La de mas lejos
+  // toma una nota de cada seis: de lejos se ve la FORMA de la cancion, no sus
+  // notas.
+  const CAPAS = [
+    { f: 0.14, k: 0.62, base: 0.34, a: 0.20, salto: 6 },
+    { f: 0.31, k: 0.46, base: 0.17, a: 0.15, salto: 3 },
+    { f: 0.55, k: 0.28, base: 0.04, a: 0.11, salto: 2 }
+  ];
   const TINTE = {
     Am: [70, 95, 165], F: [160, 110, 70], C: [80, 150, 130],
     G: [120, 95, 175], Dm: [130, 65, 120], E: [175, 80, 65]
@@ -2313,6 +2322,34 @@ function arrancarNavegador () {
       cx.fillRect(px(s.x) - rl, py(s.y + R) - rl, rl * 2, rl * 2);
     }
 
+    // EL PAISAJE ES LA CANCION. Las montañas del fondo son la melodia misma
+    // vista de lejos: lo que se viene, dibujado en el horizonte y comprimido
+    // por la perspectiva. No es decorado inventado por seccion -- es el mapa,
+    // y por eso cada tramo del viaje se ve distinto sin que nadie lo pinte:
+    // el amanecer es una loma, el drop es una sierra, el motor es una meseta.
+    if (corriendo) {
+      const rgbP = tinte.map(v => Math.round(v * 0.5)).join(',');
+      for (const c of CAPAS) {
+        cx.fillStyle = `rgba(${rgbP},${c.a * (0.55 + 0.45 * padLuz)})`;
+        cx.beginPath();
+        cx.moveTo(-40, y0 + 40);
+        let hubo = false;
+        for (let i = 0; i < NOTAS.length; i += c.salto) {
+          const n = NOTAS[i];
+          if (n.silencio) continue;
+          const X = ((n.xm - s.x) * c.f + 2.4) * esc;
+          if (X < -60) continue;
+          if (X > w + 60) break;
+          cx.lineTo(X, y0 - (c.base + n.y * c.k) * esc);
+          hubo = true;
+        }
+        if (!hubo) continue;
+        cx.lineTo(w + 40, y0 + 40);
+        cx.closePath();
+        cx.fill();
+      }
+    }
+
     // la red, con sus abismos
     cx.strokeStyle = `rgba(232,230,224,${0.14 + 0.12 * padLuz})`; cx.lineWidth = 2;
     const cortes = [0, ...HUECOS.flatMap(g => [g.x0, g.x1]), LARGO + 6];
@@ -2407,6 +2444,21 @@ function arrancarNavegador () {
       cx.fillText('salida', px(PISO.x1) - 6, py(PISO.y) - 8);
       cx.textAlign = 'left';
     }
+
+    // EL CAMINO RECORRIDO. Las teclas que sonaste quedan encendidas y unidas
+    // por un hilo: atras tuyo va quedando dibujada la cancion que tocaste. Es
+    // lo unico del mapa que habla de vos y no de la partitura.
+    cx.strokeStyle = `rgba(${C.esferaRGB},${0.13 + 0.17 * brilloRacha})`;
+    cx.lineWidth = 1.5;
+    cx.beginPath();
+    let corte = true;
+    for (const k of NOTAS) {
+      if (k.silencio || k.x1 < s.x - 9 || k.x0 > s.x) { corte = true; continue; }
+      if (!s.limpias.has(k.i)) { corte = true; continue; }
+      const X = px(k.xm), Y = py(k.y);
+      if (corte) { cx.moveTo(X, Y); corte = false; } else cx.lineTo(X, Y);
+    }
+    cx.stroke();
 
     // las teclas: la partitura
     for (const k of NOTAS) {
