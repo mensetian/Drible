@@ -1371,6 +1371,19 @@ function arrancarNavegador () {
     return n;
   }
   let ac = null, master = null, voz = null, t0 = 0, proxBeat = 0;
+  let solo = null, fondo = null;      // el que toca la esfera, y el arreglo
+  // El solista entra: el arreglo se agacha un instante para dejarlo pasar.
+  function agachar (t, cuanto = 0.62, dur = 0.17) {
+    // Corto y poco: en EMPUJE el bajo va en corcheas y un agache largo dejaria
+    // el arreglo hundido de punta a punta, que ya no es destacar al solista
+    // sino bajarle el volumen a la cancion.
+    if (!fondo) return;
+    const g = fondo.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(cuanto, t + 0.015);
+    g.linearRampToValueAtTime(1, t + dur);
+  }
   let corriendo = false, finSonado = false;
 
   const estela = [], particulas = [], destellos = [], desvios = [];
@@ -1440,6 +1453,22 @@ function arrancarNavegador () {
       voz = ac.createGain();
       voz.gain.value = 1;
       voz.connect(master);
+      // EL SOLISTA Y EL FONDO. Lo que toca la esfera no puede sonar igual que
+      // ese mismo instrumento en el arreglo: el bajo del jugador salia a 0.16
+      // y el del fondo a 0.155, o sea compitiendo consigo mismo, y se perdia.
+      // Ahora hay dos buses. Por SOLISTA va todo lo que toca la esfera, mas
+      // fuerte y con un realce de agudos: el mismo golpe suena mas cerca, mas
+      // al frente. Y cuando el solista entra, el FONDO se agacha un instante.
+      // Asi es como un disco pone a alguien adelante -- no subiendole el
+      // volumen a todo hasta que no se entiende nada.
+      solo = ac.createGain();
+      solo.gain.value = 1;
+      const brillo = ac.createBiquadFilter();
+      brillo.type = 'highshelf'; brillo.frequency.value = 1600; brillo.gain.value = 4;
+      solo.connect(brillo).connect(master);
+      fondo = ac.createGain();
+      fondo.gain.value = 1;
+      fondo.connect(master);
     }
     ac.resume();
     rodadaAbrir();
@@ -1489,7 +1518,7 @@ function arrancarNavegador () {
   // El ruido va FILTRADO. El blanco pelado es lo que hacia sonar a lata la
   // bateria entera: la caja, el hat y el clap eran el mismo siseo con distinta
   // envolvente. Con un filtro cada uno tiene su registro y aparece el groove.
-  function ruido (t, dur, gan, filtro = null, f = 1000, Q = 1) {
+  function ruido (t, dur, gan, filtro = null, f = 1000, Q = 1, dest = null) {
     const n = Math.max(1, ac.sampleRate * dur | 0), buf = ac.createBuffer(1, n, ac.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
@@ -1498,8 +1527,8 @@ function arrancarNavegador () {
     if (filtro) {
       const bq = ac.createBiquadFilter();
       bq.type = filtro; bq.frequency.value = f; bq.Q.value = Q;
-      src.connect(bq).connect(g).connect(master);
-    } else src.connect(g).connect(master);
+      src.connect(bq).connect(g).connect(dest || master);
+    } else src.connect(g).connect(dest || master);
     src.start(t);
   }
   function kick (t) {
@@ -1562,53 +1591,56 @@ function arrancarNavegador () {
   // hunde bajo/arpegio/pad un instante y eso ES el pump del synthwave.
   let duckE = null;
   const busE = () => {
-    if (!duckE) { duckE = ac.createGain(); duckE.connect(master); }
+    if (!duckE) { duckE = ac.createGain(); duckE.connect(fondo || master); }
     return duckE;
   };
   const EG = 2.5;
-  function eBeep (t, f, dur, tipo, gan, slide, alBus) {
+  function eBeep (t, f, dur, tipo, gan, slide, alBus, dest) {
     const o = ac.createOscillator(), g = ac.createGain();
     o.type = tipo || 'sine'; o.frequency.setValueAtTime(f, t);
     if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
     g.gain.setValueAtTime(gan, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(alBus ? busE() : master);
+    o.connect(g).connect(dest || (alBus ? busE() : fondo || master));
     o.start(t); o.stop(t + dur + 0.02);
   }
-  function eKick (t, duro) {
-    eBeep(t, duro ? 165 : 135, 0.13, 'sine', (duro ? 0.13 : 0.105) * EG, 42);
-    ruido(t, 0.025, 0.02 * EG, 'lowpass', 2600);
+  function eKick (t, duro, d) {
+    eBeep(t, duro ? 165 : 135, 0.13, 'sine', (duro ? 0.13 : 0.105) * EG, 42, false, d || fondo);
+    ruido(t, 0.025, 0.02 * EG, 'lowpass', 2600, 1, d || fondo);
     const g = busE().gain;
     g.cancelScheduledValues(t); g.setValueAtTime(1, t);
     g.linearRampToValueAtTime(0.42, t + 0.012); g.linearRampToValueAtTime(1, t + 0.24);
   }
-  const eSnare = t => {
-    ruido(t, 0.09, 0.05 * EG, 'highpass', 1700);
-    ruido(t, 0.16, 0.024 * EG, 'bandpass', 900);
-    eBeep(t, 195, 0.05, 'triangle', 0.032 * EG);
+  const eSnare = (t, d) => {
+    ruido(t, 0.09, 0.05 * EG, 'highpass', 1700, 1, d || fondo);
+    ruido(t, 0.16, 0.024 * EG, 'bandpass', 900, 1, d || fondo);
+    eBeep(t, 195, 0.05, 'triangle', 0.032 * EG, 0, false, d || fondo);
   };
-  const eHat = (t, abierto) =>
-    ruido(t, abierto ? 0.09 : 0.028, (abierto ? 0.02 : 0.017) * EG, 'highpass', 7200);
-  const eClap = t => {
-    ruido(t, 0.03, 0.045 * EG, 'bandpass', 1500);
-    ruido(t + 0.012, 0.03, 0.04 * EG, 'bandpass', 1500);
-    ruido(t + 0.026, 0.13, 0.05 * EG, 'bandpass', 1200);
+  const eHat = (t, abierto, d) =>
+    ruido(t, abierto ? 0.09 : 0.028, (abierto ? 0.02 : 0.017) * EG, 'highpass', 7200, 1, d || fondo);
+  const eClap = (t, d) => {
+    ruido(t, 0.03, 0.045 * EG, 'bandpass', 1500, 1, d || fondo);
+    ruido(t + 0.012, 0.03, 0.04 * EG, 'bandpass', 1500, 1, d || fondo);
+    ruido(t + 0.026, 0.13, 0.05 * EG, 'bandpass', 1200, 1, d || fondo);
   };
-  const eCrash = t => ruido(t, 0.55, 0.045 * EG, 'highpass', 4200);
-  const eTom = (t, f) => { eBeep(t, f, 0.2, 'sine', 0.095 * EG, f * 0.45); ruido(t, 0.02, 0.012 * EG, 'lowpass', 1800); };
-  function eBajo (t, f, gan) {
+  const eCrash = t => ruido(t, 0.55, 0.045 * EG, 'highpass', 4200, 1, fondo);
+  const eTom = (t, f, d) => { eBeep(t, f, 0.2, 'sine', 0.095 * EG, f * 0.45, false, d || fondo); ruido(t, 0.02, 0.012 * EG, 'lowpass', 1800, 1, d || fondo); };
+  function eBajo (t, f, gan, d) {
     const filtro = ac.createBiquadFilter(); filtro.type = 'lowpass';
-    filtro.frequency.setValueAtTime(560, t);
-    filtro.frequency.exponentialRampToValueAtTime(180, t + 0.16);
+    // El bajo del arreglo es oscuro a proposito (retumba y no estorba). El del
+    // JUGADOR se abre el doble: asi se oye QUE nota toco, no solo que hubo un
+    // golpe grave. La diferencia de timbre es lo que hace reconocer "ese soy yo".
+    filtro.frequency.setValueAtTime(d ? 1200 : 560, t);
+    filtro.frequency.exponentialRampToValueAtTime(d ? 420 : 180, t + 0.16);
     const g = ac.createGain();
-    g.gain.setValueAtTime(gan, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-    filtro.connect(g).connect(busE());
+    g.gain.setValueAtTime(gan, t); g.gain.exponentialRampToValueAtTime(0.0001, t + (d ? 0.32 : 0.2));
+    filtro.connect(g).connect(d || busE());
     const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t);
-    o.connect(filtro); o.start(t); o.stop(t + 0.22);
+    o.connect(filtro); o.start(t); o.stop(t + 0.35);
     const gs = ac.createGain(); gs.gain.value = 1;      // el sub: seno una octava abajo
     const o2 = ac.createOscillator(); o2.type = 'sine'; o2.frequency.setValueAtTime(f / 2, t);
-    o2.connect(gs).connect(filtro); o2.start(t); o2.stop(t + 0.22);
+    o2.connect(gs).connect(filtro); o2.start(t); o2.stop(t + 0.35);
   }
-  const eArp = (t, f, gan) => eBeep(t, f, 0.07, 'square', gan, 0, true);
+  const eArp = (t, f, gan, d) => eBeep(t, f, d ? 0.11 : 0.07, 'square', gan, 0, true, d);
   function ePad (t, freqs, gan, durCompas) {
     const filtro = ac.createBiquadFilter(); filtro.type = 'lowpass'; filtro.frequency.setValueAtTime(750, t);
     const g = ac.createGain();
@@ -1634,13 +1666,17 @@ function arrancarNavegador () {
     src.connect(f).connect(g).connect(master);
     src.start(t); src.stop(t + dur + 0.1);
   }
-  const eTambor = (c, t) => {
-    if (c === 'k') eKick(t); else if (c === 'K') eKick(t, true);
-    else if (c === 's') eSnare(t); else if (c === 'c') eClap(t);
-    else if (c === 'h') eHat(t); else if (c === 'H') eHat(t, true);
-    else if (c === 'u') eTom(t, 190); else if (c === 'T') eTom(t, 140); else if (c === 't') eTom(t, 95);
-    else if (c === 'x') { eKick(t); eSnare(t); eClap(t); }
+  const eTambor = (c, t, d) => {
+    if (c === 'k') eKick(t, false, d); else if (c === 'K') eKick(t, true, d);
+    else if (c === 's') eSnare(t, d); else if (c === 'c') eClap(t, d);
+    else if (c === 'h') eHat(t, false, d); else if (c === 'H') eHat(t, true, d);
+    else if (c === 'u') eTom(t, 190, d); else if (c === 'T') eTom(t, 140, d); else if (c === 't') eTom(t, 95, d);
+    else if (c === 'x') { eKick(t, false, d); eSnare(t, d); eClap(t, d); }
   };
+  // El mismo golpe, pero tocado por la esfera: entra por el bus del solista y
+  // agacha el arreglo. Es el gesto de un baterista que acentua, no un sample
+  // mas fuerte.
+  const golpeDeLaEsfera = (c, t) => { eTambor(c, t, solo); agachar(t); };
 
   // El sostenido, espejo del estudio: alla una nota prolongada es la misma
   // cuadrada sonando y decayendo a lo largo de toda la nota -- no otra voz.
@@ -1893,11 +1929,14 @@ function arrancarNavegador () {
           // tecla de bajo: la esfera esta tocando el bajo del estudio -- dos
           // octavas abajo de donde pisa, con la voz de alla. Sin eco: el bajo
           // no lo lleva. Chueca, sale apagada y con el golpe sordo.
-          eBajo(ac.currentTime, e.f / 8, 0.16 - 0.09 * e.suc);
+          // Por el bus del SOLISTA y al triple de lo que sale el bajo del
+          // arreglo: antes iban parejos y el jugador competia consigo mismo.
+          eBajo(ac.currentTime, e.f / 8, 0.44 - 0.22 * e.suc, solo);
+          agachar(ac.currentTime, 0.6, 0.16);
           // ...y la raiz del arpegio: con los tres orbes del arco, el up16
           // queda completo -- tocar bien el motor ES tocar el arpegio entero
           const ch = acordeEnCompas(Math.floor(e.x / 4));
-          eArp(ac.currentTime, ch.root * 2, 0.11 * (1 - e.suc));
+          eArp(ac.currentTime, ch.root * 2, 0.17 * (1 - e.suc), solo);
           if (e.suc > 0.25) ruido(ac.currentTime, 0.05, 0.09 * e.suc, 'lowpass', 500);
           destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
           chispas(e.x, e.y, Math.round(7 - 4 * e.suc), true, mezcla(C.impulsoRGB, C.suciaRGB, e.suc));
@@ -1944,13 +1983,13 @@ function arrancarNavegador () {
       } else if (e.tipo === 'piston') {
         // el caño suena SU golpe de la bateria (el fondo lo callo, lo toca la
         // esfera), y el aire comprimido encima
-        if (e.instr) eTambor(e.instr, ac.currentTime);
+        if (e.instr) golpeDeLaEsfera(e.instr, ac.currentTime);
         ruido(ac.currentTime, e.modo === 'encima' ? 0.1 : 0.16, 0.18, 'bandpass', 700, 1.1);
         if (e.modo === 'encima') {
           golpe(ac.currentTime, 320, 0.09, 0.11, 'triangle');
           destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
         } else {
-          eKick(ac.currentTime, true);
+          eKick(ac.currentTime, true, solo);
           golpe(ac.currentTime, 120, 0.2, 0.18, 'square');
           golpe(ac.currentTime + 0.03, 240, 0.14, 0.1, 'triangle');
         }
@@ -1962,11 +2001,13 @@ function arrancarNavegador () {
         if (e.instr === 'arp') {
           const ch = acordeEnCompas(e.c);
           const semis = ch.ints[e.n % 3] + 12 * Math.floor(e.n / 3);
-          eArp(ac.currentTime, ch.root * Math.pow(2, semis / 12) * 2, 0.11);
+          eArp(ac.currentTime, ch.root * Math.pow(2, semis / 12) * 2, 0.17, solo);
+          agachar(ac.currentTime, 0.78, 0.11);
         } else if (e.instr === 'bajo') {
           const ch = acordeEnCompas(e.c);
-          eBajo(ac.currentTime, (ch.root / 4) * Math.pow(2, e.semi / 12), 0.09 * EG);
-        } else eTambor(e.instr, ac.currentTime);
+          eBajo(ac.currentTime, (ch.root / 4) * Math.pow(2, e.semi / 12), 0.3, solo);
+          agachar(ac.currentTime, 0.62, 0.18);
+        } else golpeDeLaEsfera(e.instr, ac.currentTime);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
         chispas(e.x, e.y, 6, true, e.instr === 'arp' ? C.teclaRGB : C.esferaRGB);
       } else if (e.tipo === 'falso') {
