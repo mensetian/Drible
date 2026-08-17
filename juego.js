@@ -288,8 +288,14 @@ const CANCIONES = {
     sinAbismo: [{ x0: 244, x1: 260 }],
     // SUPERNOVA dobla la melodia una octava arriba, como el estudio.
     octavas: [{ x0: 212, x1: 244 }],
-    // MOTOR es zona de ARPEGIO: abajo de las teclas de bajo la red se corta
-    // (fallar una tecla del motor se paga), y cada arco entre teclas lleva
+    // MOTOR arranca con cuatro La seguidos: mismo tono, misma altura, una
+    // meseta plana de cuatro compases. Pero un BUILD no es plano -- levanta.
+    // Como la altura de una tecla de bajo la decide el mapa (el sonido lo da su
+    // nombre), la seccion TREPA: cada tecla se apoya un poco mas arriba que la
+    // anterior, y el tono sigue dibujando su relieve encima de esa cuesta.
+    trepadas: [{ x0: 36, x1: 52, alto: 0.115 }],
+    // MOTOR es ademas zona de ARPEGIO: abajo de las teclas de bajo la red se
+    // corta (fallar una tecla del motor se paga), y cada arco entre teclas lleva
     // tres orbes con las semicorcheas del up16. El bajo lo toca la esfera,
     // asi que el bajo de fondo calla aca.
     arpegios: [{ x0: 35.9, x1: 51.5 }],
@@ -530,6 +536,20 @@ function compilar () {
     else if (n.riel) n.x1 = fin;                         // se suelta al final
     else n.x1 = Math.min(n.b + Math.min(0.42, n.dur * 0.7), fin);
   }
+  // LA CUESTA DEL BUILD. Un build levanta, y una seccion de bajo puede repetir
+  // la misma nota cuatro compases seguidos: mismo tono, misma altura, meseta
+  // plana. El tono no se toca --el sonido sale de ahi-- pero la ALTURA de una
+  // tecla de bajo es del mapa, asi que la seccion trepa: se le suma una cuesta
+  // que crece pareja de punta a punta, y el relieve del tono queda dibujado
+  // encima. La rampa de salida, mas abajo, se encarga de que siga siendo
+  // saltable.
+  for (const z of (CANCIONES[CANCION_ID].trepadas || [])) {
+    for (const n of notas) {
+      if (n.silencio || !n.bajo || n.b < z.x0 || n.b >= z.x1) continue;
+      n.y = +(n.y + z.alto * (n.b - z.x0) / (z.x1 - z.x0)).toFixed(4);
+    }
+  }
+
   // LA RAMPA DE SALIDA. Un build termina en el drop: la ultima tecla de BAJO
   // esta en la banda de abajo y la primera del coro arriba, y entre las dos hay
   // media negra. Subir 0.35 con esta gravedad pide 0.80 tiempos -- no habia
@@ -582,6 +602,14 @@ function compilar () {
     if (n.silencio || !sig || sig.silencio) continue;
     // a una carrera no se cae ligado: se entra rodando, o se rompe la carrera
     if (n.escalera || sig.escalera) continue;
+    // NI ENTRE INSTRUMENTOS DISTINTOS. Ligar es no volver a atacar: es un
+    // idioma de la melodia. Pasar de la melodia al BAJO es cambiar de
+    // instrumento, y eso siempre es un ataque -- en el estudio el bajo toca
+    // esas notas con su propio golpe. Ligarlas hacia la tecla de bajo dejaba
+    // la ultima verde de cada compas del VUELO como "no se toca": el jugador
+    // la tocaba (es lo natural), y el juego se lo cobraba como toque en falso
+    // con sordera incluida. La seccion entera se sentia rota sin serlo.
+    if (!n.bajo !== !sig.bajo) continue;
     if (n.dur < 1 || sig.dur > 0.5 || sig.y >= n.y) continue;
     const caida = Math.sqrt(2 * (n.y - sig.y) / G);
     const borde = sig.xm - caida;                        // la caida cae en el pulso
@@ -2151,6 +2179,51 @@ function arrancarNavegador () {
     }
   }
 
+  // PAUSA. Se suspende el AudioContext, y con eso se congela SU reloj: como
+  // todo --la musica agendada, t0, el mundo-- cuelga de ese reloj, al volver
+  // nada quedo corrido y no hay nada que recalcular. Suspender es la pausa.
+  let pausado = false;
+  const BOTON_PAUSA = { x: 44, y: 34, r: 17 };     // desde el borde derecho
+  const enBotonPausa = (px, py, w) =>
+    Math.abs(px - (w - BOTON_PAUSA.x)) < BOTON_PAUSA.r + 6 &&
+    Math.abs(py - BOTON_PAUSA.y) < BOTON_PAUSA.r + 6;
+  function alternarPausa () {
+    if (!corriendo || s.meta || !ac) return;
+    pausado = !pausado;
+    if (pausado) {
+      soltar(s);                       // que no quede el boton hundido al volver
+      rielCerrar(); eRielCerrar();
+      try { ac.suspend(); } catch (_) {}
+    } else {
+      try { ac.resume(); } catch (_) {}
+    }
+  }
+  function dibujarPausa (w, h) {
+    // el boton, siempre a la vista mientras se juega
+    const bx = w - BOTON_PAUSA.x, by = BOTON_PAUSA.y;
+    cx.fillStyle = 'rgba(0,0,0,0.35)';
+    cx.beginPath(); cx.arc(bx, by, BOTON_PAUSA.r, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = `rgba(${C.esferaRGB},0.5)`; cx.lineWidth = 1.5;
+    cx.beginPath(); cx.arc(bx, by, BOTON_PAUSA.r, 0, Math.PI * 2); cx.stroke();
+    cx.fillStyle = `rgba(${C.esferaRGB},0.9)`;
+    if (pausado) {                     // en pausa muestra el triangulo de seguir
+      cx.beginPath();
+      cx.moveTo(bx - 4, by - 7); cx.lineTo(bx + 7, by); cx.lineTo(bx - 4, by + 7);
+      cx.closePath(); cx.fill();
+    } else {
+      cx.fillRect(bx - 6, by - 7, 4, 14);
+      cx.fillRect(bx + 2, by - 7, 4, 14);
+    }
+    if (!pausado) return;
+    cx.fillStyle = 'rgba(10,10,14,0.55)'; cx.fillRect(0, 0, w, h);
+    cx.textAlign = 'center';
+    cx.fillStyle = C.peligro; cx.font = 'bold 30px system-ui';
+    cx.fillText('PAUSA', w / 2, h * 0.44);
+    cx.fillStyle = C.tenue; cx.font = '13px system-ui';
+    cx.fillText('toca para seguir · ESC', w / 2, h * 0.44 + 26);
+    cx.textAlign = 'left';
+  }
+
   // ENSAYO Y CONCIERTO. Saltar de seccion es para revisar un tramo sin tocar
   // la cancion entera -- pero entonces la corrida ya no empezo en el principio,
   // y su porcentaje no significa nada. Un record que se saca saltando al 90%
@@ -2189,6 +2262,7 @@ function arrancarNavegador () {
   // En el menu, un toque pelado (espacio, click) arranca el nivel 1; el nivel
   // se elige con 1/2 en el teclado o tocando su renglon.
   function bajar (nivel = 0) {
+    if (pausado) { alternarPausa(); return; }   // en pausa, tocar es seguir
     if (calib) { tocarCalib(); return; }
     if (nivel === 'calibrar') { calibrar(); return; }
     if (!corriendo) { empezar(NIVELES[nivel] || NIVELES[0]); return; }
@@ -2207,6 +2281,7 @@ function arrancarNavegador () {
   // En captura y sobre window: asi ningun elemento con foco se come la tecla,
   // que es lo que pasa cuando la pagina se abre embebida o se hizo clic afuera.
   addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) alternarPausa(); return; }
     // revisar: saltar de seccion en seccion sin jugar todo el nivel
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
@@ -2232,6 +2307,11 @@ function arrancarNavegador () {
 
   cv.addEventListener('pointerdown', e => {
     e.preventDefault();
+    // el boton de pausa se come el toque: si no, pausar seria tambien tocar
+    if (corriendo && !s.meta && enBotonPausa(e.offsetX, e.offsetY, cv.clientWidth)) {
+      alternarPausa();
+      return;
+    }
     if (!corriendo) {
       if (calib) { bajar(); return; }
       // cada renglon del menu es una franja: 1 arriba, 2 al medio, 3 abajo,
@@ -2261,11 +2341,14 @@ function arrancarNavegador () {
     // cero por construccion.
     const crudo = (t - antes) / 1000;
     const dtSeg = Math.min(0.05, crudo);
+    antes = t;
+    // en pausa el reloj del audio esta congelado, asi que no hay nada que
+    // devolver ni que adelantar: solo se sigue dibujando
+    if (pausado) { dibujar(0); return; }
     if (ac && crudo > dtSeg) {
       t0 += crudo - dtSeg;
       proxBeat = Math.max(proxBeat, Math.floor(ahoraAudio() * 4) / 4);
     }
-    antes = t;
     if (calib) {
       if (!calib.listo && ac.currentTime > calib.fin) cerrarCalib();
       else if (calib.listo && ac.currentTime > calib.fin + 3.2) calib = null;
@@ -2812,6 +2895,7 @@ function arrancarNavegador () {
       // el atajo de revision, dicho donde se necesita
       cx.fillStyle = C.tenue; cx.font = '11px system-ui';
       cx.fillText('◀ ▶  saltar de seccion', 12, h - 10);
+      if (!s.meta) dibujarPausa(w, h);
       if (ensayo) {                 // y que se sepa que esto no puntua
         cx.fillStyle = C.sucia; cx.font = 'bold 11px system-ui';
         cx.fillText('ENSAYO', w - 62, h - 10);

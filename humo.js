@@ -31,6 +31,7 @@ class AudioContextFalso {
   // la imagen consume los golpes agendados (el latido del fondo)
   get currentTime () { return reloj / 1000; }
   resume () {}
+  suspend () {}
   createGain () { return nodoAudio(); }
   createOscillator () { return nodoAudio(); }
   createBiquadFilter () { return nodoAudio(); }
@@ -150,6 +151,18 @@ for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'aurora'], ['3', 'viaje']])
       if (i % 7 === 3) disparar('keyup', { key: ' ', code: 'Space', preventDefault () {} });
       correrCuadros(1);
     }
+  });
+  probar(`${nivel}: se pausa y se sigue`, () => {
+    disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
+    correrCuadros(4);
+    exigir(dijo('PAUSA'), 'no se pauso con ESC');
+    textos.length = 0;
+    correrCuadros(20);
+    exigir(dijo('PAUSA'), 'la pausa no se sostuvo');
+    tocar1();                                   // en pausa, tocar es seguir
+    textos.length = 0;
+    correrCuadros(6);
+    exigir(!dijo('PAUSA'), 'tocar no reanudo el juego');
   });
   probar(`${nivel}: saltar de seccion con las flechas`, () => {
     for (let i = 0; i < 6; i++) {

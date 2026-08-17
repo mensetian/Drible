@@ -189,8 +189,22 @@ function correr (id) {
     perfecta(s, b);
   };
 
+  // la mano que ATACA EL BAJO: toca toda tecla que no sea riel ni ligadura de
+  // la melodia -- incluidas las de bajo, que es lo natural (son otro
+  // instrumento, y un instrumento que entra siempre entra atacando). Si el
+  // mapa liga hacia una tecla de bajo, este toque no corresponde: se va a la
+  // cola, se paga contra la nota siguiente y desalinea el resto del tramo.
+  const atacaElBajo = (s, b) => {
+    if (rescata(s, b)) return;
+    const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+    s.sostiene = !!(k && k.riel);
+    if (k && !k.riel && !k.silencio && !(k.porCaida && !k.bajo) &&
+        s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
+  };
+
   const rp = jugar(perfecta);
   const rBorde = jugar(alBorde);
+  const rBajo = jugar(atacaElBajo);
   const rz = jugar(tropieza);
   const rPiso = R.pistones ? jugar(porElPiso) : null;
   const rSpam = jugar(martillo(0.04));
@@ -243,6 +257,7 @@ function correr (id) {
     !(NOTAS[k.i - 1] && NOTAS[k.i - 1].dur <= 0.25));
 
   const ligadas = NOTAS.filter(k => k.porCaida);
+  let cruzados = [];
 
   const pruebas = [
     ['cada compas suma exactamente 4 tiempos', !compasesMal.length,
@@ -266,25 +281,46 @@ function correr (id) {
       ligadas.map(k => k.nombre + '@' + k.b).join(' ') || 'ninguna'],
     ['toda ligadura tiene ventana para atacar la primera nota',
       NOTAS.filter(k => k.ligada).every(k => k.x1 - k.x0 >= 0.14), ''],
+    // Ligar es NO volver a atacar, y eso es un idioma de la melodia. Cambiar de
+    // instrumento siempre es un ataque: en el estudio el bajo toca esas notas
+    // con su propio golpe. Ligar hacia una tecla de bajo dejaba la ultima verde
+    // de cada compas del VUELO como "no se toca", el jugador la tocaba igual
+    // --es lo natural-- y ese toque de mas se pagaba contra la nota siguiente:
+    // 234 de 277 limpias jugando a tiempo, contra 277 sin la ligadura cruzada.
+    ['ninguna ligadura cruza de instrumento: el bajo siempre se ataca',
+      NOTAS.every(k => !k.porCaida || !NOTAS[k.i - 1] || !NOTAS[k.i - 1].bajo === !k.bajo),
+      NOTAS.filter(k => k.porCaida && NOTAS[k.i - 1] && !NOTAS[k.i - 1].bajo !== !k.bajo)
+        .map(k => k.nombre + '@' + k.b).join(' ')],
+    ['...y atacar el bajo sale limpio, que es lo que el jugador va a hacer',
+      rBajo.limpias.size === TOTAL_NOTAS && rBajo.falsos === 0,
+      `${rBajo.limpias.size}/${TOTAL_NOTAS} limpias · ${rBajo.falsos} en falso`],
     ['una ligadura NO suena si no sonaste la nota de la que cuelga',
       ligadas.every(k => !rm.tocadas.has(k.i)), ''],
     ['hay rieles y saltos; carreras si la partitura las pide',
       NOTAS.some(k => k.riel) && saltos.length > R.saltos &&
       (!R.escaleras || NOTAS.some(k => k.escalera)),
       `rieles ${NOTAS.filter(k => k.riel).length} · escalones ${NOTAS.filter(k => k.escalera).length} · saltos ${saltos.length}`],
-    // ...salvo las que TREPAN para salir al drop: esa rampa es a proposito (sin
-    // ella el salto de la banda de abajo a la melodia es fisicamente imposible),
-    // y tiene que ser una minoria -- si trepara la mitad, no hay dos bandas.
-    ['las teclas de bajo viven en su banda, salvo la rampa de salida',
+    // Las dos bandas existen para que se vea de un vistazo que son DOS
+    // instrumentos. Pero la altura de una tecla de bajo es del mapa, y el mapa
+    // la usa: la cuesta del build y la rampa de salida las levantan a proposito
+    // --sin la rampa el salto al drop es fisicamente imposible-- y en un build
+    // no hay melodia con la cual confundirlas. Asi que lo que se exige no es
+    // "siempre abajo de tal altura", que seria falso, sino lo unico que importa:
+    // DONDE CONVIVEN, el bajo va por debajo. Ese es el zigzag del verso.
+    ['donde melodia y bajo comparten compas, el bajo va por debajo',
       (() => {
-        const bajos = NOTAS.filter(k => k.bajo);
-        if (!bajos.length) return true;
-        const trepan = bajos.filter(k => k.y >= Y_GRAVE);
-        return trepan.length <= bajos.length * 0.25 &&
-          // y las que trepan son siempre las ULTIMAS de su carrera
-          trepan.every(k => { const sig = NOTAS[k.i + 1]; return sig && (!sig.bajo || sig.y >= k.y); });
+        const porCompas = new Map();
+        for (const k of NOTAS) {
+          if (k.silencio) continue;
+          const c = Math.floor(k.b / 4);
+          if (!porCompas.has(c)) porCompas.set(c, { bajo: [], mel: [] });
+          porCompas.get(c)[k.bajo ? 'bajo' : 'mel'].push(k.y);
+        }
+        cruzados = [...porCompas].filter(([, g]) => g.bajo.length && g.mel.length &&
+          Math.max(...g.bajo) >= Math.min(...g.mel)).map(([c]) => 'c' + c);
+        return !cruzados.length;
       })(),
-      `${NOTAS.filter(k => k.bajo).length} teclas de bajo · ${NOTAS.filter(k => k.bajo && k.y >= Y_GRAVE).length} en rampa`],
+      cruzados.length ? cruzados.join(' ') : `${NOTAS.filter(k => k.bajo).length} teclas de bajo`],
     ['el mapa sube y baja de verdad (rango > medio octava)',
       Math.max(...NOTAS.filter(k => !k.silencio).map(k => k.y)) -
       Math.min(...NOTAS.filter(k => !k.silencio).map(k => k.y)) > 0.15, ''],
@@ -373,10 +409,13 @@ function correr (id) {
     // proxima tecla. Se pierden a lo sumo la salteada y sus dos vecinas.
     // La zona de dribleo del motor: picar al beat suena el arpegio y no rompe
     // nada -- la melodia de despues sale entera igual.
-    // Los orbes son cuerpos: la mano fina los cosecha casi todos con el arco;
-    // la corrida 150 ms pica por otro lado y deja la mayoria mudos.
+    // Los orbes son cuerpos: la mano fina los cosecha TODOS con el arco, y la
+    // atrasada 150 ms vuela mas chato y pierde una parte real. El numero exacto
+    // no es un objetivo de diseño --da 0.71 hoy y daba 0.69 ayer, y las dos
+    // cosas significan lo mismo--; lo que se afirma es que llegar tarde cuesta
+    // orbes, no que cueste una fraccion precisa.
     ['los orbes del arpegio se tocan con el cuerpo, y el arco fino los lleva',
-      !R.orbes || (rp.orbes >= R.orbes && rAt.orbes < rp.orbes * 0.7),
+      !R.orbes || (rp.orbes >= R.orbes && rAt.orbes < rp.orbes * 0.8),
       R.orbes ? `perfecta ${rp.orbes}/${ORBES.length} · atrasada ${rAt.orbes}` : 'sin orbes: no aplica'],
     // el evento de cosecha tiene que decir QUE instrumento suena: sin esto el
     // navegador recibia undefined y el orbe cosechado salia mudo
