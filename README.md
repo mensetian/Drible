@@ -5,6 +5,8 @@ dos archivos, un canvas y sonido sintetizado en el momento.
 
 ▶ **Jugar: https://mensetian.github.io/Drible/**
 
+![drible — la seccion MOTOR de AURORA - EL VIAJE: las teclas verdes son el bajo, los orbes el arpegio y los pistones naranjas castigan anticiparse](captura.png)
+
 ## La idea
 
 La esfera no rebota sola nunca. Cada nota de la melodía es una **tecla física**
