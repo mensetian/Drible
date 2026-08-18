@@ -3,7 +3,7 @@
 **El mapa ES la partitura.** Un juego de ritmo de un botón, sin dependencias:
 dos archivos, un canvas y sonido sintetizado en el momento.
 
-▶ **Jugar: https://mensetian.github.io/drible/**
+▶ **Jugar: https://mensetian.github.io/Drible/**
 
 ## La idea
 
