@@ -1,0 +1,4 @@
+# scratch de agentes verificadores: no entra al repo
+_aud*.mjs
+_diag*.mjs
+_verif*.mjs

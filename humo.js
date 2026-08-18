@@ -3,7 +3,7 @@
 // todo el dibujo y la sintesis quedaban sin red. Esto no juzga como se ve:
 // juzga que no explote.
 //
-//   node drible/humo.js
+//   node humo.js
 
 const nodoAudio = () => new Proxy({}, {
   get (t, k) {

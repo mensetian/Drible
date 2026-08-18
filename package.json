@@ -1,0 +1,11 @@
+{
+  "name": "drible",
+  "private": true,
+  "type": "module",
+  "description": "Juego de ritmo de un boton: el mapa ES la partitura.",
+  "scripts": {
+    "test": "node prueba.js && node humo.js",
+    "prueba": "node prueba.js",
+    "humo": "node humo.js"
+  }
+}

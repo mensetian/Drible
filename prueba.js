@@ -7,7 +7,7 @@
 // (Aurora tiene carreras de semicorcheas y un silencio con techo; esfera no),
 // y eso va en `RASGOS`, no en tests copiados.
 //
-//   node drible/prueba.js
+//   node prueba.js
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
