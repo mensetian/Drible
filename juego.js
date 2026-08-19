@@ -2363,7 +2363,9 @@ function arrancarNavegador () {
     techo: 'te aplasto el techo — bajo el techo NO se toca',
     hueco: 'soltaste el riel sobre el vacio — ahi hay que mantener',
     dribleo: 'la red se corta entre piques — hay que PICAR al beat',
-    red: 'SIN RED: fallar una nota es caer — aca abajo no hay nada'
+    // dice lo que paso, no lo que se supone que lo causo: fallar una nota no
+    // siempre tira a la red -- lo que mata, aca, es tocarla
+    red: 'SIN RED: tocaste la red — aca abajo no hay nada'
   };
   let avisoMuerte = null;
   function morirOReiniciar () {
@@ -3468,9 +3470,10 @@ function arrancarNavegador () {
           : sig === 'SUPERNOVA' ? Math.ceil(total * 0.85) - (paso.r.perf || 0)
           : Math.ceil(total * 0.85) - paso.r.limpias;
         if (faltan > 0) {
+          const que = sig === 'SUPERNOVA' ? (faltan === 1 ? 'clavada' : 'clavadas')
+            : (faltan === 1 ? 'limpia' : 'limpias');
           cx.fillStyle = C.tenue; cx.font = '12px system-ui';
-          cx.fillText(`${nombreCancion(paso.id)}: a ${faltan} ${sig === 'SUPERNOVA' ? 'clavadas' : 'limpias'} de ${sig}`,
-            w / 2, h * 0.50 + 6);
+          cx.fillText(`${nombreCancion(paso.id)}: a ${faltan} ${que} de ${sig}`, w / 2, h * 0.50 + 6);
         }
       }
       cx.font = '13px system-ui';
