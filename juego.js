@@ -277,10 +277,12 @@ const CANCIONES = {
       { x0: 196, n: 'empuje final' }, { x0: 212, n: 'supernova · climax' },
       { x0: 244, n: 'aurora · aterrizaje' }
     ],
-    // Los martillos: densos en el build (uno por arco) y salteados en el coro
-    // (uno cada tres), donde solo cazan al que se va adelante.
-    pistones: [{ x0: 116, x1: 132, cada: 2 }, { x0: 132, x1: 164, cada: 4 },
-      { x0: 212, x1: 244, cada: 3 }],
+    // Los martillos: densos en el build y naturalmente salteados en el coro,
+    // donde solo cazan al que se va adelante -- alli el galope es tan denso
+    // que solo las negras tienen lugar para un caño, asi que el espaciado lo
+    // pone la propia geometria y `cada` queda en 1.
+    pistones: [{ x0: 116, x1: 132, cada: 2 }, { x0: 132, x1: 164, cada: 1 },
+      { x0: 212, x1: 244, cada: 1 }],
     // El aterrizaje es la vuelta de la victoria: sin abismos, el premio no se
     // cobra con un susto. NEBULOSA si los lleva --sus hilos de 4 tiempos son
     // los rieles mas largos de la cancion y ahi sostener vale la vida-- salvo
@@ -678,7 +680,6 @@ export let PASOS_BATERIA = new Set();
 export let PASOS_BAJO = new Set();
 function orbes () {
   const r = [];
-  PASOS_BATERIA = new Set(); PASOS_BAJO = new Set();
   const extra = !!CANCIONES[CANCION_ID].orbesExtra;
   const spec = CANCIONES[CANCION_ID].estudio;
   if (!ARPEGIOS.length && !extra) return r;
@@ -694,6 +695,7 @@ function orbes () {
       for (let tx = n.xm + 0.7; tx < n.x1 - 1.1; tx += 1) {
         let mr = null;
         for (let p = Math.ceil((tx - 0.3) * 4); p <= Math.floor((tx + 0.3) * 4); p++) {
+          if (PASOS_BATERIA.has(p) || PASOS_BAJO.has(p)) continue;   // los caños eligen primero
           const cc = Math.floor(p / 16), i16 = p % 16;
           const pl = spec(cc); if (!pl) continue;
           const bat = E_BATERIA[pl.drums];
@@ -734,6 +736,7 @@ function orbes () {
       const p0 = Math.ceil((x0 + 0.08) * 4), p1 = Math.floor((obj - 0.08) * 4);
       const candidatos = [];
       for (let p = p0; p <= p1; p++) {
+        if (PASOS_BATERIA.has(p) || PASOS_BAJO.has(p)) continue;   // los caños eligen primero
         const cc = Math.floor(p / 16), i16 = p % 16;
         const pl = spec(cc); if (!pl) continue;
         const bat = E_BATERIA[pl.drums];
@@ -806,7 +809,15 @@ export let TECHOS = [];
 // ahi si hay castigo (racha cortada, un rato sordo), pero te devuelve a la
 // cancion en vez de sacarte.
 export let PISTONES = [];
+export let ZONAS_PISTON = [];      // las zonas declaradas por la cancion
 export const ROCE = 0.13;          // debajo de esto vas rasante: te agarra el vastago
+// El caño elige su golpe con JERARQUIA, no por cercania: el backbeat entero
+// ('x' = bombo+caja+clap) manda sobre la caja, la caja sobre el clap, y el
+// hat es el ultimo recurso. Antes ganaba el mas cercano, que en los patrones
+// del coro ('k.h.x.h...') era casi siempre un hat de 30 ms: se pisaba un caño
+// gigante y sonaba un tic -- por eso los caños parecian decorado.
+const PESO = { x: 4, s: 3, c: 2, H: 1, h: 0 };
+export let PASOS_PISTON = new Set();   // pasos reclamados por caños: llevan crater
 function pistones () {
   const r = [];
   const spec = CANCIONES[CANCION_ID].estudio;
@@ -821,45 +832,83 @@ function pistones () {
       let obj = sig.x0 + MIRA;
       if (obj - k.xm < tv) obj = Math.min(sig.x1 - 0.02, k.xm + tv);
       const T = obj - k.xm;
-      if (T < 0.6) continue;
-      if (++n % (z.cada || 1)) continue;
-      // El arco del salto tocado EN EL PULSO, que es el que se premia. La
-      // cabeza va pasada la cima, del lado que baja: ahi la esfera CAE sobre
-      // el caño en vez de rozarlo, que es lo que se siente como pisarlo.
+      // 0.45, no 0.6: con 0.6 el galope del coro no compilaba NI UN caño y la
+      // promesa del mapa ("en el coro solo cazan al que se va adelante") era
+      // letra muerta -- DESPEGUE II salia con cero.
+      if (T < 0.45) continue;
+      // EL CAÑO QUIERE VIVIR EN LA GRILLA. Primero intenta pararse EN el paso
+      // de semicorchea de un golpe libre: como en este juego x ES el tiempo,
+      // pisarlo a tiempo y sonar el golpe en su semicorchea son EL MISMO
+      // INSTANTE -- latencia cero y el acento clavado en el pocket, sin
+      // relojes de por medio. Si ningun paso sobrevive la geometria (en
+      // GRAVEDAD el unico alcanzable pisa el borde de la tecla anterior), el
+      // caño cae al punto fisico de siempre --apenas pasada la cima-- y el
+      // golpe suena al contacto, a lo sumo ~80 ms del paso: un baterista
+      // apenas laid-back, no un flam.
       const vy = Math.min(1.9, (sig.y - k.y) / T + G * T / 2);
-      // ...del lado que BAJA, siempre: con el minimo de afuera, un vuelo corto
-      // dejaba la cabeza en la subida, donde la esfera pasa rozando por debajo
-      // y nunca la pisa -- un caño impisable que ademas se lleva mudo un golpe
-      // del arreglo. Si el arco no da para la bajada, mejor no poner caño.
-      const dt = Math.max(vy / G + 0.1, Math.min(T * 0.72, vy / G + 0.2));
-      if (dt <= 0.15 || dt >= T - 0.08) continue;
-      const tope = +(k.y + vy * dt - G * dt * dt / 2).toFixed(3);
-      if (tope < 2 * R + 0.06) continue;          // tan bajo que ya es la red
-      const x = +(k.xm + dt).toFixed(3);
-      const x0 = +(x - 0.15).toFixed(3), x1 = +(x + 0.15).toFixed(3);
-      if (HUECOS.some(h => x > h.x0 - 0.9 && x < h.x1 + 0.9)) continue;
-      if (TECHOS.some(t => x > t.x0 - 0.5 && x < t.x1 + 0.5)) continue;
-      // ninguna tecla puede quedar dentro del caño: parado en ella te dispararia
-      if (NOTAS.some(k2 => !k2.silencio && k2.y < tope + 2 * R + 0.02 &&
-          k2.x1 > x0 - 0.02 && k2.x0 < x1 + 0.02)) continue;
-      // El golpe que reclama: el mas cercano de la bateria que nadie haya
-      // pedido todavia. Sin golpe no hay piston -- un caño mudo es decorado,
-      // y de eso justamente veniamos.
+      if (!spec) continue;
+      const cabe = (x, tope) => {
+        if (tope < 2 * R + 0.06) return false;    // tan bajo que ya es la red
+        const x0 = x - 0.15, x1 = x + 0.15;
+        if (HUECOS.some(h => x > h.x0 - 0.9 && x < h.x1 + 0.9)) return false;
+        if (TECHOS.some(t => x > t.x0 - 0.5 && x < t.x1 + 0.5)) return false;
+        // ninguna tecla puede quedar dentro del caño: parado ahi te dispararia
+        return !NOTAS.some(k2 => !k2.silencio && k2.y < tope + 2 * R + 0.02 &&
+          k2.x1 > x0 - 0.02 && k2.x0 < x1 + 0.02);
+      };
+      const golpeEn = p => {
+        if (PASOS_BATERIA.has(p)) return null;
+        const pl = spec(Math.floor(p / 16)); if (!pl) return null;
+        const bat = E_BATERIA[pl.drums];
+        return bat && 'xscHh'.includes(bat[p % 16]) ? bat[p % 16] : null;
+      };
       let mr = null;
-      if (spec) {
-        for (let p = Math.ceil((x - 0.3) * 4); p <= Math.floor((x + 0.3) * 4); p++) {
-          if (PASOS_BATERIA.has(p)) continue;
-          const pl = spec(Math.floor(p / 16)); if (!pl) continue;
-          const bat = E_BATERIA[pl.drums];
-          const golpe = bat && 'xscHh'.includes(bat[p % 16]) ? bat[p % 16] : null;
+      // candidatos en grilla: pasos del lado que BAJA del arco (en la subida
+      // la esfera pasa rozando por debajo y el caño es impisable). El margen
+      // tras la cima es finisimo a proposito -- en el galope el unico paso
+      // alcanzable cae apenas pasada la cima -- y lo compensa la cabeza: va 5
+      // milesimas DEBAJO del arco, asi el cruce en bajada existe aunque la
+      // integracion discreta nunca pise la cima exacta.
+      const p0 = Math.ceil((k.xm + Math.max(0.15, vy / G + 0.015)) * 4);
+      const p1 = Math.ceil((k.xm + T - 0.08) * 4) - 1;
+      for (let p = p0; p <= p1; p++) {
+        const golpe = golpeEn(p);
+        if (!golpe) continue;
+        const dt = p / 4 - k.xm;
+        const tope = +(k.y + vy * dt - G * dt * dt / 2 - 0.005).toFixed(3);
+        const x = +(p / 4).toFixed(3);
+        if (!cabe(x, tope)) continue;
+        // apenas pasada la cima es donde pisar se SIENTE pisar
+        const d = Math.abs(dt - (vy / G + 0.2));
+        if (!mr || PESO[golpe] > PESO[mr.golpe] ||
+            (PESO[golpe] === PESO[mr.golpe] && d < mr.d)) mr = { p, golpe, x, tope, d };
+      }
+      if (!mr) {
+        // fuera de grilla: el punto fisico del arco, y el golpe libre mas
+        // pesado a menos de 0.2 tiempos -- el pisoton suena al contacto, a lo
+        // sumo ~107 ms del paso del golpe: acento humano, no flam
+        const dt = Math.max(vy / G + 0.1, Math.min(T * 0.72, vy / G + 0.2));
+        if (dt <= 0.15 || dt >= T - 0.08) continue;
+        const tope = +(k.y + vy * dt - G * dt * dt / 2).toFixed(3);
+        const x = +(k.xm + dt).toFixed(3);
+        if (!cabe(x, tope)) continue;
+        for (let p = Math.ceil((x - 0.2) * 4); p <= Math.floor((x + 0.2) * 4); p++) {
+          const golpe = golpeEn(p);
           if (!golpe) continue;
           const d = Math.abs(p / 4 - x);
-          if (!mr || d < mr.d) mr = { p, golpe, d };
+          if (!mr || PESO[golpe] > PESO[mr.golpe] ||
+              (PESO[golpe] === PESO[mr.golpe] && d < mr.d)) mr = { p, golpe, x, tope, d };
         }
       }
-      if (!mr) continue;
+      if (!mr) continue;      // sin golpe no hay piston: un caño mudo es decorado
+      // `cada` cuenta caños VIABLES, no teclas. Contando teclas, el azar del
+      // muestreo elegia justo las corcheas del galope --donde ningun caño
+      // cabe-- y DESPEGUE II se quedaba sin martillos aunque sus negras los
+      // tenian servidos.
+      if (++n % (z.cada || 1)) continue;
       PASOS_BATERIA.add(mr.p);
-      r.push({ x, x0, x1, y: tope, instr: mr.golpe });
+      PASOS_PISTON.add(mr.p);
+      r.push({ x: mr.x, x0: +(mr.x - 0.15).toFixed(3), x1: +(mr.x + 0.15).toFixed(3), y: mr.tope, instr: mr.golpe, paso: mr.p });
     }
   }
   return r;
@@ -925,8 +974,13 @@ export function elegirCancion (id) {
     for (let bx = Math.ceil(z.x0); bx < z.x1 - 0.6; bx++)
       HUECOS.push({ x0: +(bx + 0.3).toFixed(3), x1: +(bx + 0.7).toFixed(3) });
   TECHOS = calcularTechos();
-  ORBES = orbes();
+  // Los caños compilan ANTES que los orbes: reclaman el backbeat del compas, y
+  // recien despues los orbes se reparten los golpes que quedan. Al reves, los
+  // 178 orbes se llevaban los golpes buenos y al caño le tocaba un hat.
+  PASOS_BATERIA = new Set(); PASOS_BAJO = new Set(); PASOS_PISTON = new Set();
+  ZONAS_PISTON = c.pistones || [];
   PISTONES = pistones();
+  ORBES = orbes();
   ZONAS_BAJO = NOTAS.filter(n => n.bajo)
     .map(n => ({ x0: n.x0 - 0.3, x1: n.x1 + 0.3 }));
   OCTAVAS = c.octavas || [];
@@ -1175,6 +1229,17 @@ export function paso (s, dt) {
   }
   // ...y el vastago, para el que viene rasante por la red
   if (s.y < ROCE) rozarPiston(s);
+  // EL CAÑO EXPIRADO. Fallar un piston sigue sin castigar -- pero ya no es
+  // invisible: se marca para que el whiff suene y la vista lo desplome. El
+  // golpe que reclamo queda mudo, y eso ahora es el backbeat: se oye faltar.
+  // Solo el que ACABA de expirar emite: tras un salto de seccion, los que
+  // quedaron muy atras se marcan en silencio.
+  for (const p of PISTONES) {
+    if (s.pistones.has(p.x) || s.x <= p.x1 + 0.02) continue;
+    s.pistones.add(p.x);
+    if (s.x - p.x1 < 0.5)
+      s.eventos.push({ tipo: 'piston', modo: 'perdido', x: p.x, y: p.y, instr: p.instr, paso: p.paso });
+  }
 
   if (s.y < CAIDA_MUERTE) { s.viva = false; s.causa = 'hueco'; return; }
   for (const t of TECHOS) {
@@ -1206,7 +1271,7 @@ function pisarPiston (s, yAntes) {
     // te deja EXACTAMENTE en la linea de vuelo hacia la proxima tecla: si
     // acertarle te descolocara, acertarle seria un castigo
     s.vy = haciaLaProxima(s, s.vy);
-    s.eventos.push({ tipo: 'piston', modo: 'encima', x: s.x, y: p.y, instr: p.instr });
+    s.eventos.push({ tipo: 'piston', modo: 'encima', x: s.x, y: p.y, instr: p.instr, paso: p.paso });
     return;
   }
 }
@@ -1223,7 +1288,7 @@ function rozarPiston (s) {
     s.bloqueo = Math.max(s.bloqueo, s.x + CASTIGO);
     s.estado = 'aire'; s.tecla = -1; s.saliendoDe = -1; s.soltoEn = null;
     s.vy = haciaLaProxima(s);
-    s.eventos.push({ tipo: 'piston', modo: 'abajo', x: s.x, y: s.y, instr: p.instr });
+    s.eventos.push({ tipo: 'piston', modo: 'abajo', x: s.x, y: s.y, instr: p.instr, paso: p.paso });
     return;
   }
 }
@@ -1395,6 +1460,21 @@ function arrancarNavegador () {
   let ac = null, master = null, voz = null, t0 = 0, proxBeat = 0;
   let solo = null, fondo = null;      // el que toca la esfera, y el arreglo
   // El solista entra: el arreglo se agacha un instante para dejarlo pasar.
+  // EL CRATER. En el paso de semicorchea que un caño reclamo, el arreglo
+  // entero se ABRE --se hunde a la mitad por un tercio de segundo-- pase lo
+  // que pase. Si la esfera pisa el caño, su golpe cae dentro del pozo y por
+  // fin es un ACENTO (carvear antes del golpe es como se acentua en una mezcla
+  // real, no subiendo el sample). Si nadie lo pisa, el pozo suena VACIO: la
+  // banda se agacha para un golpe que no llega -- el fallo se oye solo.
+  const crateres = [];
+  function aplicarCrater (t) {
+    if (!fondo) return;
+    const g = fondo.gain;
+    g.setValueAtTime(1, t - 0.02);
+    g.linearRampToValueAtTime(0.5, t + 0.015);
+    g.linearRampToValueAtTime(1, t + 0.3);
+  }
+  function agendarCrater (t) { crateres.push(t); aplicarCrater(t); }
   function agachar (t, cuanto = 0.62, dur = 0.17) {
     // Corto y poco: en EMPUJE el bajo va en corcheas y un agache largo dejaria
     // el arreglo hundido de punta a punta, que ya no es destacar al solista
@@ -1405,6 +1485,12 @@ function arrancarNavegador () {
     g.setValueAtTime(g.value, t);
     g.linearRampToValueAtTime(cuanto, t + 0.015);
     g.linearRampToValueAtTime(1, t + dur);
+    // el cancel de arriba se lleva los crateres agendados a futuro: se
+    // re-aplican, o el fallo de un caño volveria a ser mudo
+    for (let i = crateres.length - 1; i >= 0; i--) {
+      if (crateres[i] < t - 0.5) { crateres.splice(i, 1); continue; }
+      if (crateres[i] >= t + dur) aplicarCrater(crateres[i]);
+    }
   }
   let corriendo = false, finSonado = false;
 
@@ -1427,6 +1513,10 @@ function arrancarNavegador () {
   // no se enteraba. Ahora el bombo lo hunde (el mismo sidechain que ya hunde al
   // bajo), el pad lo enciende, el acorde lo tiñe y la racha lo satura.
   const golpesVista = [], padsVista = [];
+  // el estado visible de cada caño (paso -> {t, modo}) y el hundimiento de
+  // pantalla del pisoton: el golpe baja el mundo entero unos pixeles
+  const cabezas = new Map();
+  let pisada = 0;
   // Las teclas son un instrumento, no un piso: se hunden con el peso de la
   // esfera y vuelven solas. La que se esta pisando comparte el mismo resorte
   // que la esfera --por eso bajan juntas-- y al soltarla vuelve sola.
@@ -1853,6 +1943,9 @@ function arrancarNavegador () {
         const ch = acordeEnCompas(c);
         const paso = Math.round(proxBeat * 4);   // el paso global de semicorchea
         const bat = E_BATERIA[p.drums];
+        // el paso de un caño lleva CRATER: el arreglo se abre para el acento,
+        // lo llene la esfera o quede vacio
+        if (PASOS_PISTON.has(paso)) agendarCrater(t);
         if (bat && bat[i16] && bat[i16] !== '.' && !PASOS_BATERIA.has(paso)) {
           eTambor(bat[i16], t);
           if ('kKx'.includes(bat[i16])) golpesVista.push(t);
@@ -2003,19 +2096,49 @@ function arrancarNavegador () {
         squash = 0.8;
         chispas(e.x, e.y, 4, true);
       } else if (e.tipo === 'piston') {
-        // el caño suena SU golpe de la bateria (el fondo lo callo, lo toca la
-        // esfera), y el aire comprimido encima
-        if (e.instr) golpeDeLaEsfera(e.instr, ac.currentTime);
-        ruido(ac.currentTime, e.modo === 'encima' ? 0.1 : 0.16, 0.18, 'bandpass', 700, 1.1);
-        if (e.modo === 'encima') {
-          golpe(ac.currentTime, 320, 0.09, 0.11, 'triangle');
+        if (e.modo === 'perdido') {
+          // el caño disparo al aire: whiff mecanico, seco, sin agache -- y el
+          // crater ya agendado suena vacio, el backbeat que no llego
+          ruido(ac.currentTime, 0.09, 0.1, 'bandpass', 380, 2);
+          golpe(ac.currentTime, 95, 0.05, 0.06, 'square');
+          cabezas.set(e.paso, { t: performance.now(), modo: 'perdido' });
+        } else if (e.modo === 'encima') {
+          // EL PISOTON. El golpe reclamado, tocado por la esfera DENTRO del
+          // crater que el arreglo abrio -- sin agache propio: el crater ya es
+          // el agache, doblarlo hundiria la cancion. El hat cerrado se ABRE al
+          // pisarlo: mismo instrumento, gesto de acento, como un baterista que
+          // abre el hi-hat en la sincopa. Y el eco del solista: el fondo jamas
+          // ecoa la bateria, asi que un golpe con eco es TUYO aunque el timbre
+          // sea identico.
+          const instr = e.instr === 'h' ? 'H' : e.instr;
+          if (instr) {
+            eTambor(instr, ac.currentTime, solo);
+            const g = ac.createGain(); g.gain.value = 0.3; g.connect(solo);
+            eTambor(instr, ac.currentTime + 0.75 * SPB, g);
+            if ('kKx'.includes(instr)) golpesVista.push(ac.currentTime);
+          }
+          // el peso del pisoton: aire metalico y un golpe sordo, foley del
+          // caño, no musica
+          ruido(ac.currentTime, 0.05, 0.14, 'highpass', 2400);
+          golpe(ac.currentTime, 90, 0.1, 0.18, 'sine');
+          // el cuerpo entero lo siente: hit-stop, anillo, el mundo pisado
+          retencion = 0.09;
+          aros.push({ x: e.x, y: e.y, t: performance.now() });
           destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
+          chispas(e.x, e.y, 8, true, C.esferaRGB);
+          chispas(e.x, e.y, 8, true, C.impulsoRGB);
+          pump = 1; pisada = 1;
+          cabezas.set(e.paso, { t: performance.now(), modo: 'encima' });
         } else {
+          // el rescate desde abajo: el vastago te dispara de vuelta
+          if (e.instr) golpeDeLaEsfera(e.instr === 'h' ? 'H' : e.instr, ac.currentTime);
+          ruido(ac.currentTime, 0.16, 0.18, 'bandpass', 700, 1.1);
           eKick(ac.currentTime, true, solo);
           golpe(ac.currentTime, 120, 0.2, 0.18, 'square');
           golpe(ac.currentTime + 0.03, 240, 0.14, 0.1, 'triangle');
+          chispas(e.x, e.y, 12, true, C.esferaRGB);
+          cabezas.set(e.paso, { t: performance.now(), modo: 'abajo' });
         }
-        chispas(e.x, e.y, e.modo === 'encima' ? 8 : 12, true, C.esferaRGB);
         squash = 1;
       } else if (e.tipo === 'orbe') {
         // la esfera atraveso un orbe: suena el golpe REAL que reclamo -- la
@@ -2087,6 +2210,7 @@ function arrancarNavegador () {
     proxBeat = 0;
     estela.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
+    cabezas.clear(); crateres.length = 0; pisada = 0;
     desvios.length = 0;
     marcas.length = 0;
     avisos.length = 0;
@@ -2101,6 +2225,7 @@ function arrancarNavegador () {
     armarLecciones();
     ensayo = false;                 // arrancar de cero es el unico concierto
     golpesVista.length = 0; padsVista.length = 0;
+    cabezas.clear(); crateres.length = 0; pisada = 0;
     intento = 1; mejor = 0;
     s = crearSim();
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
@@ -2304,6 +2429,7 @@ function arrancarNavegador () {
     proxBeat = Math.floor(ahoraAudio() * 4) / 4;
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
+    cabezas.clear(); crateres.length = 0; pisada = 0;
     finSonado = false;
   }
   function irASeccion (d) {
@@ -2318,6 +2444,7 @@ function arrancarNavegador () {
   function alMenu () {
     rielCerrar(); eRielCerrar();
     golpesVista.length = 0; padsVista.length = 0;
+    cabezas.clear(); crateres.length = 0; pisada = 0;
     corriendo = false; finSonado = false;
     s = crearSim();
   }
@@ -2504,7 +2631,10 @@ function arrancarNavegador () {
     cx.fillStyle = C.fondo; cx.fillRect(0, 0, w, h);
 
     const esc = w / 9;
-    const y0 = h * 0.86;
+    // el pisoton hunde la pantalla entera unos pixeles -- solo vertical, para
+    // no romper la lectura de la partitura -- y vuelve con resorte
+    pisada = Math.max(0, pisada - dtSeg * 8);
+    const y0 = h * 0.86 + pisada * pisada * 5;
     const px = wx => (wx - s.x + 2.4) * esc;
     const py = wy => y0 - wy * esc;
 
@@ -2593,33 +2723,63 @@ function arrancarNavegador () {
       cx.beginPath(); cx.moveTo(px(t.x0), py(t.y)); cx.lineTo(px(t.x1), py(t.y)); cx.stroke();
     }
 
-    // PISTONES: suben de la red a medida que te acercas, hasta la altura del
-    // arco. La cabeza es una PLATAFORMA -- hay que caerle encima --, asi que se
-    // dibuja como una plataforma (chata, verde, invitando) y no como un filo.
+    const latOrbe = 0.55 + 0.45 * Math.sin(performance.now() / 160);
+    // PISTONES: el caño CARGA con el compas -- sube por escalones al acercarse
+    // su golpe, latiendo con el bombo, y llega a altura plena un tiempo antes
+    // del contacto (la fisica solo mira la ventana [x0,x1], y ahi ya esta
+    // arriba: lo que se ve es la verdad donde importa). La cabeza es una
+    // PLATAFORMA -- hay que caerle encima -- y sobre ella late el punto del
+    // golpe que guarda, el mismo lenguaje que los orbes.
     for (const p of PISTONES) {
       if (p.x1 < s.x - 2 || p.x0 > s.x + 7) continue;
       const falta = p.x - s.x;
-      const sube = Math.max(0, Math.min(1, (2.8 - falta) / 2.2));
-      const gastado = s.pistones.has(p.x);
-      const alto = Math.max(3, (py(0) - py(p.y)) * (gastado ? 0.18 : sube));
+      const reg = cabezas.get(p.paso);
+      const edad = reg ? (performance.now() - reg.t) / 1000 : 0;
+      const gastado = s.pistones.has(p.x) && (!reg || edad > 0.08);
+      // la carga por escalones: cada beat que falta es un escalon menos
+      const carga = falta > 3 ? 0.12 : falta > 2 ? 0.38 : falta > 1 ? 0.68 : 1;
+      let f = carga;                                 // fraccion de la altura
+      if (reg && reg.modo === 'encima') {
+        // pisado: se comprime de golpe y rebota a un rescoldo bajo
+        f = edad < 0.08 ? 1 - (1 - 0.12) * (edad / 0.08)
+          : edad < 0.28 ? 0.12 + 0.06 * Math.sin((edad - 0.08) / 0.2 * Math.PI)
+            : 0.18;
+      } else if (reg && reg.modo === 'perdido') {
+        // perdido: se desploma lento, un mecanismo que se apaga
+        f = edad < 0.45 ? 1 - (1 - 0.18) * (edad / 0.45) : 0.18;
+      } else if (gastado) f = 0.18;
+      const alto = Math.max(3, (py(0) - py(p.y)) * f + (f >= 1 ? 2.5 * pump : 0));
       const a0 = px(p.x0), an = (p.x1 - p.x0) * esc;
       const yTope = py(0) - alto;
-      cx.fillStyle = gastado ? 'rgba(150,140,130,0.35)' : `rgba(${C.esferaRGB},${0.22 + 0.3 * sube})`;
+      const pisado = reg && reg.modo === 'encima';
+      // el cobrado conserva un rescoldo naranja; el perdido muere gris frio
+      cx.fillStyle = pisado ? `rgba(${C.esferaRGB},0.4)`
+        : gastado ? 'rgba(150,140,130,0.35)' : `rgba(${C.esferaRGB},${0.22 + 0.3 * carga})`;
       cx.fillRect(a0 + an * 0.34, yTope, an * 0.32, alto);      // el vastago
-      cx.fillStyle = gastado ? 'rgba(150,140,130,0.5)' : C.impulso;
+      cx.fillStyle = pisado && edad < 0.06 ? 'rgb(255,252,240)'
+        : pisado ? C.esfera : gastado ? 'rgba(150,140,130,0.5)' : C.impulso;
       cx.fillRect(a0, yTope - 3, an, 6);                        // la plataforma
-      if (!gastado && sube > 0.6) {                             // la flecha: caele
-        cx.fillStyle = `rgba(${C.impulsoRGB},${(sube - 0.6) * 1.6})`;
-        cx.beginPath();
-        cx.moveTo(a0 + an / 2 - 5, yTope - 14); cx.lineTo(a0 + an / 2 + 5, yTope - 14);
-        cx.lineTo(a0 + an / 2, yTope - 7); cx.closePath(); cx.fill();
+      if (!gastado && !reg) {
+        // el punto del golpe que GUARDA, latiendo como un orbe: esta
+        // plataforma tiene un golpe adentro, tocalo vos o no lo toca nadie
+        cx.fillStyle = `rgba(${C.esferaRGB},${0.4 + 0.4 * latOrbe})`;
+        cx.beginPath(); cx.arc(a0 + an / 2, yTope - 9, 3 + 1.2 * latOrbe, 0, Math.PI * 2); cx.fill();
+        if (carga >= 1) {                            // la flecha: caele
+          cx.fillStyle = `rgba(${C.impulsoRGB},0.8)`;
+          cx.beginPath();
+          cx.moveTo(a0 + an / 2 - 5, yTope - 20); cx.lineTo(a0 + an / 2 + 5, yTope - 20);
+          cx.lineTo(a0 + an / 2, yTope - 14); cx.closePath(); cx.fill();
+        }
+      } else if (reg && reg.modo === 'perdido') {
+        // el golpe que nadie toco queda gris y quieto, como un orbe mudo
+        cx.fillStyle = 'rgba(150,140,130,0.6)';
+        cx.beginPath(); cx.arc(a0 + an / 2, yTope - 9, 3, 0, Math.PI * 2); cx.fill();
       }
     }
 
     // Los ORBES: cuerpos de verdad. Viven flotando sobre el arco del pique
     // hasta que la esfera los atraviesa -- ahi suenan y estallan. Los que el
     // arco no toco quedan ahi, mudos: se VE lo que no sonaste.
-    const latOrbe = 0.55 + 0.45 * Math.sin(performance.now() / 160);
     for (const o of ORBES) {
       if (o.x < s.x - 3 || o.x > s.x + 7) continue;
       if (s.orbesTocados.has(o.i)) continue;

@@ -11,7 +11,7 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, Y_GRAVE, HOLGURA
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, ZONAS_PISTON, Y_GRAVE, HOLGURA
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -29,7 +29,7 @@ const RASGOS = {
   // el viaje es la cancion ENTERA del estudio: 64 compases y 139 s. Los unicos
   // techos son los dos vacios de NEBULOSA -- los silencios cortos ya no tiran a
   // la red, se sobrevuelan, y el motor es zona de dribleo (ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 2, saltos: 30, exigente: true, orbes: 120, pistones: 5 }
+  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 2, saltos: 30, exigente: true, orbes: 120, pistones: 9 }
 };
 
 let fallas = 0;
@@ -443,6 +443,21 @@ function correr (id) {
     // el caño suena un golpe REAL del arreglo, como los orbes: sin eso es
     // decorado, que es de donde veniamos
     ['todo piston reclama un golpe de la bateria', PISTONES.every(p => p.instr), ''],
+    // ...y sabe en que paso de semicorchea vive ese golpe (el crater del
+    // arreglo se abre ahi), a menos de 0.2 tiempos del contacto: acento
+    // humano, no flam
+    ['todo piston conoce su paso, y esta pegado al contacto',
+      PISTONES.every(p => Number.isInteger(p.paso) && Math.abs(p.paso / 4 - p.x) <= 0.2 + 1e-9), ''],
+    // fallar un caño no castiga, pero se OYE y se VE: el que expira sin nadie
+    // emite su evento. La perfecta, que los pisa todos, no pierde ninguno.
+    ['la mano perfecta no deja expirar ningun caño',
+      !rp.eventos.some(e => e.tipo === 'piston' && e.modo === 'perdido'),
+      `${rp.eventos.filter(e => e.tipo === 'piston' && e.modo === 'perdido').length} perdidos`],
+    // cada zona declarada compila caños de verdad: una zona muda es una
+    // promesa del mapa que el compilador rompio en silencio
+    ['ninguna zona de pistones queda muda', !R.pistones ||
+      ZONAS_PISTON.every(z => PISTONES.filter(p => p.x >= z.x0 && p.x < z.x1).length >= 2),
+      ZONAS_PISTON.map(z => `${z.x0}-${z.x1}: ${PISTONES.filter(p => p.x >= z.x0 && p.x < z.x1).length}`).join(' · ')],
     ['ningun piston dentro de una tecla, sobre un abismo o bajo un techo',
       PISTONES.every(p => !HUECOS.some(h => p.x > h.x0 - 0.9 && p.x < h.x1 + 0.9) &&
         !TECHOS.some(t => p.x > t.x0 - 0.5 && p.x < t.x1 + 0.5) &&
