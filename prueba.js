@@ -422,6 +422,13 @@ function correr (id) {
     ['todo orbe cosechado dice su instrumento',
       rp.eventos.filter(e => e.tipo === 'orbe').every(e => e.instr),
       `${rp.eventos.filter(e => e.tipo === 'orbe').length} cosechados`],
+    // La apuesta de NEBULOSA: sobre los rieles del vacio hay notas del
+    // arpegio reclamadas -- picar para cosechar es jugarse la vida, y el
+    // fondo calla esas notas: son del que las cosecha, o de nadie.
+    ['la apuesta de NEBULOSA existe: el arpegio vive sobre el vacio',
+      !R.pistones || (ORBES.some(o => o.instr === 'arpz') &&
+        ORBES.some(o => o.instr === 'arpz' && HUECOS.some(h => o.x > h.x0 - 0.5 && o.x < h.x1 + 0.5))),
+      `${ORBES.filter(o => o.instr === 'arpz').length} notas de arpegio reclamadas`],
     // LOS PISTONES SE PISAN. La cabeza esta puesta sobre el arco del salto
     // tocado a tiempo, asi que acertar el ritmo ES caerle encima: el que toca
     // bien los cobra casi todos, el que va corrido se los pierde. Fallarlos no

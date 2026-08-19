@@ -133,12 +133,25 @@ probar('esfera: llegar a la meta dibuja el rango y el informe por seccion', () =
     correrCuadros(3);
   }
   correrCuadros(700);
-  exigir(dijo('toca para volver al menu'), 'no se dibujo la pantalla de meta');
-  exigir(dijo('LLEGASTE') || dijo('AFINADO') || dijo('MUSICO') || dijo('VIRTUOSO') || dijo('AURORA'),
+  exigir(dijo('toca — otra vez'), 'no se dibujo la pantalla de meta');
+  exigir(dijo('LLEGASTE') || dijo('AFINADO') || dijo('MUSICO') || dijo('VIRTUOSO') || dijo('AURORA') || dijo('SUPERNOVA'),
     'la meta no mostro ningun rango');
+  // el toque en la meta es OTRA VEZ: reinicia la misma cancion de cero. Se
+  // vuelve a la meta saltando, y de ahi ESC si sale al menu -- que ademas
+  // deja el humo en el estado que los tests siguientes esperan.
   tocar1();
   correrCuadros(5);
-  exigir(dijo('elegi el nivel'), 'desde la meta no se vuelve al menu');
+  exigir(!dijo('elegi el nivel'), 'el toque en la meta tiro al menu: debe reintentar');
+  textos.length = 0;
+  for (let i = 0; i < 16; i++) {
+    disparar('keydown', { key: 'ArrowRight', preventDefault () {}, repeat: false });
+    correrCuadros(3);
+  }
+  correrCuadros(700);
+  exigir(dijo('toca — otra vez'), 'el reintento no llego a una meta nueva');
+  disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
+  correrCuadros(5);
+  exigir(dijo('elegi el nivel'), 'ESC en la meta no vuelve al menu');
 });
 
 for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'aurora'], ['3', 'viaje']]) {

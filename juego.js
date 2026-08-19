@@ -678,6 +678,7 @@ export let ORBES = [];
 // agrega sonidos: completa los que la cancion ya tiene.
 export let PASOS_BATERIA = new Set();
 export let PASOS_BAJO = new Set();
+export let PASOS_ARP = new Set();
 function orbes () {
   const r = [];
   const extra = !!CANCIONES[CANCION_ID].orbesExtra;
@@ -690,25 +691,31 @@ function orbes () {
     if (n.escalera || sig.escalera || n.ligada) continue;
     // Sobre los RIELES largos: orbes que piden el saltito (tocar de nuevo
     // mientras sostenes). Flotan mas arriba de lo que alcanza rodar: solo el
-    // saltito los toca. Tambien reclaman golpes reales.
+    // saltito los toca. Tambien reclaman golpes reales -- y donde la bateria
+    // calla (NEBULOSA: drums en silencio, solo arpegio y pad), reclaman la
+    // nota del ARPEGIO. Esa es la apuesta que el mapa promete: los rieles de
+    // NEBULOSA llevan abismo, asi que picar para cosechar es jugarse la vida
+    // -- y el que no quiere, no pica.
     if (extra && spec && n.riel && n.x1 - n.xm > 1.6) {
       for (let tx = n.xm + 0.7; tx < n.x1 - 1.1; tx += 1) {
         let mr = null;
         for (let p = Math.ceil((tx - 0.3) * 4); p <= Math.floor((tx + 0.3) * 4); p++) {
-          if (PASOS_BATERIA.has(p) || PASOS_BAJO.has(p)) continue;   // los caños eligen primero
+          if (PASOS_BATERIA.has(p) || PASOS_BAJO.has(p) || PASOS_ARP.has(p)) continue;   // los caños eligen primero
           const cc = Math.floor(p / 16), i16 = p % 16;
           const pl = spec(cc); if (!pl) continue;
           const bat = E_BATERIA[pl.drums];
           const golpe = bat && 'hHsc'.includes(bat[i16]) ? bat[i16] : null;
           const nb = pl.bajo && E_BAJO[pl.bajo] ? E_BAJO[pl.bajo][i16] : null;
-          if (golpe == null && nb == null) continue;
+          const na = pl.arp && E_ARP[pl.arp] ? E_ARP[pl.arp][i16] : null;
+          if (golpe == null && nb == null && na == null) continue;
           const d = Math.abs(p / 4 - tx);
-          if (!mr || d < mr.d) mr = { p, golpe, nb, d, cc };
+          if (!mr || d < mr.d) mr = { p, golpe, nb, na, d, cc };
         }
         if (!mr) continue;
         const o = { i: r.length, x: +(mr.p / 4).toFixed(3), y: +(n.y + 0.13).toFixed(3), c: mr.cc };
         if (mr.nb != null && mr.golpe == null) { o.instr = 'bajo'; o.semi = mr.nb; PASOS_BAJO.add(mr.p); }
         else if (mr.golpe) { o.instr = mr.golpe; PASOS_BATERIA.add(mr.p); }
+        else if (mr.na != null) { o.instr = 'arpz'; o.semi = mr.na; PASOS_ARP.add(mr.p); }
         else continue;
         r.push(o);
       }
@@ -977,7 +984,7 @@ export function elegirCancion (id) {
   // Los caños compilan ANTES que los orbes: reclaman el backbeat del compas, y
   // recien despues los orbes se reparten los golpes que quedan. Al reves, los
   // 178 orbes se llevaban los golpes buenos y al caño le tocaba un hat.
-  PASOS_BATERIA = new Set(); PASOS_BAJO = new Set(); PASOS_PISTON = new Set();
+  PASOS_BATERIA = new Set(); PASOS_BAJO = new Set(); PASOS_ARP = new Set(); PASOS_PISTON = new Set();
   ZONAS_PISTON = c.pistones || [];
   PISTONES = pistones();
   ORBES = orbes();
@@ -1008,6 +1015,7 @@ export function crearSim () {
     castigoNivel: 0,
     coyote: null,           // tecla recien abandonada, todavia tocable
     bloqueo: -Infinity,     // hasta donde no responde el boton: castigo por martillar
+    bloqueoDesde: -Infinity, // desde donde: el arco de sordera se dibuja vaciandose
     ultimoToque: -Infinity, // para distinguir un toque adelantado de una rafaga
     tocadas: new Set(),
     limpias: new Set(),     // las que ademas sonaron afinadas: ese es el puntaje
@@ -1018,6 +1026,20 @@ export function crearSim () {
     pistones: new Set(), pistonazos: 0,   // caños ya disparados
     eventos: []
   };
+}
+
+// EL RANGO: la maestria como premio, y nada mas que eso. La escalera sube por
+// limpias, y arriba del todo hay dos peldaños de leyenda: AURORA (todo limpio
+// y todos los orbes) y SUPERNOVA (ademas, el 85% clavado en el centro). Es
+// funcion pura y exportada: el record la persiste y las pruebas la miran.
+export const RANGOS = ['LLEGASTE', 'AFINADO', 'MUSICO', 'VIRTUOSO', 'AURORA', 'SUPERNOVA'];
+export function rango (limpias, total, orbes, totalOrbes, perfectas = 0) {
+  const t = total || 1;
+  const pl = limpias / t;
+  const todoOrbe = !totalOrbes || orbes >= totalOrbes;
+  if (pl >= 1 && todoOrbe && perfectas / t >= 0.85) return 'SUPERNOVA';
+  if (pl >= 1 && todoOrbe) return 'AURORA';
+  return pl >= 0.95 ? 'VIRTUOSO' : pl >= 0.85 ? 'MUSICO' : pl >= 0.7 ? 'AFINADO' : 'LLEGASTE';
 }
 
 function despegar (s, dejando = null) {
@@ -1111,8 +1133,16 @@ function anotar (s, obj, dev, tipo, extra = {}) {
   // perfecto, a los 97 roto-- era lo que sonaba a maquina.
   const suc = Math.min(1, Math.abs(dev) / (AFINADO * 2));
   s.tocadas.add(obj.i);
-  if (chueca) s.racha = 0;
-  else { s.limpias.add(obj.i); s.racha++; s.mejorRacha = Math.max(s.mejorRacha, s.racha); }
+  // La racha tiene DIENTES: perder una larga es un momento (el numero cae, el
+  // mundo se apaga de golpe), y cada 8 seguidas es un hito que se anuncia.
+  // Antes perder x22 se veia igual que perder x4: un lerp suave y nada mas.
+  if (chueca) {
+    if (s.racha >= 6) s.eventos.push({ tipo: 'rachaRota', n: s.racha, x: s.x, y: s.y });
+    s.racha = 0;
+  } else {
+    s.limpias.add(obj.i); s.racha++; s.mejorRacha = Math.max(s.mejorRacha, s.racha);
+    if (s.racha % 8 === 0) s.eventos.push({ tipo: 'hito', n: s.racha, x: s.x, y: s.y });
+  }
   s.eventos.push({ tipo, f: obj.f, x: s.x, y: s.y, i: obj.i, tarde: dev, chueca, suc, perfecto, ...extra });
 }
 
@@ -1284,8 +1314,10 @@ function rozarPiston (s) {
     if (s.pistones.has(p.x)) continue;
     if (s.x <= p.x0 || s.x >= p.x1) continue;
     s.pistones.add(p.x); s.pistonazos++;
+    if (s.racha >= 6) s.eventos.push({ tipo: 'rachaRota', n: s.racha, x: s.x, y: s.y });
     s.racha = 0;
     s.bloqueo = Math.max(s.bloqueo, s.x + CASTIGO);
+    s.bloqueoDesde = s.x;
     s.estado = 'aire'; s.tecla = -1; s.saliendoDe = -1; s.soltoEn = null;
     s.vy = haciaLaProxima(s);
     s.eventos.push({ tipo: 'piston', modo: 'abajo', x: s.x, y: s.y, instr: p.instr, paso: p.paso });
@@ -1385,6 +1417,8 @@ function castigar (s) {
   s.castigoNivel = s.x - s.falsoEn < 1.2 ? Math.min(4, s.castigoNivel + 1) : 0;
   s.falsoEn = s.x;
   s.bloqueo = s.x + CASTIGO * (1 + s.castigoNivel);
+  s.bloqueoDesde = s.x;               // para que la sordera se VEA terminar
+  if (s.racha >= 6) s.eventos.push({ tipo: 'rachaRota', n: s.racha, x: s.x, y: s.y });
   s.racha = 0; s.falsos++;
   s.eventos.push({ tipo: 'falso', x: s.x, y: s.y });
 }
@@ -1450,10 +1484,22 @@ function arrancarNavegador () {
   const leerRecord = id => {
     try { return JSON.parse(localStorage.getItem(MEM + id)) || null; } catch (_) { return null; }
   };
-  function guardarRecord (id, pct, limpias) {
-    const r = leerRecord(id) || { pct: 0, limpias: 0 };
-    if (pct <= r.pct && limpias <= r.limpias) return r;
-    const n = { pct: Math.max(pct, r.pct), limpias: Math.max(limpias, r.limpias) };
+  // El record tiene MEMORIA DE MAESTRIA: no solo hasta donde llegaste, sino la
+  // mejor racha, las clavadas, los orbes y el rango. Cada campo se queda con
+  // su maximo historico -- sin esto, completar una cancion mataba la
+  // zanahoria: el menu decia "completa" para siempre y daba igual volver.
+  // Records viejos {pct, limpias} entran con defaults en cero.
+  function guardarRecord (id, d) {
+    const r = leerRecord(id) || {};
+    const n = {
+      pct: Math.max(d.pct || 0, r.pct || 0),
+      limpias: Math.max(d.limpias || 0, r.limpias || 0),
+      perf: Math.max(d.perf || 0, r.perf || 0),
+      racha: Math.max(d.racha || 0, r.racha || 0),
+      orbes: Math.max(d.orbes || 0, r.orbes || 0),
+      rango: [d.rango, r.rango].filter(Boolean)
+        .sort((a, b) => RANGOS.indexOf(b) - RANGOS.indexOf(a))[0] || null
+    };
     try { localStorage.setItem(MEM + id, JSON.stringify(n)); } catch (_) {}
     return n;
   }
@@ -1517,6 +1563,24 @@ function arrancarNavegador () {
   // pantalla del pisoton: el golpe baja el mundo entero unos pixeles
   const cabezas = new Map();
   let pisada = 0;
+  // la racha que se acaba de romper (el numero cae) y el record historico a
+  // perseguir (se anuncia una vez por corrida al superarlo)
+  let rachaRota = null, rachaRecord = 0, rachaAvisada = false;
+  let ultSeccion = 0;   // el capitulo que ya se anuncio: cruzar al siguiente avisa
+  let metaRecord = null; // si esta corrida mejoro la marca, la meta lo celebra
+  // el drop en pantalla: crashes agendados que al sonar liberan un flash, y el
+  // riser vivo que tensa la imagen mientras sube
+  const crashVista = [];
+  let riserVista = null;
+  let leccionViva = null;   // la leccion sin lugar fijo: red y sordera, sobre la esfera
+  let vecesRed = 0;         // cuantas veces se explico la red: no se insiste
+  // el flash tiene SEMANTICA: blanco para los golpes de siempre, rojizo para
+  // la muerte, dorado para la meta -- el mismo destello no puede significar
+  // todo a la vez
+  let flashRGB = '232,230,224';
+  // la esfera se ve morir: esquirlas en coordenadas de PANTALLA (sobreviven al
+  // teletransporte de la camara a x=0) -- y la meta se revela por tiempos
+  let muerteVista = null, metaEn = 0;
   // Las teclas son un instrumento, no un piso: se hunden con el peso de la
   // esfera y vuelven solas. La que se esta pisando comparte el mismo resorte
   // que la esfera --por eso bajan juntas-- y al soltarla vuelve sola.
@@ -1954,8 +2018,10 @@ function arrancarNavegador () {
           const n = E_BAJO[p.bajo][i16];
           if (n != null) eBajo(t, (ch.root / 4) * Math.pow(2, n / 12), 0.062 * EG);
         }
-        // el arpegio de fondo calla en la zona de dribleo: ahi lo toca la esfera
-        if (p.arp && !enArpegio(proxBeat)) {
+        // el arpegio de fondo calla en la zona de dribleo (ahi lo toca la
+        // esfera) y en los pasos que un orbe de NEBULOSA reclamo: esa nota es
+        // del que la cosecha, o de nadie
+        if (p.arp && !enArpegio(proxBeat) && !PASOS_ARP.has(paso)) {
           const n = E_ARP[p.arp][i16];
           if (n != null) {
             const semis = ch.ints[n % 3] + 12 * Math.floor(n / 3);
@@ -1967,8 +2033,10 @@ function arrancarNavegador () {
             ePad(t, ch.ints.map(sm => ch.root * Math.pow(2, sm / 12)), 0.014 * EG, 4 * SPB);
             padsVista.push(t);
           }
-          if (p.crash) eCrash(t);
-          if (p.riser) eRiser(t, p.riser * 4 * SPB);
+          // el drop tambien EXISTE EN PANTALLA: el riser tensa la imagen en
+          // rampa y el crash la libera (ver el consumo en dibujar)
+          if (p.crash) { eCrash(t); crashVista.push(t); }
+          if (p.riser) { eRiser(t, p.riser * 4 * SPB); riserVista = { t0: t, t1: t + p.riser * 4 * SPB }; }
         }
       }
       proxBeat += 0.25;
@@ -2029,17 +2097,29 @@ function arrancarNavegador () {
     marcas.push({ d: e.tarde, t: performance.now() });
     if (marcas.length > 16) marcas.shift();
     const signo = ms > 0 ? '+' : '−';
-    avisos.push({
-      x: e.x, y: e.y, t: performance.now(), chueca: e.chueca, suc: e.suc,
-      txt: e.chueca ? `${ms > 0 ? 'TARDE' : 'ANTES'} ${signo}${Math.abs(ms)}`
-        : Math.abs(ms) <= 25 ? 'PERFECTO' : `${signo}${Math.abs(ms)}`
-    });
+    // Una sola verdad: PERFECTO es el MISMO flag que dispara el aro (antes el
+    // texto usaba otro umbral y la ceremonia se contradecia: aro celebrando,
+    // "+38" negandolo al lado). Y la limpia comun ya no imprime numerito: en
+    // el galope eran tres textos por segundo compitiendo con el anillo de
+    // anticipacion -- el medidor de abajo da ese dato mejor y sin gritar.
+    const txt = e.chueca ? `${ms > 0 ? 'TARDE' : 'ANTES'} ${signo}${Math.abs(ms)}`
+      : e.perfecto ? 'PERFECTO' : null;
+    if (txt) {
+      avisos.push({
+        x: e.x, y: e.y, t: performance.now(), chueca: e.chueca, suc: e.suc,
+        perf: !!e.perfecto, txt
+      });
+    }
   }
 
   function procesar () {
     for (const e of s.eventos) {
       if (e.tipo === 'nota') {
-        desvios.push(Math.abs(e.tarde) * SPB * 1000); aviso(e);
+        // ventana rodante: un promedio sobre la corrida entera se congela a
+        // los dos minutos y deja de ser feedback
+        desvios.push(Math.abs(e.tarde) * SPB * 1000);
+        if (desvios.length > 24) desvios.shift();
+        aviso(e);
         if (NOTAS[e.i].bajo) {
           // tecla de bajo: la esfera esta tocando el bajo del estudio -- dos
           // octavas abajo de donde pisa, con la voz de alla. Sin eco: el bajo
@@ -2072,6 +2152,12 @@ function arrancarNavegador () {
         if (enOctava(e.x)) lead(ac.currentTime, e.f * 2, 0.24, (fuerte ? 0.29 : 0.21) * 0.5, 0, e.suc);
         if (!NOTAS[e.i].riel)
           lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.3, 0, e.suc);
+        // LA CLAVADA SE OYE: el eco realimenta una vez mas, perfectamente
+        // limpio, solo cuando tocaste exacto. No entra ningun sonido nuevo al
+        // arreglo -- se repite el eco que el estudio ya define. El premio
+        // maximo de un juego musical tiene que ser musical.
+        if (e.perfecto && !NOTAS[e.i].riel)
+          lead(ac.currentTime + 1.5 * SPB, e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.15, 0, 0);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
         chispas(e.x, e.y, Math.round(7 - 4 * e.suc), true, mezcla(C.teclaRGB, C.suciaRGB, e.suc));
         squash = 1;
@@ -2152,16 +2238,47 @@ function arrancarNavegador () {
           const ch = acordeEnCompas(e.c);
           eBajo(ac.currentTime, (ch.root / 4) * Math.pow(2, e.semi / 12), 0.3, solo);
           agachar(ac.currentTime, 0.62, 0.18);
+        } else if (e.instr === 'arpz') {
+          // la nota del arpegio que el fondo callo: la MISMA nota, al frente.
+          // La apuesta de NEBULOSA pagada en su propia moneda.
+          const ch = acordeEnCompas(e.c);
+          const semis = ch.ints[e.semi % 3] + 12 * Math.floor(e.semi / 3);
+          eArp(ac.currentTime, ch.root * Math.pow(2, semis / 12), 0.12, solo);
+          agachar(ac.currentTime, 0.78, 0.11);
         } else golpeDeLaEsfera(e.instr, ac.currentTime);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
         chispas(e.x, e.y, 6, true, e.instr === 'arp' ? C.teclaRGB : C.esferaRGB);
+      } else if (e.tipo === 'rachaRota') {
+        // perder una racha larga ES un momento: el numero cae, el brillo del
+        // mundo se apaga DE GOLPE (no en lerp: perder x22 no puede verse igual
+        // que perder x4) y un golpe sordo lo dice. Foley, no musica.
+        rachaRota = { n: e.n, t: performance.now() };
+        brilloRacha = 0;
+        ruido(ac.currentTime, 0.08, 0.1, 'lowpass', 400);
+      } else if (e.tipo === 'hito') {
+        // cada 8 limpias, un hito: el aro blanco estalla sobre la esfera y el
+        // numero lo dice. Sin sonido nuevo: la musica sonando bien ES el premio.
+        aros.push({ x: e.x, y: e.y, t: performance.now() });
+        avisos.push({ x: e.x, y: e.y, t: performance.now(), chueca: false, suc: 0, txt: `x${e.n}` });
+        if (rachaRecord && e.n > rachaRecord && !rachaAvisada) {
+          rachaAvisada = true;
+          avisos.push({ x: e.x, y: e.y + 0.12, t: performance.now(), chueca: false, suc: 0, txt: 'MEJOR RACHA' });
+        }
       } else if (e.tipo === 'falso') {
         // martillaste: cuerda muerta. El boton queda sordo hasta que se acomode.
         ruido(ac.currentTime, 0.06, 0.14, 'bandpass', 700, 1.4);
         golpe(ac.currentTime, 70, 0.09, 0.16, 'square');
         chispas(e.x, e.y, 4, false, C.suciaRGB);
+        // la primera sordera se explica una vez: sin esto parece que el juego
+        // se comio tus toques porque si
+        if (!aprendidas.has('sordo')) {
+          aprendidas.add('sordo');
+          leccionViva = { txt: 'martillaste — el boton quedo sordo un instante', t: performance.now() };
+        }
       } else if (e.tipo === 'sordo') {
+        // el toque comido se VE comerse: sin esto la sordera parece bug de input
         ruido(ac.currentTime, 0.015, 0.02);
+        chispas(s.x, s.y, 2, false, '150,140,130');
       } else if (e.tipo === 'rielCorta') {
         if (rielVozE) eRielCerrar(); else rielCerrar();
       } else if (e.tipo === 'posar') {
@@ -2175,8 +2292,14 @@ function arrancarNavegador () {
       } else if (e.tipo === 'red') {
         ruido(ac.currentTime, 0.09, 0.09, 'lowpass', 700); squash = 0.9;
         chispas(e.x, 0, 5);
+        // la primera caida merece su leccion: la red no es el final, es un
+        // toque de distancia de la cancion. Dos veces y basta -- al que no
+        // reacciona no lo convence la tercera, y el cartel pasa a ser ruido.
+        if (!aprendidas.has('red') && ++vecesRed <= 2)
+          leccionViva = { txt: 'TOCA: volves a la cancion', t: performance.now() };
       } else if (e.tipo === 'aire' || e.tipo === 'saltoRed') {
         ruido(ac.currentTime, 0.04, 0.03, 'highpass', 3000);
+        if (e.tipo === 'saltoRed') { aprendidas.add('red'); leccionViva = null; }
       }
     }
     s.eventos.length = 0;
@@ -2186,7 +2309,8 @@ function arrancarNavegador () {
   // sabe (s.causa) y hasta ahora se lo guardaba.
   const PORQUE = {
     techo: 'te aplasto el techo — bajo el techo NO se toca',
-    hueco: 'soltaste el riel sobre el vacio — ahi hay que mantener'
+    hueco: 'soltaste el riel sobre el vacio — ahi hay que mantener',
+    dribleo: 'la red se corta entre piques — hay que PICAR al beat'
   };
   let avisoMuerte = null;
   function morirOReiniciar () {
@@ -2195,22 +2319,50 @@ function arrancarNavegador () {
     // que solo existe si el juego te dice cuanto faltaba.
     const pct = Math.min(100, Math.round(s.x / LARGO * 100));
     const antes = leerRecord(CANCION_ID);
-    if (!ensayo) guardarRecord(CANCION_ID, pct, s.limpias.size);
+    // en la zona de dribleo la causa dice la verdad: ahi no soltaste ningun
+    // riel, te falto el pique
+    const causa = s.causa === 'hueco' && ARPEGIOS.some(z => s.x >= z.x0 && s.x < z.x1 + 0.7)
+      ? 'dribleo' : s.causa;
+    if (!ensayo) {
+      guardarRecord(CANCION_ID, {
+        pct, limpias: s.limpias.size, perf: s.perfectas.size,
+        racha: s.mejorRacha, orbes: s.orbes
+      });
+      rachaRecord = Math.max(rachaRecord, s.mejorRacha); rachaAvisada = false;
+    }
+    // La muerte DIAGNOSTICA: ademas del numero, el informe por seccion (que
+    // antes solo veia el que ganaba -- justo el que menos lo necesita) con la
+    // seccion de la muerte señalada, y la comparacion contra tu record.
     avisoMuerte = {
-      txt: PORQUE[s.causa] || null, ensayo,
-      pct, record: antes ? antes.pct : 0, nuevo: !ensayo && (!antes || pct > antes.pct),
+      txt: PORQUE[causa] || null, ensayo,
+      pct, record: antes ? antes.pct || 0 : 0, nuevo: !ensayo && (!antes || pct > (antes.pct || 0)),
+      limpias: s.limpias, xm: s.x, limpiasRun: s.limpias.size,
+      mejorLimpias: antes ? antes.limpias || 0 : 0,
+      seccion: (SECCIONES.filter(z => z.x0 <= s.x).pop() || {}).n,
       t: performance.now()
     };
     rielCerrar(); eRielCerrar();
     mejor = Math.max(mejor, s.limpias.size);
     intento++;
     ensayo = false;      // morir reinicia en x=0, y eso ya es empezar de cero
+    // la esfera ESTALLA donde estaba (coordenadas de pantalla: la camara ya se
+    // teletransporto a la salida cuando esto se dibuja) y el flash se tiñe
+    muerteVista = {
+      y: s.y, t: performance.now(),
+      esquirlas: Array.from({ length: 14 }, () => ({
+        a: Math.random() * Math.PI * 2, v: 60 + Math.random() * 160
+      }))
+    };
+    flashRGB = '255,120,90';
     s = crearSim();
-    t0 = ac.currentTime + 0.7;
+    // 1.4 s, no 0.7: el respiro justo para LEER el diagnostico antes de que el
+    // compas 1 reclame los dedos. Sigue siendo automatico: nadie toca nada.
+    t0 = ac.currentTime + 1.4;
     proxBeat = 0;
     estela.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); crateres.length = 0; pisada = 0;
+    crashVista.length = 0; riserVista = null;
     desvios.length = 0;
     marcas.length = 0;
     avisos.length = 0;
@@ -2226,7 +2378,13 @@ function arrancarNavegador () {
     ensayo = false;                 // arrancar de cero es el unico concierto
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); crateres.length = 0; pisada = 0;
+    crashVista.length = 0; riserVista = null;
     intento = 1; mejor = 0;
+    // la marca a perseguir: superar tu mejor racha historica se anuncia
+    rachaRecord = (leerRecord(id) || {}).racha || 0;
+    rachaAvisada = false; rachaRota = null;
+    metaRecord = null; avisoMuerte = null; ultSeccion = 0;
+    metaEn = 0; muerteVista = null; leccionViva = null;
     s = crearSim();
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
     corriendo = true;
@@ -2430,21 +2588,27 @@ function arrancarNavegador () {
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); crateres.length = 0; pisada = 0;
+    crashVista.length = 0; riserVista = null;
+    ultSeccion = SECCIONES.filter(z => z.x0 <= s.x).length - 1;   // el salto no se auto-anuncia
     finSonado = false;
   }
   function irASeccion (d) {
     if (!corriendo || !SECCIONES.length) return;
-    ensayo = true;
     const aqui = SECCIONES.filter(sec => sec.x0 <= s.x + 0.5).length - 1;
     const i = Math.max(0, Math.min(SECCIONES.length - 1, aqui + d));
+    // volver a la salida ES un concierto nuevo: antes habia que morirse a
+    // proposito o pasar por el menu para que un intento contara
+    if (SECCIONES[i].x0 === 0) { ensayo = false; intento++; } else ensayo = true;
     saltarA(SECCIONES[i].x0);
-    avisoSeccion = { n: SECCIONES[i].n, t: performance.now() };
+    avisoSeccion = { n: SECCIONES[i].n, t: performance.now(), aviso: ensayo, deCero: !ensayo };
   }
 
   function alMenu () {
     rielCerrar(); eRielCerrar();
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); crateres.length = 0; pisada = 0;
+    crashVista.length = 0; riserVista = null;
+    metaEn = 0; muerteVista = null; leccionViva = null; avisoMuerte = null;
     corriendo = false; finSonado = false;
     s = crearSim();
   }
@@ -2456,7 +2620,10 @@ function arrancarNavegador () {
     if (calib) { tocarCalib(); return; }
     if (nivel === 'calibrar') { calibrar(); return; }
     if (!corriendo) { empezar(NIVELES[nivel] || NIVELES[0]); return; }
-    if (s.meta) { alMenu(); return; }
+    // En la meta, el toque es OTRA VEZ: el momento de maxima ganas de mejorar
+    // la marca no puede desembocar en el menu. Al menu se sale con ESC (o
+    // tocando la franja de abajo, para el telefono).
+    if (s.meta) { empezar(CANCION_ID); return; }
     s.sostiene = true;
     tocar(s, ahora());
   }
@@ -2471,11 +2638,28 @@ function arrancarNavegador () {
   // En captura y sobre window: asi ningun elemento con foco se come la tecla,
   // que es lo que pasa cuando la pagina se abre embebida o se hizo clic afuera.
   addEventListener('keydown', e => {
-    if (e.key === 'Escape') { e.preventDefault(); if (!e.repeat) alternarPausa(); return; }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (e.repeat) return;
+      if (corriendo && s.meta) { alMenu(); return; }    // desde la meta, ESC sale
+      alternarPausa(); return;
+    }
     // revisar: saltar de seccion en seccion sin jugar todo el nivel
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
-      if (!e.repeat) irASeccion(e.key === 'ArrowRight' ? 1 : -1);
+      if (e.repeat) return;
+      // Con el diagnostico de muerte en pantalla, la flecha derecha va
+      // DIRECTO a ensayar la seccion que te tiro: de ~2 minutos de rejugar el
+      // viaje a una tecla. El puente muerte -> practica dirigida.
+      if (e.key === 'ArrowRight' && avisoMuerte && avisoMuerte.xm != null && corriendo && SECCIONES.length) {
+        const z = SECCIONES.filter(z2 => z2.x0 <= avisoMuerte.xm).pop() || SECCIONES[0];
+        ensayo = z.x0 !== 0;
+        saltarA(z.x0);
+        avisoSeccion = { n: z.n, t: performance.now(), aviso: ensayo };
+        avisoMuerte = null;
+        return;
+      }
+      irASeccion(e.key === 'ArrowRight' ? 1 : -1);
       return;
     }
     if (!esBoton(e)) return;
@@ -2504,12 +2688,16 @@ function arrancarNavegador () {
     }
     if (!corriendo) {
       if (calib) { bajar(); return; }
-      // cada renglon del menu es una franja: 1 arriba, 2 al medio, 3 abajo,
-      // y el pie de pagina es calibrar
+      // cada renglon del menu es una franja AJUSTADA a su renglon: tocar el
+      // espacio vacio o las reglas arranca el nivel 1, no el 3 -- el texto lo
+      // promete ("un toque arranca el nivel 1") y antes media pantalla
+      // arrancaba VIAJE, los 64 compases mas dificiles, a un pulgar despistado
       const y = e.offsetY / cv.clientHeight;
-      bajar(y > 0.80 ? 'calibrar' : y > 0.37 ? 2 : y > 0.295 ? 1 : 0);
+      bajar(y > 0.80 ? 'calibrar' : y > 0.435 ? 0 : y > 0.37 ? 2 : y > 0.295 ? 1 : 0);
       return;
     }
+    // en la meta, la franja de abajo es la salida al menu (tactil sin ESC)
+    if (s.meta && e.offsetY / cv.clientHeight > 0.88) { alMenu(); return; }
     bajar();
   });
   addEventListener('pointerup', subir);
@@ -2559,7 +2747,29 @@ function arrancarNavegador () {
     if (!s.viva) { golpe(ac.currentTime, 90, 0.3, 0.4, 'sawtooth'); ruido(ac.currentTime, 0.2, 0.28); morirOReiniciar(); }
     if (s.meta && !finSonado) {
       finSonado = true; rielCerrar(); eRielCerrar(); sonarFinal();
-      if (!ensayo) guardarRecord(CANCION_ID, 100, s.limpias.size);
+      metaEn = performance.now(); flash = 1; flashRGB = '255,215,130';
+      // al ganar se guarda TODO, rango incluido, y se recuerda si la marca
+      // cayo: la meta tiene que celebrar el record, no solo mostrarlo
+      if (!ensayo) {
+        const antes = leerRecord(CANCION_ID);
+        metaRecord = {
+          antes: antes ? antes.limpias || 0 : 0,
+          nuevo: !antes || s.limpias.size > (antes.limpias || 0)
+        };
+        guardarRecord(CANCION_ID, {
+          pct: 100, limpias: s.limpias.size, perf: s.perfectas.size,
+          racha: s.mejorRacha, orbes: s.orbes,
+          rango: rango(s.limpias.size, TOTAL_NOTAS, s.orbes, ORBES.length, s.perfectas.size)
+        });
+      } else metaRecord = null;
+    }
+    // el capitulo nuevo se anuncia al cruzarlo jugando: MOTOR, VUELO,
+    // SUPERNOVA son los actos de la aventura y pasaban en 12px junto a la red
+    if (corriendo && SECCIONES.length) {
+      const si = SECCIONES.filter(z => z.x0 <= s.x).length - 1;
+      if (si > ultSeccion && s.x > 1 && !s.meta)
+        avisoSeccion = { n: SECCIONES[si].n, t: performance.now() };
+      ultSeccion = si;
     }
     dibujar(dtSeg);
   }
@@ -2600,12 +2810,19 @@ function arrancarNavegador () {
   // EL INFORME POR SECCION. Una corrida que termina y se evapora no deja nada.
   // Esto dice donde tocaste bien y donde te caiste, con los nombres del arreglo
   // --motor, vuelo, gravedad--, que es como el jugador ya piensa la cancion.
-  function dibujarInforme (w, h) {
+  // Lo ve el que gana Y el que muere: al morir, las secciones que no llegaste
+  // van apagadas y la de la muerte lleva el marco rojo -- el numero dispara el
+  // reintento, la barra floja lo DIRIGE.
+  function dibujarInforme (w, h, limpias = s.limpias, xHasta = Infinity) {
     if (!SECCIONES.length) return;
     const tramos = SECCIONES.map((z, i) => {
       const x1 = i + 1 < SECCIONES.length ? SECCIONES[i + 1].x0 : LARGO;
       const dentro = NOTAS.filter(n => !n.silencio && n.xm >= z.x0 && n.xm < x1);
-      return { n: z.n, total: dentro.length, lim: dentro.filter(n => s.limpias.has(n.i)).length };
+      return {
+        n: z.n, total: dentro.length,
+        lim: dentro.filter(n => limpias.has(n.i)).length,
+        lejos: z.x0 > xHasta, aqui: z.x0 <= xHasta && x1 > xHasta
+      };
     }).filter(t => t.total);
     if (!tramos.length) return;
     const bw = Math.min(110, (w - 40) / tramos.length);
@@ -2614,13 +2831,24 @@ function arrancarNavegador () {
     tramos.forEach((t, i) => {
       const x = w / 2 + (i - (tramos.length - 1) / 2) * bw;
       const p = t.lim / t.total;
+      cx.save();
+      if (t.lejos) cx.globalAlpha *= 0.25;
       cx.fillStyle = 'rgba(232,230,224,0.09)';
       cx.fillRect(x - bw * 0.3, base - alto, bw * 0.6, alto);
       cx.fillStyle = p >= 1 ? C.impulso : p >= 0.8 ? C.esfera : p >= 0.5 ? C.tecla : C.sucia;
       cx.fillRect(x - bw * 0.3, base - alto * p, bw * 0.6, alto * p);
-      cx.fillStyle = C.tenue; cx.font = '10px system-ui';
-      cx.fillText(`${Math.round(p * 100)}%`, x, base - alto - 5);
+      cx.fillStyle = C.tenue; cx.font = t.aqui ? 'bold 10px system-ui' : '10px system-ui';
+      if (!t.lejos) cx.fillText(`${Math.round(p * 100)}%`, x, base - alto - 5);
       cx.fillText(t.n.length > 12 ? t.n.slice(0, 11) + '…' : t.n, x, base + 13);
+      if (t.aqui && xHasta < Infinity) {           // aca te quedaste
+        // en el color de la esfera: la esfera sos vos, y este es el tramo
+        // donde te quedaste. C.peligro es casi blanco y no marcaba nada.
+        cx.strokeStyle = C.esfera; cx.lineWidth = 2;
+        cx.strokeRect(x - bw * 0.3 - 3, base - alto - 3, bw * 0.6 + 6, alto + 6);
+        cx.fillStyle = C.esfera; cx.font = 'bold 10px system-ui';
+        cx.fillText('aca', x, base + 26);
+      }
+      cx.restore();
     });
   }
 
@@ -2640,12 +2868,22 @@ function arrancarNavegador () {
 
     // Respirar. Los golpes se agendaron con el audio, asi que la imagen late
     // EXACTAMENTE con lo que se escucha, no con un reloj propio que se corre.
+    let riserQ = 0;
     if (ac && corriendo) {
       // se consumen con el desfase puesto: el mundo late cuando el golpe se
       // ESCUCHA, no cuando se agendo
       const ahoraAc = ac.currentTime - desfase;
       while (golpesVista.length && golpesVista[0] <= ahoraAc) { golpesVista.shift(); pump = 1; }
       while (padsVista.length && padsVista[0] <= ahoraAc) { padsVista.shift(); padLuz = 1; }
+      // EL DROP EXISTE EN PANTALLA. El juego construia cuatro compases de
+      // build hacia un instante que no tenia ni un pixel: mientras el riser
+      // sube, la imagen se tensa (brillo en rampa, el anillo engorda), y el
+      // crash la libera de golpe.
+      while (crashVista.length && crashVista[0] <= ahoraAc) {
+        crashVista.shift(); flash = Math.max(flash, 0.8); padLuz = 1.6; riserVista = null;
+      }
+      if (riserVista && ac.currentTime >= riserVista.t0)
+        riserQ = Math.min(1, (ac.currentTime - riserVista.t0) / (riserVista.t1 - riserVista.t0));
     }
     pump = Math.max(0, pump - dtSeg * 4.2);
     padLuz = Math.max(0, padLuz - dtSeg * 0.5);
@@ -2656,7 +2894,7 @@ function arrancarNavegador () {
     for (let i = 0; i < 3; i++)                       // el acorde no salta: funde
       tinte[i] += (acordeAhora[i] - tinte[i]) * Math.min(1, dtSeg * 2.2);
     if (corriendo) {
-      const luz = (0.5 + 0.5 * padLuz) * (1 - 0.45 * pump) * (0.55 + 0.45 * brilloRacha);
+      const luz = (0.5 + 0.5 * padLuz) * (1 - 0.45 * pump) * (0.55 + 0.45 * brilloRacha) * (1 + 0.35 * riserQ);
       const gr = cx.createLinearGradient(0, 0, 0, y0 + esc * 0.4);
       const rgb = tinte.map(v => Math.round(v)).join(',');
       gr.addColorStop(0, `rgba(${rgb},${0.34 * luz})`);
@@ -2939,7 +3177,7 @@ function arrancarNavegador () {
       if (prox && prox.xm - s.x < 2.2) {
         const q = Math.max(0, (prox.xm - s.x) / 2.2);       // 1 lejos, 0 justo
         cx.strokeStyle = `rgba(${C.teclaRGB},${0.5 * (1 - q) * (1 - q)})`;
-        cx.lineWidth = 1.5;
+        cx.lineWidth = 1.5 + 1.5 * riserQ;                  // el build lo engorda
         cx.beginPath();
         cx.arc(px(prox.xm), py(prox.y), (0.07 + q * 0.75) * esc, 0, Math.PI * 2);
         cx.stroke();
@@ -2970,7 +3208,9 @@ function arrancarNavegador () {
       const a = avisos[i], e = (performance.now() - a.t) / 750;
       if (e > 1) { avisos.splice(i, 1); continue; }
       cx.font = a.chueca ? 'bold 12px system-ui' : '12px system-ui';
-      cx.fillStyle = `rgba(${a.chueca ? C.suciaRGB : C.esferaRGB},${1 - e})`;
+      // el PERFECTO habla con el blanco del aro: la misma voz que su anillo
+      cx.fillStyle = a.perf ? `rgba(255,252,240,${1 - e})`
+        : `rgba(${a.chueca ? C.suciaRGB : C.esferaRGB},${1 - e})`;
       cx.fillText(a.txt, px(a.x), py(a.y) - 22 - e * 26);
     }
     cx.textAlign = 'left';
@@ -2997,6 +3237,17 @@ function arrancarNavegador () {
     }
 
     dibujarLecciones(px, py);
+    if (leccionViva) {
+      const e = (performance.now() - leccionViva.t) / 2800;
+      if (e >= 1) leccionViva = null;
+      else {
+        cx.save();
+        cx.textAlign = 'center'; cx.globalAlpha = Math.min(1, 4 * (1 - e));
+        cx.fillStyle = C.esfera; cx.font = 'bold 13px system-ui';
+        cx.fillText(leccionViva.txt, px(s.x), py(s.y) - 40);
+        cx.restore();
+      }
+    }
 
     // LA ESFERA. Rueda de verdad (una pelota que no gira no pesa), se hunde al
     // aterrizar con un resorte --el golpe no termina en el frame en que toca--
@@ -3060,11 +3311,36 @@ function arrancarNavegador () {
     cx.fillStyle = 'rgba(255,255,255,0.35)';
     cx.beginPath(); cx.arc(rx * 0.45, -ry * 0.42, Math.max(1.5, rx * 0.17), 0, Math.PI * 2); cx.fill();
     cx.restore();
+    // la sordera SE VE TERMINAR: un arco gris que se vacia alrededor de la
+    // esfera. El castigo escala hasta x5 y sin esto era ilegible -- parecia
+    // que el boton fallaba porque si.
+    if (sordo && s.bloqueo > s.bloqueoDesde) {
+      const fr = Math.max(0, Math.min(1, (s.bloqueo - s.x) / (s.bloqueo - s.bloqueoDesde)));
+      cx.strokeStyle = 'rgba(150,140,130,0.8)'; cx.lineWidth = 2.5;
+      cx.beginPath();
+      cx.arc(cxb, cyb, rx + 8, -Math.PI / 2, -Math.PI / 2 + fr * Math.PI * 2);
+      cx.stroke();
+    }
 
+    // las esquirlas de la muerte: caen con gravedad de pantalla y se apagan
+    if (muerteVista) {
+      const e = (performance.now() - muerteVista.t) / 600;
+      if (e >= 1) muerteVista = null;
+      else {
+        const ox = 2.4 * esc, oy = py(muerteVista.y + R);
+        cx.fillStyle = `rgba(${C.esferaRGB},${0.9 * (1 - e)})`;
+        for (const q of muerteVista.esquirlas) {
+          const qx = ox + Math.cos(q.a) * q.v * e;
+          const qy = oy + Math.sin(q.a) * q.v * e + 240 * e * e;
+          cx.beginPath(); cx.arc(qx, qy, 3 * (1 - e * 0.6), 0, Math.PI * 2); cx.fill();
+        }
+      }
+    }
     if (flash > 0) {
       flash = Math.max(0, flash - dtSeg * 3);
-      cx.fillStyle = `rgba(232,230,224,${flash * 0.22})`;
+      cx.fillStyle = `rgba(${flashRGB},${flash * 0.22})`;
       cx.fillRect(0, 0, w, h);
+      if (flash === 0) flashRGB = '232,230,224';
     }
 
     // HUD
@@ -3075,9 +3351,15 @@ function arrancarNavegador () {
       cx.fillText('DRIBLE — elegi el nivel', w / 2, h * 0.16);
       // Dos canciones, mismo margen de error: si el nivel 1 sale facil y el 2
       // no, la dificultad era la cancion, no el margen.
+      // La marca dice el RANGO y sobre cuanto: "completa" para siempre mataba
+      // la zanahoria -- ahora una cancion terminada sigue debiendo algo.
+      const contarNotas = id => CANCIONES[id].compases
+        .flatMap(c => c.trim().split(/\s+/)).filter(t => !t.startsWith('-')).length;
       const marca = id => {
         const r = leerRecord(id);
-        return r ? `   ${r.pct >= 100 ? '★ completa' : r.pct + '%'} · ♪ ${r.limpias}` : '';
+        if (!r) return '';
+        if (r.rango) return `   ☆ ${r.rango} · ♪ ${r.limpias}/${contarNotas(id)}`;
+        return `   ${r.pct >= 100 ? '★ completa' : (r.pct || 0) + '%'} · ♪ ${r.limpias || 0}`;
       };
       cx.fillStyle = C.tecla; cx.font = '15px system-ui';
       cx.fillText(`1 — ${nombreCancion('esfera')} · negras y blancas · 100 BPM${marca('esfera')}`, w / 2, h * 0.26);
@@ -3087,6 +3369,24 @@ function arrancarNavegador () {
       cx.fillText(`3 — ${nombreCancion('viaje')} · la cancion entera del estudio${marca('viaje')}`, w / 2, h * 0.40);
       cx.fillStyle = C.tenue; cx.font = '12px system-ui';
       cx.fillText('teclas 1/2/3, o toca su renglon · ESPACIO arranca el nivel 1', w / 2, h * 0.46);
+      // la zanahoria concreta: que le falta a tu mejor cancion para el
+      // proximo rango. Un objetivo visible y contado es lo que trae de vuelta.
+      const paso = NIVELES.map(id => ({ id, r: leerRecord(id) }))
+        .filter(q => q.r && q.r.rango && q.r.rango !== 'SUPERNOVA')
+        .sort((a, b) => RANGOS.indexOf(b.r.rango) - RANGOS.indexOf(a.r.rango))[0];
+      if (paso) {
+        const total = contarNotas(paso.id);
+        const sig = RANGOS[RANGOS.indexOf(paso.r.rango) + 1];
+        const faltan = sig === 'VIRTUOSO' ? Math.ceil(total * 0.95) - paso.r.limpias
+          : sig === 'AURORA' ? total - paso.r.limpias
+          : sig === 'SUPERNOVA' ? Math.ceil(total * 0.85) - (paso.r.perf || 0)
+          : Math.ceil(total * 0.85) - paso.r.limpias;
+        if (faltan > 0) {
+          cx.fillStyle = C.tenue; cx.font = '12px system-ui';
+          cx.fillText(`${nombreCancion(paso.id)}: a ${faltan} ${sig === 'SUPERNOVA' ? 'clavadas' : 'limpias'} de ${sig}`,
+            w / 2, h * 0.50 + 6);
+        }
+      }
       cx.font = '13px system-ui';
       // Un solo boton y tres reglas. Todo lo demas lo enseña el mapa cuando
       // pasa: un muro de once renglones no lo lee nadie.
@@ -3099,9 +3399,17 @@ function arrancarNavegador () {
       // En un telefono el sonido sale tarde y el juego se siente roto sin que
       // sea culpa tuya. Esta linea es la diferencia entre "no me sale" y "no
       // estaba calibrado".
-      cx.fillStyle = C.impulso; cx.font = '13px system-ui';
-      cx.fillText(desfase ? `C — calibrar el sonido   (ahora: ${Math.round(desfase * 1000)} ms)`
-        : 'C — calibrar el sonido   (recomendado en el telefono)', w / 2, h * 0.86);
+      // ...y dibujada como BOTON: en el telefono no hay tecla C, y esta es la
+      // funcion que separa "se siente justo" de "se siente roto"
+      const tCal = desfase ? `calibrar el sonido · ${Math.round(desfase * 1000)} ms` : 'calibrar el sonido';
+      cx.font = '13px system-ui';
+      const anchoCal = cx.measureText(tCal).width + 36;
+      cx.strokeStyle = `rgba(${C.impulsoRGB},0.6)`; cx.lineWidth = 1;
+      cx.strokeRect(w / 2 - anchoCal / 2, h * 0.86 - 17, anchoCal, 26);
+      cx.fillStyle = C.impulso;
+      cx.fillText(tCal, w / 2, h * 0.86);
+      cx.fillStyle = C.tenue; cx.font = '11px system-ui';
+      cx.fillText('tocalo, o tecla C — recomendado en el telefono', w / 2, h * 0.86 + 22);
     } else {
       cx.textAlign = 'left';
       cx.fillStyle = C.red; cx.font = '14px system-ui';
@@ -3115,12 +3423,16 @@ function arrancarNavegador () {
         cx.fillText('ENSAYO', w - 62, h - 10);
       }
       if (avisoMuerte) {
-        const dt = (performance.now() - avisoMuerte.t) / 2600;
+        const dt = (performance.now() - avisoMuerte.t) / 4200;
         if (dt >= 1) avisoMuerte = null;
         else {
           const a = avisoMuerte;
           cx.save();
           cx.textAlign = 'center'; cx.globalAlpha = Math.min(1, 4 * (1 - dt));
+          // un velo sobre la corrida nueva: el diagnostico tiene que LEERSE, y
+          // atras ya arranco el compas 1 con sus teclas y su paisaje
+          cx.fillStyle = 'rgba(17,18,20,0.72)';
+          cx.fillRect(0, 0, w, h);
           if (a.txt) {
             cx.fillStyle = C.esfera; cx.font = 'bold 15px system-ui';
             cx.fillText(a.txt, w / 2, h * 0.24);
@@ -3133,6 +3445,21 @@ function arrancarNavegador () {
           cx.fillText(a.ensayo ? 'ensayo: no cuenta para el record'
             : a.nuevo && a.record ? `nuevo record — antes ${a.record}%`
             : a.record ? `tu record: ${a.record}%` : 'tu primera vuelta', w / 2, h * 0.33 + 20);
+          // ...y el detalle que dirige: cuantas limpias contra tu mejor marca,
+          // y el atajo directo a practicar el tramo que te tiro
+          if (!a.ensayo && a.mejorLimpias) {
+            cx.fillText(`♪ ${a.limpiasRun} — tu mejor: ${a.mejorLimpias}`, w / 2, h * 0.33 + 40);
+          }
+          if (a.seccion) {
+            cx.fillStyle = C.impulso; cx.font = '13px system-ui';
+            cx.fillText(`▶  ensayar ${a.seccion}`, w / 2, h * 0.33 + 66);
+          }
+          // el diagnostico entero: el informe por seccion, con la de la
+          // muerte señalada -- se ve QUE tramo esta flojo, no solo cuanto
+          if (dt < 0.75) {
+            cx.globalAlpha *= dt > 0.6 ? (0.75 - dt) / 0.15 : 1;
+            dibujarInforme(w, h, a.limpias, a.xm);
+          }
           cx.restore();
         }
       }
@@ -3145,6 +3472,15 @@ function arrancarNavegador () {
           cx.globalAlpha = Math.min(1, 3 * (1 - dt));
           cx.fillStyle = C.impulso; cx.font = 'bold 16px system-ui';
           cx.fillText(avisoSeccion.n.toUpperCase(), w / 2, 30);
+          // el contrato del salto, dicho en el momento: ensayo no puntua, y
+          // volver a la salida es un concierto que si
+          if (avisoSeccion.aviso) {
+            cx.fillStyle = C.sucia; cx.font = '11px system-ui';
+            cx.fillText('ENSAYO — esta corrida no puntua', w / 2, 48);
+          } else if (avisoSeccion.deCero) {
+            cx.fillStyle = C.tenue; cx.font = '11px system-ui';
+            cx.fillText('DE CERO — esta si cuenta', w / 2, 48);
+          }
           cx.restore();
         }
       }
@@ -3152,6 +3488,11 @@ function arrancarNavegador () {
       // martillar el boton puntuaba igual que tocar bien.
       cx.fillStyle = C.esfera; cx.font = '15px system-ui';
       cx.fillText(`♪ ${s.limpias.size}/${TOTAL_NOTAS}`, 12, 44);
+      // las clavadas al lado: la metrica de maestria se persigue EN VIVO
+      if (s.perfectas.size) {
+        cx.fillStyle = 'rgba(255,252,240,0.85)'; cx.font = '13px system-ui';
+        cx.fillText(`◎ ${s.perfectas.size}`, 96, 44);
+      }
       const chuecas = s.tocadas.size - s.limpias.size;
       if (chuecas) {
         cx.fillStyle = C.sucia; cx.font = '13px system-ui';
@@ -3163,10 +3504,24 @@ function arrancarNavegador () {
       }
       if (s.racha >= 4 && !s.meta) {               // la cadena limpia, bien grande
         cx.textAlign = 'center';
-        cx.fillStyle = `rgba(${C.esferaRGB},${Math.min(1, 0.4 + s.racha / 30)})`;
+        // superar tu mejor racha historica se ve: el numero se pinta verde.
+        // "estuve a 2 de mi mejor" es el motor del una-mas, y necesita color.
+        const record = rachaRecord && s.racha > rachaRecord;
+        cx.fillStyle = record ? C.impulso : `rgba(${C.esferaRGB},${Math.min(1, 0.4 + s.racha / 30)})`;
         cx.font = `${Math.min(34, 17 + s.racha)}px system-ui`;
         cx.fillText(`x${s.racha}`, w / 2, 42);
         cx.textAlign = 'left';
+      }
+      if (rachaRota) {                             // el numero perdido CAE
+        const e = (performance.now() - rachaRota.t) / 700;
+        if (e >= 1) rachaRota = null;
+        else {
+          cx.textAlign = 'center';
+          cx.fillStyle = `rgba(150,140,130,${0.9 * (1 - e)})`;
+          cx.font = `${Math.min(34, 17 + rachaRota.n)}px system-ui`;
+          cx.fillText(`x${rachaRota.n}`, w / 2, 42 + e * e * 90);
+          cx.textAlign = 'left';
+        }
       }
       cx.fillStyle = C.tenue; cx.fillRect(w - 132, 16, 120, 4);
       cx.fillStyle = C.esfera; cx.fillRect(w - 132, 16, 120 * Math.min(1, s.x / LARGO), 4);
@@ -3192,25 +3547,45 @@ function arrancarNavegador () {
         cx.textAlign = 'left';
       }
       if (s.meta) {
+        // LA META EN TIEMPOS. Antes volcaba rango+stats+mapa+informe en un
+        // solo frame, como una planilla: ahora el rango hace su pop, y el
+        // resto entra detras, en orden. Mismo contenido, entregado como
+        // ceremonia.
+        const tm = metaEn ? (performance.now() - metaEn) / 1000 : 9;
+        const rev = desde => Math.max(0, Math.min(1, (tm - desde) / 0.45));
+        cx.save();
+        cx.globalAlpha = rev(0.6);
         dibujarMapa(w, h);                         // la cancion entera, de una mirada
+        cx.restore();
         // El RANGO: la maestria como premio, y nada mas que eso. Sin monedas,
         // sin energia -- lo unico que se desbloquea es saber que lo hiciste.
         const tot = TOTAL_NOTAS || 1;
-        const pl = s.limpias.size / tot;
-        const todoOrbe = !ORBES.length || s.orbes >= ORBES.length;
-        const rango = pl >= 1 && todoOrbe ? 'AURORA' : pl >= 0.95 ? 'VIRTUOSO'
-          : pl >= 0.85 ? 'MUSICO' : pl >= 0.7 ? 'AFINADO' : 'LLEGASTE';
+        const rg = rango(s.limpias.size, tot, s.orbes, ORBES.length, s.perfectas.size);
+        cx.save();
         cx.textAlign = 'center';
-        cx.fillStyle = rango === 'AURORA' ? C.impulso : C.peligro;
-        cx.font = 'bold 30px system-ui';
-        cx.fillText(rango, w / 2, h * 0.11);
+        cx.globalAlpha = rev(0.05);
+        cx.fillStyle = rg === 'AURORA' || rg === 'SUPERNOVA' ? C.impulso : C.peligro;
+        cx.font = `bold ${Math.round(30 * (1.2 - 0.2 * rev(0.05)))}px system-ui`;
+        cx.fillText(rg, w / 2, h * 0.11);
+        cx.globalAlpha = rev(0.45);
         cx.fillStyle = C.peligro; cx.font = '14px system-ui';
         cx.fillText(`${s.limpias.size}/${tot} limpias · ${s.perfectas.size} clavadas · ` +
           `${chuecas} chuecas · racha ${s.mejorRacha}` +
           (ORBES.length ? ` · ${s.orbes}/${ORBES.length} orbes` : ''), w / 2, h * 0.11 + 24);
+        // ganar mejorando tu marca no puede verse igual que no mejorarla
+        if (metaRecord) {
+          cx.globalAlpha = rev(0.8);
+          cx.fillStyle = metaRecord.nuevo ? C.impulso : C.tenue; cx.font = '13px system-ui';
+          cx.fillText(metaRecord.nuevo
+            ? (metaRecord.antes ? `★ nuevo record: ${s.limpias.size} limpias (antes ${metaRecord.antes})` : '★ tu primera marca')
+            : `tu record sigue en ${metaRecord.antes} limpias`, w / 2, h * 0.11 + 44);
+        }
+        cx.globalAlpha = rev(1.2);
         dibujarInforme(w, h);
+        cx.globalAlpha = rev(1.6);
         cx.fillStyle = C.tenue; cx.font = '13px system-ui';
-        cx.fillText('toca para volver al menu', w / 2, h * 0.95);
+        cx.fillText('toca — otra vez · ESC o aca abajo — menu', w / 2, h * 0.95);
+        cx.restore();
       }
     }
     hud.textContent = '';
