@@ -39,10 +39,12 @@ se agrega, se reparte.
 
 - **Los orbes** flotan sobre el arco del salto y guardan un golpe real del
   arreglo. El fondo lo calla: suena si lo atravesás, o no suena.
-- **Los pistones** son caños que reclaman el *backbeat* del compás. El arreglo
-  abre un cráter en esa semicorchea —se hunde a la mitad, pase lo que pase— y
-  caerle encima lo llena con tu golpe. Si pasás de largo, el cráter suena vacío:
-  la banda se agachó para un golpe que no llegó.
+- **Los pistones** son caños cuya cabeza se para justo donde pasa el arco de un
+  salto tocado a tiempo, y reclaman un golpe del contratiempo (ahí es donde la
+  esfera vuela: en los tiempos hay teclas). El arreglo abre un **cráter** en esa
+  semicorchea —se hunde a la mitad, pase lo que pase— y caerle encima lo llena
+  con tu golpe: el hi-hat se abre, y vuelve con eco. Si pasás de largo, el
+  cráter suena vacío: la banda se agachó para un golpe que no llegó.
 - **En NEBULOSA** los rieles cuelgan sobre el vacío y llevan notas del arpegio:
   picar para cosecharlas es apostar la vida. El que no quiere, no pica.
 

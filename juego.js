@@ -842,11 +842,22 @@ export let TECHOS = [];
 export let PISTONES = [];
 export let ZONAS_PISTON = [];      // las zonas declaradas por la cancion
 export const ROCE = 0.13;          // debajo de esto vas rasante: te agarra el vastago
-// El caño elige su golpe con JERARQUIA, no por cercania: el backbeat entero
-// ('x' = bombo+caja+clap) manda sobre la caja, la caja sobre el clap, y el
-// hat es el ultimo recurso. Antes ganaba el mas cercano, que en los patrones
-// del coro ('k.h.x.h...') era casi siempre un hat de 30 ms: se pisaba un caño
-// gigante y sonaba un tic -- por eso los caños parecian decorado.
+// El caño elige su golpe con JERARQUIA, no por cercania: el golpe entero
+// ('x' = bombo+caja+clap) manda sobre la caja, la caja sobre el clap, y el hat
+// es el ultimo recurso.
+//
+// Con una limitacion que conviene saber, porque es geometria y no se negocia:
+// las teclas viven EN el pulso, asi que la esfera esta parada en los tiempos y
+// vuela ENTRE ellos. El arco de un salto nunca pasa por el backbeat -- ahi hay
+// una tecla, no aire. Medido sobre el viaje: de los 57 golpes fuertes de las
+// tres zonas, CERO son alcanzables por un arco. Lo que hay a mano en el aire
+// es el contratiempo: hats casi siempre, y cajas donde el patron redobla
+// (rollBig). Asi que la jerarquia decide poco -- y cuando decide, importa.
+//
+// Lo que hace que un hat pisado no sea un tic: se ABRE al pisarlo (mismo
+// instrumento, gesto de acento), cae dentro del crater que el arreglo abrio
+// para el, y lleva el eco del solista. El caño no suena mas fuerte: suena
+// SOLO, que es distinto.
 const PESO = { x: 4, s: 3, c: 2, H: 1, h: 0 };
 export let PASOS_PISTON = new Set();   // pasos reclamados por caños: llevan crater
 function pistones () {
