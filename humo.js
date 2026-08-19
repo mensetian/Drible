@@ -68,6 +68,15 @@ globalThis.document = {
   addEventListener: () => {}
 };
 globalThis.AudioContext = AudioContextFalso;
+// Un localStorage de mentira: sin esto el record no se ejercitaba NUNCA fuera
+// del navegador --leerRecord/guardarRecord viven en try/catch-- y son el
+// camino que corre en cada muerte.
+const guardado = new Map();
+globalThis.localStorage = {
+  getItem: k => (guardado.has(k) ? guardado.get(k) : null),
+  setItem: (k, v) => { guardado.set(k, String(v)); },
+  removeItem: k => { guardado.delete(k); }
+};
 globalThis.window = globalThis;
 globalThis.performance = globalThis.performance || { now: () => reloj };
 globalThis.addEventListener = (tipo, f) => { (oyentes[tipo] ||= []).push(f); };
@@ -196,6 +205,43 @@ for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'aurora'], ['3', 'viaje']])
     exigir(dijo('ENSAYO'), 'saltar de seccion no marco la corrida como ensayo');
   });
 }
+
+// EL RECORD Y SU MODO. guardarRecord corre en cada muerte y en cada meta, vive
+// en un try/catch, y sin localStorage de mentira no lo ejercitaba nadie: si su
+// firma se rompe, el juego sigue andando y el jugador pierde sus marcas en
+// silencio. Aca se lo obliga a escribir, a leer lo viejo y a habilitar el modo.
+probar('el record se guarda, se lee, y con el llega SIN RED', () => {
+  // salir de la corrida en curso: pausa y M. (Antes no habia salida al menu a
+  // mitad de cancion -- para cambiar de nivel habia que dejarse matar.)
+  disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
+  correrCuadros(4);
+  exigir(dijo('volver al menu'), 'la pausa no ofrece salida al menu');
+  disparar('keydown', { key: 'm', code: 'KeyM', preventDefault () {}, repeat: false });
+  correrCuadros(4);
+  textos.length = 0;
+  correrCuadros(4);
+  exigir(dijo('elegi el nivel'), 'M en pausa no volvio al menu');
+  // un record viejo, del formato anterior {pct, limpias}: tiene que sobrevivir
+  localStorage.setItem('drible:record:esfera', JSON.stringify({ pct: 100, limpias: 40 }));
+  textos.length = 0;
+  correrCuadros(4);
+  exigir(dijo('SIN RED'), 'con una cancion terminada, SIN RED no aparece en el menu');
+  // armarlo con la tecla S y arrancar: la corrida tiene que quedar marcada
+  disparar('keydown', { key: 's', code: 'KeyS', preventDefault () {}, repeat: false });
+  correrCuadros(4);
+  textos.length = 0;
+  correrCuadros(4);
+  exigir(dijo('armado'), 'la tecla S no armo SIN RED');
+  disparar('keydown', { key: '1', code: 'Digit1', preventDefault () {}, repeat: false });
+  correrCuadros(20);
+  textos.length = 0;
+  correrCuadros(6);
+  exigir(dijo('SIN RED'), 'la corrida sin red no lleva su marca en el HUD');
+  // y que la escritura del record no explote: se juega y se muere sin tocar
+  correrCuadros(600);
+  exigir(JSON.parse(localStorage.getItem('drible:record:esfera')).limpias >= 40,
+    'el record viejo se perdio al guardar el nuevo');
+});
 
 console.log(fallas ? `\n${fallas} FALLAS` : '\nsin fallas');
 process.exit(fallas ? 1 : 0);

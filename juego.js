@@ -1293,6 +1293,9 @@ export function paso (s, dt) {
     // aire, sobre el hueco entre teclas, asi que no compite con ninguna.
     if (s.vy <= 0) pisarPiston(s, yAntes);
     if (s.vy < 0) posarse(s, yAntes);
+    // posarse puede matar (SIN RED toca la red y se acabo): el resto del paso
+    // --el vastago, los caños, la meta-- no corre sobre una esfera muerta
+    if (!s.viva) return;
   }
   // ...y el vastago, para el que viene rasante por la red
   if (s.y < ROCE) rozarPiston(s);
@@ -2609,6 +2612,11 @@ function arrancarNavegador () {
     cx.fillText('PAUSA', w / 2, h * 0.44);
     cx.fillStyle = C.tenue; cx.font = '13px system-ui';
     cx.fillText('toca para seguir · ESC', w / 2, h * 0.44 + 26);
+    // ...y la salida. No habia NINGUNA forma de volver al menu sin terminar la
+    // cancion o morirse: para cambiar de nivel a mitad de camino habia que
+    // dejarse matar, que es una forma rara de pedirle algo a un juego.
+    cx.fillStyle = `rgba(${C.esferaRGB},0.7)`;
+    cx.fillText('M — volver al menu', w / 2, h * 0.66);
     cx.textAlign = 'left';
   }
 
@@ -2666,8 +2674,11 @@ function arrancarNavegador () {
     if (nivel === 'calibrar') { calibrar(); return; }
     if (nivel === 'sinred') {
       // solo se arma cuando ya terminaste algo: es el concierto del que ya se
-      // sabe la cancion, no una trampa para el que recien llega
-      if (NIVELES.some(id => ((leerRecord(id) || {}).pct || 0) >= 100)) sinRedArmado = !sinRedArmado;
+      // sabe la cancion, no una trampa para el que recien llega. Y si todavia
+      // no esta a la vista, esa franja de pantalla no puede ser un toque
+      // muerto: vale la promesa de siempre, un toque arranca el nivel 1.
+      if (NIVELES.some(id => ((leerRecord(id) || {}).pct || 0) >= 100)) { sinRedArmado = !sinRedArmado; return; }
+      if (!corriendo) { empezar(NIVELES[0]); }
       return;
     }
     if (!corriendo) { empezar(NIVELES[nivel] || NIVELES[0]); return; }
@@ -2694,6 +2705,13 @@ function arrancarNavegador () {
       if (e.repeat) return;
       if (corriendo && s.meta) { alMenu(); return; }    // desde la meta, ESC sale
       alternarPausa(); return;
+    }
+    // en pausa, M es la salida al menu (y no puede caer en el camino del boton
+    // de jugar, que reanudaria en vez de salir)
+    if (pausado && (e.key === 'm' || e.key === 'M')) {
+      e.preventDefault();
+      if (!e.repeat) { alternarPausa(); alMenu(); }
+      return;
     }
     // revisar: saltar de seccion en seccion sin jugar todo el nivel
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
@@ -2751,6 +2769,8 @@ function arrancarNavegador () {
     }
     // en la meta, la franja de abajo es la salida al menu (tactil sin ESC)
     if (s.meta && e.offsetY / cv.clientHeight > 0.88) { alMenu(); return; }
+    // ...y en pausa, la franja del cartel "volver al menu" (tactil sin M)
+    if (pausado && e.offsetY / cv.clientHeight > 0.6) { alternarPausa(); alMenu(); return; }
     bajar();
   });
   addEventListener('pointerup', subir);
