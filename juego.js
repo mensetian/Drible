@@ -668,6 +668,30 @@ export const enHueco = x => HUECOS.some(h => x > h.x0 && x < h.x1);
 export let ARPEGIOS = [];
 export const enArpegio = x => ARPEGIOS.some(z => x > z.x0 && x < z.x1);
 
+// DONDE LA PARTITURA MANDA RODAR. En los silencios largos el mapa no te deja
+// otra: la nota anterior te suelta con impulso cero, caes, rodas y volves a
+// subir tocando. Eso NO es fallar -- es el respiro escrito. Se deduce de la
+// partitura para que el modo SIN RED pueda castigar la caida sin castigar la
+// cancion: ahi abajo la red sigue estando, en todo el resto no.
+export let TRAMOS_RODAR = [];
+export const mandaRodar = x => TRAMOS_RODAR.some(t => x >= t.x0 && x <= t.x1);
+function tramosRodar () {
+  const r = [];
+  for (const n of NOTAS) {
+    if (!n.silencio || n.piso || n.volado) continue;
+    const sig = NOTAS[n.i + 1];
+    r.push({
+      x0: +(n.x0 - 0.3).toFixed(3),
+      x1: +((sig ? sig.x0 : n.x0 + n.dur) + 0.2).toFixed(3)
+    });
+  }
+  // ...y la rodada final: pasada la ultima nota se rueda hasta la meta, y eso
+  // es la vuelta de la victoria, no un error
+  const ult = [...NOTAS].reverse().find(n => !n.silencio);
+  if (ult) r.push({ x0: +(ult.x1 - 0.1).toFixed(3), x1: LARGO + 4 });
+  return r;
+}
+
 // Los ORBES del arpegio: cuerpos flotantes sobre el arco ideal de cada pique.
 // El pique pone la raiz y elige el arco; las otras tres semicorcheas se tocan
 // CON EL CUERPO: la esfera las atraviesa o no suenan. Pique fino = el arco
@@ -992,6 +1016,7 @@ export function elegirCancion (id) {
     .map(n => ({ x0: n.x0 - 0.3, x1: n.x1 + 0.3 }));
   OCTAVAS = c.octavas || [];
   SECCIONES = c.secciones;
+  TRAMOS_RODAR = tramosRodar();
 }
 export const nombreCancion = id => CANCIONES[id || CANCION_ID].nombre;
 const planCompas = c => CANCIONES[CANCION_ID].plan(c);
@@ -1000,8 +1025,14 @@ elegirCancion('aurora');   // el default de siempre: los tests corren contra est
 
 // --- simulacion --------------------------------------------------------------
 
-export function crearSim () {
+export function crearSim (opts = {}) {
   return {
+    // SIN RED: el concierto del que ya se sabe la cancion. Caer a la red mata,
+    // salvo donde la partitura MANDA rodar (los silencios largos y la vuelta
+    // final). El juego base promete "el error cuesta la nota, nunca el tramo";
+    // aca el jugador cambia esa promesa, a sabiendas, por la de los abismos:
+    // 277 notas y ninguna red debajo.
+    sinRed: !!opts.sinRed,
     x: 0, y: PISO ? PISO.y : 0, vy: 0,
     estado: 'apoyada',      // 'apoyada' | 'aire'
     tecla: PISO ? PISO.i : -1,   // indice en NOTAS, o -1 = la red
@@ -1195,6 +1226,9 @@ function posarse (s, yAntes) {
     return;
   }
   if (!enHueco(s.x) && yAntes >= -1e-9 && s.y <= 0) {
+    // SIN RED: la red esta, pero solo donde la partitura manda rodar. Fuera de
+    // ahi, tocarla es el final -- que es exactamente lo que el jugador pidio.
+    if (s.sinRed && !mandaRodar(s.x)) { s.viva = false; s.causa = 'red'; return; }
     s.estado = 'apoyada'; s.tecla = -1; s.y = 0; s.vy = 0;
     s.eventos.push({ tipo: 'red', x: s.x, y: 0 });
   }
@@ -1236,6 +1270,9 @@ export function paso (s, dt) {
     s.y = 0;
     if (enHueco(s.x)) despegar(s);
     // rodar por la red no dispara nada solo: volver arriba es TU toque
+    // ...y SIN RED, rodar mas alla del respiro escrito tampoco se perdona: el
+    // reenganche tiene su ventana, y dejarla pasar es haberse caido
+    if (s.sinRed && !mandaRodar(s.x)) { s.viva = false; s.causa = 'red'; return; }
   }
 
   if (s.estado === 'aire') {
@@ -1497,6 +1534,7 @@ function arrancarNavegador () {
       perf: Math.max(d.perf || 0, r.perf || 0),
       racha: Math.max(d.racha || 0, r.racha || 0),
       orbes: Math.max(d.orbes || 0, r.orbes || 0),
+      sinRedPct: Math.max(d.sinRedPct || 0, r.sinRedPct || 0),
       rango: [d.rango, r.rango].filter(Boolean)
         .sort((a, b) => RANGOS.indexOf(b) - RANGOS.indexOf(a))[0] || null
     };
@@ -2310,7 +2348,8 @@ function arrancarNavegador () {
   const PORQUE = {
     techo: 'te aplasto el techo — bajo el techo NO se toca',
     hueco: 'soltaste el riel sobre el vacio — ahi hay que mantener',
-    dribleo: 'la red se corta entre piques — hay que PICAR al beat'
+    dribleo: 'la red se corta entre piques — hay que PICAR al beat',
+    red: 'SIN RED: fallar una nota es caer — aca abajo no hay nada'
   };
   let avisoMuerte = null;
   function morirOReiniciar () {
@@ -2326,7 +2365,9 @@ function arrancarNavegador () {
     if (!ensayo) {
       guardarRecord(CANCION_ID, {
         pct, limpias: s.limpias.size, perf: s.perfectas.size,
-        racha: s.mejorRacha, orbes: s.orbes
+        racha: s.mejorRacha, orbes: s.orbes,
+        // el sin red lleva su propia marca: es otra promesa, otro record
+        sinRedPct: sinRed ? pct : 0
       });
       rachaRecord = Math.max(rachaRecord, s.mejorRacha); rachaAvisada = false;
     }
@@ -2354,7 +2395,7 @@ function arrancarNavegador () {
       }))
     };
     flashRGB = '255,120,90';
-    s = crearSim();
+    s = crearSim({ sinRed });
     // 1.4 s, no 0.7: el respiro justo para LEER el diagnostico antes de que el
     // compas 1 reclame los dedos. Sigue siendo automatico: nadie toca nada.
     t0 = ac.currentTime + 1.4;
@@ -2376,6 +2417,7 @@ function arrancarNavegador () {
     elegirCancion(id);
     armarLecciones();
     ensayo = false;                 // arrancar de cero es el unico concierto
+    sinRed = sinRedArmado;          // el modo se elige en el menu y dura la corrida
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); crateres.length = 0; pisada = 0;
     crashVista.length = 0; riserVista = null;
@@ -2384,8 +2426,8 @@ function arrancarNavegador () {
     rachaRecord = (leerRecord(id) || {}).racha || 0;
     rachaAvisada = false; rachaRota = null;
     metaRecord = null; avisoMuerte = null; ultSeccion = 0;
-    metaEn = 0; muerteVista = null; leccionViva = null;
-    s = crearSim();
+    metaEn = 0; muerteVista = null; leccionViva = null; vecesRed = 0;
+    s = crearSim({ sinRed });
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
     corriendo = true;
     arrancarAudio();
@@ -2576,11 +2618,14 @@ function arrancarNavegador () {
   // no es un record: es una trampa contra uno mismo. Desde el primer salto la
   // corrida queda marcada como ENSAYO y no puntua hasta que se arranque de cero.
   let ensayo = false;
+  // SIN RED: se arma en el menu (solo despues de terminar alguna cancion) y
+  // dura toda la corrida, reintentos incluidos.
+  let sinRed = false, sinRedArmado = false;
   let avisoSeccion = null;
   function saltarA (bx) {
     rielCerrar(); eRielCerrar();
     const k = NOTAS.find(n => !n.silencio && n.x0 >= bx - 0.001) || NOTAS[0];
-    s = crearSim();
+    s = crearSim({ sinRed });
     s.x = Math.max(0, k.x0);
     s.estado = 'apoyada'; s.tecla = k.i; s.y = k.y; s.saliendoDe = -1;
     t0 = ac.currentTime - desfase - s.x * SPB;   // el juego va s.x; el audio, adelante
@@ -2609,7 +2654,7 @@ function arrancarNavegador () {
     cabezas.clear(); crateres.length = 0; pisada = 0;
     crashVista.length = 0; riserVista = null;
     metaEn = 0; muerteVista = null; leccionViva = null; avisoMuerte = null;
-    corriendo = false; finSonado = false;
+    corriendo = false; finSonado = false; sinRed = false;
     s = crearSim();
   }
 
@@ -2619,6 +2664,12 @@ function arrancarNavegador () {
     if (pausado) { alternarPausa(); return; }   // en pausa, tocar es seguir
     if (calib) { tocarCalib(); return; }
     if (nivel === 'calibrar') { calibrar(); return; }
+    if (nivel === 'sinred') {
+      // solo se arma cuando ya terminaste algo: es el concierto del que ya se
+      // sabe la cancion, no una trampa para el que recien llega
+      if (NIVELES.some(id => ((leerRecord(id) || {}).pct || 0) >= 100)) sinRedArmado = !sinRedArmado;
+      return;
+    }
     if (!corriendo) { empezar(NIVELES[nivel] || NIVELES[0]); return; }
     // En la meta, el toque es OTRA VEZ: el momento de maxima ganas de mejorar
     // la marca no puede desembocar en el menu. Al menu se sale con ESC (o
@@ -2666,6 +2717,7 @@ function arrancarNavegador () {
     e.preventDefault();
     if (e.repeat) return;
     if (!corriendo && !calib && (e.key === 'c' || e.key === 'C')) { bajar('calibrar'); return; }
+    if (!corriendo && !calib && (e.key === 's' || e.key === 'S')) { bajar('sinred'); return; }
     if (!corriendo && !calib && e.key >= '1' && e.key <= String(NIVELES.length)) { bajar(+e.key - 1); return; }
     bajar();
   }, { capture: true });
@@ -2693,7 +2745,8 @@ function arrancarNavegador () {
       // promete ("un toque arranca el nivel 1") y antes media pantalla
       // arrancaba VIAJE, los 64 compases mas dificiles, a un pulgar despistado
       const y = e.offsetY / cv.clientHeight;
-      bajar(y > 0.80 ? 'calibrar' : y > 0.435 ? 0 : y > 0.37 ? 2 : y > 0.295 ? 1 : 0);
+      bajar(y > 0.80 ? 'calibrar' : y > 0.66 ? 'sinred'
+        : y > 0.435 ? 0 : y > 0.37 ? 2 : y > 0.295 ? 1 : 0);
       return;
     }
     // en la meta, la franja de abajo es la salida al menu (tactil sin ESC)
@@ -2758,7 +2811,7 @@ function arrancarNavegador () {
         };
         guardarRecord(CANCION_ID, {
           pct: 100, limpias: s.limpias.size, perf: s.perfectas.size,
-          racha: s.mejorRacha, orbes: s.orbes,
+          racha: s.mejorRacha, orbes: s.orbes, sinRedPct: sinRed ? 100 : 0,
           rango: rango(s.limpias.size, TOTAL_NOTAS, s.orbes, ORBES.length, s.perfectas.size)
         });
       } else metaRecord = null;
@@ -3358,7 +3411,9 @@ function arrancarNavegador () {
       const marca = id => {
         const r = leerRecord(id);
         if (!r) return '';
-        if (r.rango) return `   ☆ ${r.rango} · ♪ ${r.limpias}/${contarNotas(id)}`;
+        // el ✦ es la marca de honor: esta cancion la terminaste SIN RED
+        const sr = r.sinRedPct >= 100 ? ' ✦' : r.sinRedPct ? ` ✦${r.sinRedPct}%` : '';
+        if (r.rango) return `   ☆ ${r.rango} · ♪ ${r.limpias}/${contarNotas(id)}${sr}`;
         return `   ${r.pct >= 100 ? '★ completa' : (r.pct || 0) + '%'} · ♪ ${r.limpias || 0}`;
       };
       cx.fillStyle = C.tecla; cx.font = '15px system-ui';
@@ -3399,11 +3454,30 @@ function arrancarNavegador () {
       // En un telefono el sonido sale tarde y el juego se siente roto sin que
       // sea culpa tuya. Esta linea es la diferencia entre "no me sale" y "no
       // estaba calibrado".
+      // SIN RED: el endgame, y solo para el que ya termino algo. Antes de eso
+      // ni se menciona -- una promesa rota de dificultad no le sirve a nadie
+      // que todavia esta aprendiendo el gesto.
+      if (NIVELES.some(id => ((leerRecord(id) || {}).pct || 0) >= 100)) {
+        cx.font = sinRedArmado ? 'bold 13px system-ui' : '13px system-ui';
+        const tSR = sinRedArmado ? 'SIN RED — armado: caer es el final' : 'SIN RED — caer mata, salvo donde la cancion manda rodar';
+        const anchoSR = cx.measureText(tSR).width + 36;
+        cx.fillStyle = C.fondo;                    // el menu no compite con el mundo
+        cx.fillRect(w / 2 - anchoSR / 2, h * 0.72 - 17, anchoSR, 26);
+        cx.strokeStyle = sinRedArmado ? C.esfera : `rgba(${C.esferaRGB},0.35)`;
+        cx.lineWidth = sinRedArmado ? 2 : 1;
+        cx.strokeRect(w / 2 - anchoSR / 2, h * 0.72 - 17, anchoSR, 26);
+        cx.fillStyle = sinRedArmado ? C.esfera : `rgba(${C.esferaRGB},0.6)`;
+        cx.fillText(tSR, w / 2, h * 0.72);
+        cx.fillStyle = C.tenue; cx.font = '11px system-ui';
+        cx.fillText('tocalo, o tecla S', w / 2, h * 0.72 + 20);
+      }
       // ...y dibujada como BOTON: en el telefono no hay tecla C, y esta es la
       // funcion que separa "se siente justo" de "se siente roto"
       const tCal = desfase ? `calibrar el sonido · ${Math.round(desfase * 1000)} ms` : 'calibrar el sonido';
       cx.font = '13px system-ui';
       const anchoCal = cx.measureText(tCal).width + 36;
+      cx.fillStyle = C.fondo;
+      cx.fillRect(w / 2 - anchoCal / 2, h * 0.86 - 17, anchoCal, 26);
       cx.strokeStyle = `rgba(${C.impulsoRGB},0.6)`; cx.lineWidth = 1;
       cx.strokeRect(w / 2 - anchoCal / 2, h * 0.86 - 17, anchoCal, 26);
       cx.fillStyle = C.impulso;
@@ -3421,6 +3495,10 @@ function arrancarNavegador () {
       if (ensayo) {                 // y que se sepa que esto no puntua
         cx.fillStyle = C.sucia; cx.font = 'bold 11px system-ui';
         cx.fillText('ENSAYO', w - 62, h - 10);
+      }
+      if (sinRed) {                 // ...y que se sepa que abajo no hay nada
+        cx.fillStyle = C.esfera; cx.font = 'bold 11px system-ui';
+        cx.fillText('SIN RED', w - 62, h - 26);
       }
       if (avisoMuerte) {
         const dt = (performance.now() - avisoMuerte.t) / 4200;

@@ -11,7 +11,8 @@
 
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
-  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, ZONAS_PISTON, Y_GRAVE, HOLGURA
+  CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, ZONAS_PISTON, Y_GRAVE, HOLGURA,
+  TRAMOS_RODAR, mandaRodar, RANGOS, rango
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -38,8 +39,8 @@ function correr (id) {
   elegirCancion(id);
   const R = RASGOS[id];
 
-  function jugar (mano) {
-    const s = crearSim();
+  function jugar (mano, opts) {
+    const s = crearSim(opts);
     for (let b = 0; b < LARGO + 2 && s.viva && !s.meta; b += DT) {
       mano(s, b);
       paso(s, DT);
@@ -203,6 +204,8 @@ function correr (id) {
   };
 
   const rp = jugar(perfecta);
+  const rSinRed = jugar(perfecta, { sinRed: true });     // el concierto sin red
+  const rMuertaSR = jugar(muerta, { sinRed: true });     // ...y el que no toca
   const rBorde = jugar(alBorde);
   const rBajo = jugar(atacaElBajo);
   const rz = jugar(tropieza);
@@ -472,6 +475,41 @@ function correr (id) {
     ['tropezar cuesta esa nota, no el tramo: tocar en la red reengancha',
       rz.meta && rz.tocadas.size >= TOTAL_NOTAS - 3,
       `${rz.tocadas.size}/${TOTAL_NOTAS} sonadas tras caerse una vez`],
+
+    // --- SIN RED: el concierto del que ya se sabe la cancion -------------------
+    // La prueba que decide si el modo es HONESTO: si la mano perfecta no puede
+    // ganarlo, el modo no existe -- seria castigar al jugador por geometria
+    // que el propio mapa fabrica, no por sus errores.
+    ['SIN RED: la mano perfecta llega a la meta, y entera',
+      rSinRed.meta && rSinRed.limpias.size === TOTAL_NOTAS,
+      `${rSinRed.meta ? 'meta' : 'murio en ' + rSinRed.x.toFixed(1) + ' ' + rSinRed.causa} · ${rSinRed.limpias.size}/${TOTAL_NOTAS}`],
+    // ...y la que decide si el modo RETA: tocar la red es el final, y llega
+    // enseguida. (Fallar una nota no siempre TIRA a la red: si la que sigue
+    // esta mas abajo te caes adentro de ella, que es la ligadura de siempre --
+    // el modo castiga la caida, no el error.)
+    ['SIN RED: tocar la red es el final, y la red llega enseguida',
+      !rMuertaSR.viva && rMuertaSR.causa === 'red' && rMuertaSR.x < LARGO / 2,
+      rMuertaSR.viva ? 'nunca murio' : `murio en ${rMuertaSR.x.toFixed(1)} (${rMuertaSR.causa})`],
+    // y con red puesta el mismo que no toca nada rueda largo y nunca muere POR
+    // la red: el modo no se filtra al camino normal (si muere es por un
+    // abismo, mucho mas tarde)
+    ['...y con red, el que no toca nada rueda largo y no muere por la red',
+      rm.causa !== 'red' && rm.x > rMuertaSR.x * 3,
+      `con red llego a ${rm.x.toFixed(1)} (${rm.causa || 'vivo'}) contra ${rMuertaSR.x.toFixed(1)} sin red`],
+    // El techo EXIGE rodar: no puede matar por hacer lo que el mismo ordena.
+    ['SIN RED: todo techo cae dentro de un tramo donde se manda rodar',
+      TECHOS.every(t => mandaRodar(t.x0) && mandaRodar(t.x1)),
+      `${TECHOS.length} techos · ${TRAMOS_RODAR.length} tramos de rodar`],
+    // y el modo no puede filtrarse al camino normal
+    ['...y el modo normal sigue perdonando la caida', rz.meta && rp.meta, ''],
+
+    // El RANGO es funcion pura y con escalera completa: sin esto el record no
+    // puede recordar maestria (guarda el maximo por indice en RANGOS).
+    ['el rango sube por limpias y corona con las clavadas',
+      rango(0, 100, 0, 0) === 'LLEGASTE' && rango(70, 100, 0, 0) === 'AFINADO' &&
+      rango(85, 100, 0, 0) === 'MUSICO' && rango(95, 100, 0, 0) === 'VIRTUOSO' &&
+      rango(100, 100, 5, 5, 0) === 'AURORA' && rango(100, 100, 5, 5, 85) === 'SUPERNOVA' &&
+      RANGOS.length === 6, RANGOS.join(' < ')],
     // sin trampolines automaticos, caerse se resuelve tocando: la mano que
     // tropieza (arriba) es la prueba de que ese camino funciona
   ];

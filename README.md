@@ -31,6 +31,21 @@ oye), y desde la red un toque te reengancha con la próxima tecla. El error cues
 esa nota, nunca el tramo entero. Sobre los abismos no hay red — ahí el riel se
 paga con la vida.
 
+## Vos sos el solista
+
+El fondo es un arreglo de verdad —batería, bajo, arpegio, pad— y la esfera es el
+que toca encima. Todo lo que suena por tu mano **ya estaba en la canción**: nada
+se agrega, se reparte.
+
+- **Los orbes** flotan sobre el arco del salto y guardan un golpe real del
+  arreglo. El fondo lo calla: suena si lo atravesás, o no suena.
+- **Los pistones** son caños que reclaman el *backbeat* del compás. El arreglo
+  abre un cráter en esa semicorchea —se hunde a la mitad, pase lo que pase— y
+  caerle encima lo llena con tu golpe. Si pasás de largo, el cráter suena vacío:
+  la banda se agachó para un golpe que no llegó.
+- **En NEBULOSA** los rieles cuelgan sobre el vacío y llevan notas del arpegio:
+  picar para cosecharlas es apostar la vida. El que no quiere, no pica.
+
 ## Cómo se juega
 
 | | |
@@ -38,11 +53,30 @@ paga con la vida.
 | tocar | cualquier tecla, o tocar la pantalla |
 | pausa | `Esc`, o el botón de la esquina |
 | saltar de sección | `←` `→` (marca la corrida como ENSAYO: no puntúa) |
+| tras morir, `→` | ensaya directo el tramo que te tiró |
+| en la meta | tocar reintenta · `Esc` vuelve al menú |
 | elegir nivel | `1` `2` `3` en el menú |
 | calibrar el desfase | `C` — si tu pantalla o tus auriculares llegan tarde |
+| **SIN RED** | `S` en el menú, una vez que terminaste alguna canción |
 
 Tres canciones, cada una con su mapa: **ESFERA** (100 BPM), **AURORA 2.0** y
 **AURORA · EL VIAJE**, que va por actos y trae progresiones propias por sección.
+
+**SIN RED** es el concierto del que ya se sabe la canción: caer es el final,
+salvo en los silencios que la partitura manda rodar. La promesa base —el error
+cuesta la nota, no el tramo— la cambiás vos, a sabiendas, por la de los abismos.
+
+## Qué se persigue
+
+El único desbloqueo es saber que lo hiciste. El récord de cada canción recuerda
+hasta dónde llegaste, cuántas limpias, cuántas **clavadas** (el tercio interior
+de la ventana), tu mejor racha y los orbes; y el menú te dice cuánto falta para
+el rango siguiente:
+
+`LLEGASTE → AFINADO → MUSICO → VIRTUOSO → AURORA → SUPERNOVA`
+
+AURORA pide la canción entera limpia y todos los orbes. SUPERNOVA, además, el
+85% clavado.
 
 ## Bajo el capó
 
@@ -74,8 +108,9 @@ npm test                # prueba.js && humo.js
 - **`prueba.js`** — simula manos reales (perfecta, humana, atrasada) tocando el
   nivel entero, y exige que sea jugable: que ningún salto sea inalcanzable, que
   todo abismo caiga bajo un riel, que ningún pistón esté bajo un techo, que
-  tropezar cueste una nota y no el tramo. Corre la suite completa una vez por
-  canción.
+  tropezar cueste una nota y no el tramo, y que SIN RED lo pueda ganar una mano
+  perfecta —si no, el modo castigaría geometría en vez de errores—. Corre la
+  suite completa una vez por canción.
 - **`humo.js`** — corre la capa de navegador (render + audio) contra un DOM y un
   AudioContext simulados. No juzga cómo se ve: juzga que no explote.
 
