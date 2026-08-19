@@ -435,6 +435,13 @@ const alturaBajo = n => Y_BAJO + (semitono(n) - semitono('E4')) * PASO_TONO * 0.
 export function vueloMinimo (dy) {
   return dy > 0 ? Math.sqrt(2 * dy / G) * 1.08 + 0.02 : 0.05;
 }
+// Bajar tambien toma tiempo: la caida libre hasta -dy. Ese es el minimo
+// NATURAL de una bajada -- aterrizar antes solo se puede empujado hacia abajo,
+// y ese empujon se ve como una mano invisible que aplasta la esfera. No entra
+// en vueloMinimo porque el rescate de los pistones lo usa para elegir tecla y
+// con este minimo se salteaba la de al lado; lo usan solo el borde del riel y
+// lanzar(), que es donde el empujon se veia.
+export const caidaLibre = dy => dy < 0 ? Math.sqrt(-2 * dy / G) : 0;
 // Al reves: cuanto se puede SUBIR en el tiempo que hay. Es lo que necesita la
 // rampa de salida para saber hasta donde tiene que trepar una tecla de bajo.
 export const alcanceEn = t => t <= 0.02 ? 0 : (G / 2) * Math.pow((t - 0.02) / 1.08, 2);
@@ -592,7 +599,13 @@ function compilar () {
     // El riel lanza solo al terminarse: su borde tiene que dar el vuelo JUSTO,
     // porque el jugador no elige cuando salir. Una tecla normal la lanza el,
     // asi que ahi alcanza con poder aterrizar adentro de la que sigue.
-    n.x1 = Math.min(n.x1, n.riel ? sig.x0 + MIRA - tv : Math.max(sig.x0, sig.x1 - 0.06) - tv);
+    // Y si la que sigue esta MAS ABAJO, el borde del riel retrocede el tiempo
+    // de caida libre: la nota larga te DESPIDE rodando (vy 0) y la esfera cae
+    // sola hasta la tecla. Con el borde pegado a la siguiente, lanzar() tenia
+    // que cumplir "llegar en 0.05" disparandola hacia abajo -- al salir de
+    // NEBULOSA hacia el bajo salia con vy -7, una plomada, no una pelota.
+    n.x1 = Math.min(n.x1, n.riel ? sig.x0 + MIRA - Math.max(tv, caidaLibre(sig.y - n.y))
+      : Math.max(sig.x0, sig.x1 - 0.06) - tv);
   }
   // LIGADURAS: de una nota larga a una corta mas grave no se vuelve a atacar,
   // se cae. El borde de la tecla se corre para que la caida libre aterrice
@@ -997,6 +1010,15 @@ function lanzar (s, desde) {
   if (objetivo - s.x < tv) objetivo = Math.min(destino.x1 - 0.02, s.x + tv);
   const T = Math.max(0.06, objetivo - s.x);
   s.vy = Math.min(1.9, (destino.y - s.y) / T + G * T / 2);
+  // Hacia abajo no se empuja. Si el impulso salio negativo (la tecla que sigue
+  // esta mas abajo y cerca), se apunta mas adentro --hasta el pulso, nunca mas
+  // alla-- para acercar el arco a la caida libre. Aterrizar mas adentro es
+  // llegar un poco despues, no fallar; y una esfera que CAE se ve caer, no
+  // salir clavada hacia abajo.
+  if (s.vy < 0 && destino.y < s.y) {
+    const T2 = Math.min(destino.xm - s.x, caidaLibre(destino.y - s.y));
+    if (T2 > T) s.vy = (destino.y - s.y) / T2 + G * T2 / 2;
+  }
 }
 
 // Una carrera es un grupo de escalones pegados (las semicorcheas).
@@ -2705,15 +2727,6 @@ function arrancarNavegador () {
         cx.lineTo(px(k.x1) - 1, punta - 11);
         cx.lineTo(px(k.x1) - 1, punta - 3);
         cx.stroke();
-      }
-      // EL PUNTO EXACTO. La tecla entera es la ventana en la que la nota suena;
-      // esta marca es donde sale afinada. Son cosas distintas y hasta ahora solo
-      // se dibujaba la primera: se jugaba creyendo ir a tiempo y sonaba chueco.
-      if (!sono) {
-        cx.fillStyle = 'rgba(255,255,255,0.30)';
-        cx.fillRect(px(k.xm - AFINADO), py(k.y) - 4, 2 * AFINADO * esc, 2);
-        cx.fillStyle = 'rgba(255,255,255,0.95)';
-        cx.fillRect(px(k.xm) - 1, py(k.y) - 13, 2, 13);
       }
       if (k.ligada) {                             // el arco de ligadura: aca se cae
         const sig = NOTAS[k.i + 1];
