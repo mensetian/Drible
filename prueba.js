@@ -30,7 +30,7 @@ const RASGOS = {
   // el viaje es la cancion ENTERA del estudio: 64 compases y 139 s. Los unicos
   // techos son los dos vacios de NEBULOSA -- los silencios cortos ya no tiran a
   // la red, se sobrevuelan, y el motor es zona de dribleo (ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 2, saltos: 30, exigente: true, orbes: 120, pistones: 9 }
+  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 2, saltos: 30, exigente: true, orbes: 120, pistones: 8 }
 };
 
 let fallas = 0;

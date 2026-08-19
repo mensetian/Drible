@@ -889,6 +889,31 @@ function pistones () {
       // apenas laid-back, no un flam.
       const vy = Math.min(1.9, (sig.y - k.y) / T + G * T / 2);
       if (!spec) continue;
+      // LA CABEZA NO PUEDE PEDIR MAS PRECISION QUE UNA CLAVADA. Puesta justo
+      // sobre el arco del toque exacto, cualquier toque corrido levanta el
+      // arco y la esfera pasa por encima: medido, la ventana de pisoton
+      // quedaba en [-117, +30] ms contra los +-39 de una clavada, asi que el
+      // juego te celebraba PERFECTO y te negaba el caño en el mismo instante.
+      // Ahora la cabeza baja hasta la altura MINIMA que toma el arco entre
+      // todos los toques que el juego considera clavados: si clavaste la nota,
+      // pisas el caño. Se modela igual que lanzar(), no parecido.
+      const alturaEn = (dt, dev) => {
+        const xt = k.xm + dev;
+        let obj2 = sig.x0 + MIRA;
+        const tv2 = vueloMinimo(sig.y - k.y);
+        if (obj2 - xt < tv2) obj2 = Math.min(sig.x1 - 0.02, xt + tv2);
+        const T2 = Math.max(0.06, obj2 - xt);
+        const vy2 = Math.min(1.9, (sig.y - k.y) / T2 + G * T2 / 2);
+        const t2 = k.xm + dt - xt;                    // tiempo de vuelo hasta el caño
+        return t2 <= 0 ? Infinity : k.y + vy2 * t2 - G * t2 * t2 / 2;
+      };
+      const CLAVADA = AFINADO * PERFECTO;
+      const topeJusto = dt => {
+        let min = Infinity;
+        for (let dev = -CLAVADA; dev <= CLAVADA + 1e-9; dev += CLAVADA / 4)
+          min = Math.min(min, alturaEn(dt, dev));
+        return +(min - 0.004).toFixed(3);            // y un pelo mas, por la integracion
+      };
       const cabe = (x, tope) => {
         if (tope < 2 * R + 0.06) return false;    // tan bajo que ya es la red
         const x0 = x - 0.15, x1 = x + 0.15;
@@ -917,7 +942,7 @@ function pistones () {
         const golpe = golpeEn(p);
         if (!golpe) continue;
         const dt = p / 4 - k.xm;
-        const tope = +(k.y + vy * dt - G * dt * dt / 2 - 0.005).toFixed(3);
+        const tope = topeJusto(dt);
         const x = +(p / 4).toFixed(3);
         if (!cabe(x, tope)) continue;
         // apenas pasada la cima es donde pisar se SIENTE pisar
@@ -931,7 +956,7 @@ function pistones () {
         // sumo ~107 ms del paso del golpe: acento humano, no flam
         const dt = Math.max(vy / G + 0.1, Math.min(T * 0.72, vy / G + 0.2));
         if (dt <= 0.15 || dt >= T - 0.08) continue;
-        const tope = +(k.y + vy * dt - G * dt * dt / 2).toFixed(3);
+        const tope = topeJusto(dt);
         const x = +(k.xm + dt).toFixed(3);
         if (!cabe(x, tope)) continue;
         for (let p = Math.ceil((x - 0.2) * 4); p <= Math.floor((x + 0.2) * 4); p++) {
@@ -1065,7 +1090,10 @@ export function crearSim (opts = {}) {
     racha: 0, mejorRacha: 0, falsos: 0,
     orbes: 0, orbesTocados: new Set(),   // los orbes cosechados en el aire
     soltoEn: null,          // cuando solto el riel: corre la gracia de repique
-    pistones: new Set(), pistonazos: 0,   // caños ya disparados
+    // caños ya resueltos: los pisados, los rozados Y los que expiraron sin que
+    // nadie los tocara. `pistonazos` cuenta solo los de contacto real -- que es
+    // lo que hay que mirar para saber si el jugador ENTENDIO el caño.
+    pistones: new Set(), pistonazos: 0,
     eventos: []
   };
 }
@@ -1075,13 +1103,19 @@ export function crearSim (opts = {}) {
 // y todos los orbes) y SUPERNOVA (ademas, el 85% clavado en el centro). Es
 // funcion pura y exportada: el record la persiste y las pruebas la miran.
 export const RANGOS = ['LLEGASTE', 'AFINADO', 'MUSICO', 'VIRTUOSO', 'AURORA', 'SUPERNOVA'];
+// Los umbrales viven en UN solo lugar. Estaban repetidos --la escalera aca y
+// la cuenta regresiva del menu alla-- y se separaron enseguida: el menu le
+// pedia a un jugador en LLEGASTE el 85% para AFINADO, que necesita el 70%, o
+// sea le pintaba la meta al doble de lejos justo a quien recien empieza.
+export const UMBRAL = { AFINADO: 0.7, MUSICO: 0.85, VIRTUOSO: 0.95, AURORA: 1, SUPERNOVA: 0.85 };
 export function rango (limpias, total, orbes, totalOrbes, perfectas = 0) {
   const t = total || 1;
   const pl = limpias / t;
   const todoOrbe = !totalOrbes || orbes >= totalOrbes;
-  if (pl >= 1 && todoOrbe && perfectas / t >= 0.85) return 'SUPERNOVA';
-  if (pl >= 1 && todoOrbe) return 'AURORA';
-  return pl >= 0.95 ? 'VIRTUOSO' : pl >= 0.85 ? 'MUSICO' : pl >= 0.7 ? 'AFINADO' : 'LLEGASTE';
+  if (pl >= UMBRAL.AURORA && todoOrbe && perfectas / t >= UMBRAL.SUPERNOVA) return 'SUPERNOVA';
+  if (pl >= UMBRAL.AURORA && todoOrbe) return 'AURORA';
+  return pl >= UMBRAL.VIRTUOSO ? 'VIRTUOSO' : pl >= UMBRAL.MUSICO ? 'MUSICO'
+    : pl >= UMBRAL.AFINADO ? 'AFINADO' : 'LLEGASTE';
 }
 
 function despegar (s, dejando = null) {
@@ -1308,8 +1342,13 @@ export function paso (s, dt) {
     // --el vastago, los caños, la meta-- no corre sobre una esfera muerta
     if (!s.viva) return;
   }
-  // ...y el vastago, para el que viene rasante por la red
-  if (s.y < ROCE) rozarPiston(s);
+  // ...y el vastago, para el que viene RODANDO POR LA RED. La altura sola no
+  // alcanza para saberlo: en GRAVEDAD las teclas del bajo estan entre 0.068 y
+  // 0.144, o sea que el arco normal de una tecla a la otra pasa entero por
+  // debajo de ROCE. Sin esta guarda el caño "rescataba" --racha a cero, un
+  // rato sordo-- a alguien que venia volando y no habia fallado nada: medido,
+  // le pasaba a la mano humana de +-90 ms en el primer caño del viaje.
+  if (s.y < ROCE && s.estado === 'apoyada' && s.tecla < 0) rozarPiston(s);
   // EL CAÑO EXPIRADO. Fallar un piston sigue sin castigar -- pero ya no es
   // invisible: se marca para que el whiff suene y la vista lo desplome. El
   // golpe que reclamo queda mudo, y eso ahora es el backbeat: se oye faltar.
@@ -1557,6 +1596,7 @@ function arrancarNavegador () {
   }
   let ac = null, master = null, voz = null, t0 = 0, proxBeat = 0;
   let solo = null, fondo = null;      // el que toca la esfera, y el arreglo
+  let craterBus = null;               // el pozo que el arreglo abre para el caño
   // El solista entra: el arreglo se agacha un instante para dejarlo pasar.
   // EL CRATER. En el paso de semicorchea que un caño reclamo, el arreglo
   // entero se ABRE --se hunde a la mitad por un tercio de segundo-- pase lo
@@ -1564,15 +1604,18 @@ function arrancarNavegador () {
   // fin es un ACENTO (carvear antes del golpe es como se acentua en una mezcla
   // real, no subiendo el sample). Si nadie lo pisa, el pozo suena VACIO: la
   // banda se agacha para un golpe que no llega -- el fallo se oye solo.
-  const crateres = [];
-  function aplicarCrater (t) {
-    if (!fondo) return;
-    const g = fondo.gain;
+  // El crater tiene BUS PROPIO, en serie con el fondo. No es un lujo: los dos
+  // automatismos escriben sobre una ganancia y `agachar` empieza por
+  // cancelScheduledValues, asi que compartir nodo significaba que un orbe
+  // cosechado 170 ms antes borraba el crater y el fallo del caño volvia a ser
+  // mudo. En nodos separados se multiplican y no se pisan nunca.
+  function agendarCrater (t) {
+    if (!craterBus) return;
+    const g = craterBus.gain;
     g.setValueAtTime(1, t - 0.02);
     g.linearRampToValueAtTime(0.5, t + 0.015);
     g.linearRampToValueAtTime(1, t + 0.3);
   }
-  function agendarCrater (t) { crateres.push(t); aplicarCrater(t); }
   function agachar (t, cuanto = 0.62, dur = 0.17) {
     // Corto y poco: en EMPUJE el bajo va en corcheas y un agache largo dejaria
     // el arreglo hundido de punta a punta, que ya no es destacar al solista
@@ -1583,12 +1626,6 @@ function arrancarNavegador () {
     g.setValueAtTime(g.value, t);
     g.linearRampToValueAtTime(cuanto, t + 0.015);
     g.linearRampToValueAtTime(1, t + dur);
-    // el cancel de arriba se lleva los crateres agendados a futuro: se
-    // re-aplican, o el fallo de un caño volveria a ser mudo
-    for (let i = crateres.length - 1; i >= 0; i--) {
-      if (crateres[i] < t - 0.5) { crateres.splice(i, 1); continue; }
-      if (crateres[i] >= t + dur) aplicarCrater(crateres[i]);
-    }
   }
   let corriendo = false, finSonado = false;
 
@@ -1696,7 +1733,9 @@ function arrancarNavegador () {
       solo.connect(brillo).connect(master);
       fondo = ac.createGain();
       fondo.gain.value = 1;
-      fondo.connect(master);
+      craterBus = ac.createGain();
+      craterBus.gain.value = 1;
+      fondo.connect(craterBus).connect(master);
     }
     ac.resume();
     rodadaAbrir();
@@ -1834,6 +1873,14 @@ function arrancarNavegador () {
   function eKick (t, duro, d) {
     eBeep(t, duro ? 165 : 135, 0.13, 'sine', (duro ? 0.13 : 0.105) * EG, 42, false, d || fondo);
     ruido(t, 0.025, 0.02 * EG, 'lowpass', 2600, 1, d || fondo);
+    // El sidechain es del ARREGLO: lo dispara el bombo del arreglo y hunde al
+    // arreglo. Cuando el bombo lo toca la esfera (d = solo), no puede escribir
+    // en esta linea de tiempo: su cancelScheduledValues se llevaba los ducks
+    // que el agendador ya habia dejado puestos para los dos tiempos
+    // siguientes, y como proxBeat solo avanza, esos pulsos nunca volvian --
+    // el pump del mundo se apagaba justo despues de un rescate. Al solista lo
+    // destaca `agachar`, que es un gesto aparte y con su propio nodo.
+    if (d) return;
     const g = busE().gain;
     g.cancelScheduledValues(t); g.setValueAtTime(1, t);
     g.linearRampToValueAtTime(0.42, t + 0.012); g.linearRampToValueAtTime(1, t + 0.24);
@@ -2418,8 +2465,9 @@ function arrancarNavegador () {
     proxBeat = 0;
     estela.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
-    cabezas.clear(); crateres.length = 0; pisada = 0;
+    cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
+    leccionViva = null; rachaRota = null; avisoSeccion = null;
     desvios.length = 0;
     marcas.length = 0;
     avisos.length = 0;
@@ -2435,8 +2483,9 @@ function arrancarNavegador () {
     ensayo = false;                 // arrancar de cero es el unico concierto
     sinRed = sinRedArmado;          // el modo se elige en el menu y dura la corrida
     golpesVista.length = 0; padsVista.length = 0;
-    cabezas.clear(); crateres.length = 0; pisada = 0;
+    cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
+    leccionViva = null; rachaRota = null; avisoSeccion = null;
     intento = 1; mejor = 0;
     // la marca a perseguir: superar tu mejor racha historica se anuncia
     rachaRecord = (leerRecord(id) || {}).racha || 0;
@@ -2553,8 +2602,11 @@ function arrancarNavegador () {
       txt: 'atravesalo: es una nota', ok: st => st.orbesTocados.has(ORBES[0].i) });
     if (TECHOS.length) L.push({ id: 'techo', x: TECHOS[0].x0, y: TECHOS[0].y,
       txt: 'bajo el techo NO se toca', ok: st => st.viva });
+    // se aprende PISANDO uno, no pasando de largo: s.pistones tambien marca
+    // los que expiraron sin que nadie los tocara, asi que mirar ese Set le
+    // retiraba el cartel justo al que los estaba fallando todos
     if (PISTONES.length) L.push({ id: 'piston', x: PISTONES[0].x, y: PISTONES[0].y,
-      txt: 'CAELE ENCIMA: suena y te empuja', ok: st => st.pistones.has(PISTONES[0].x) });
+      txt: 'CAELE ENCIMA: suena y te empuja', ok: st => st.pistonazos > 0 });
     if (HUECOS.length) L.push({ id: 'abismo', x: HUECOS[0].x0, y: 0,
       txt: 'sobre el vacio NO sueltes', ok: st => st.viva });
     lecciones = L.filter(l => !aprendidas.has(l.id)).sort((a, b) => a.x - b.x);
@@ -2642,6 +2694,9 @@ function arrancarNavegador () {
   // SIN RED: se arma en el menu (solo despues de terminar alguna cancion) y
   // dura toda la corrida, reintentos incluidos.
   let sinRed = false, sinRedArmado = false;
+  // donde quedaron dibujados los dos botones del menu, en fraccion de alto: el
+  // dibujo las escribe y la entrada las lee, asi lo que se toca es lo que se ve
+  let bandaSinRed = 0.66, bandaCalib = 0.80;
   let avisoSeccion = null;
   function saltarA (bx) {
     rielCerrar(); eRielCerrar();
@@ -2653,8 +2708,9 @@ function arrancarNavegador () {
     proxBeat = Math.floor(ahoraAudio() * 4) / 4;
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
-    cabezas.clear(); crateres.length = 0; pisada = 0;
+    cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
+    leccionViva = null; rachaRota = null; avisoSeccion = null;
     ultSeccion = SECCIONES.filter(z => z.x0 <= s.x).length - 1;   // el salto no se auto-anuncia
     finSonado = false;
   }
@@ -2672,8 +2728,9 @@ function arrancarNavegador () {
   function alMenu () {
     rielCerrar(); eRielCerrar();
     golpesVista.length = 0; padsVista.length = 0;
-    cabezas.clear(); crateres.length = 0; pisada = 0;
+    cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
+    leccionViva = null; rachaRota = null; avisoSeccion = null;
     metaEn = 0; muerteVista = null; leccionViva = null; avisoMuerte = null;
     corriendo = false; finSonado = false; sinRed = false;
     s = crearSim();
@@ -2776,7 +2833,7 @@ function arrancarNavegador () {
       // promete ("un toque arranca el nivel 1") y antes media pantalla
       // arrancaba VIAJE, los 64 compases mas dificiles, a un pulgar despistado
       const y = e.offsetY / cv.clientHeight;
-      bajar(y > 0.80 ? 'calibrar' : y > 0.66 ? 'sinred'
+      bajar(y > bandaCalib ? 'calibrar' : y > bandaSinRed ? 'sinred'
         : y > 0.435 ? 0 : y > 0.37 ? 2 : y > 0.295 ? 1 : 0);
       return;
     }
@@ -3449,12 +3506,22 @@ function arrancarNavegador () {
         if (r.rango) return `   ☆ ${r.rango} · ♪ ${r.limpias}/${contarNotas(id)}${sr}`;
         return `   ${r.pct >= 100 ? '★ completa' : (r.pct || 0) + '%'} · ♪ ${r.limpias || 0}`;
       };
-      cx.fillStyle = C.tecla; cx.font = '15px system-ui';
-      cx.fillText(`1 — ${nombreCancion('esfera')} · negras y blancas · 100 BPM${marca('esfera')}`, w / 2, h * 0.26);
-      cx.fillStyle = C.esfera;
-      cx.fillText(`2 — ${nombreCancion('aurora')} · el galope del coro · 112 BPM${marca('aurora')}`, w / 2, h * 0.33);
-      cx.fillStyle = C.impulso;
-      cx.fillText(`3 — ${nombreCancion('viaje')} · la cancion entera del estudio${marca('viaje')}`, w / 2, h * 0.40);
+      const filas = [
+        [C.tecla, `1 — ${nombreCancion('esfera')} · negras y blancas · 100 BPM${marca('esfera')}`],
+        [C.esfera, `2 — ${nombreCancion('aurora')} · el galope del coro · 112 BPM${marca('aurora')}`],
+        [C.impulso, `3 — ${nombreCancion('viaje')} · la cancion entera del estudio${marca('viaje')}`]
+      ];
+      // el renglon se achica hasta entrar: con el rango y el progreso al lado,
+      // en un telefono angosto la primera fila se salia de la pantalla
+      let cuerpo = 15;
+      cx.font = `${cuerpo}px system-ui`;
+      const masAncho = Math.max(...filas.map(([, t]) => cx.measureText(t).width));
+      if (masAncho > w - 24) cuerpo = Math.max(9, 15 * (w - 24) / masAncho);
+      cx.font = `${cuerpo.toFixed(1)}px system-ui`;
+      filas.forEach(([color, t], i) => {
+        cx.fillStyle = color;
+        cx.fillText(t, w / 2, h * (0.26 + i * 0.07));
+      });
       cx.fillStyle = C.tenue; cx.font = '12px system-ui';
       cx.fillText('teclas 1/2/3, o toca su renglon · ESPACIO arranca el nivel 1', w / 2, h * 0.46);
       // la zanahoria concreta: que le falta a tu mejor cancion para el
@@ -3465,10 +3532,10 @@ function arrancarNavegador () {
       if (paso) {
         const total = contarNotas(paso.id);
         const sig = RANGOS[RANGOS.indexOf(paso.r.rango) + 1];
-        const faltan = sig === 'VIRTUOSO' ? Math.ceil(total * 0.95) - paso.r.limpias
-          : sig === 'AURORA' ? total - paso.r.limpias
-          : sig === 'SUPERNOVA' ? Math.ceil(total * 0.85) - (paso.r.perf || 0)
-          : Math.ceil(total * 0.85) - paso.r.limpias;
+        // SUPERNOVA es el unico que se mide en clavadas; el resto, en limpias
+        const faltan = sig === 'SUPERNOVA'
+          ? Math.ceil(total * UMBRAL.SUPERNOVA) - (paso.r.perf || 0)
+          : Math.ceil(total * UMBRAL[sig]) - paso.r.limpias;
         if (faltan > 0) {
           const que = sig === 'SUPERNOVA' ? (faltan === 1 ? 'clavada' : 'clavadas')
             : (faltan === 1 ? 'limpia' : 'limpias');
@@ -3479,12 +3546,20 @@ function arrancarNavegador () {
       cx.font = '13px system-ui';
       // Un solo boton y tres reglas. Todo lo demas lo enseña el mapa cuando
       // pasa: un muro de once renglones no lo lee nadie.
-      [
+      const REGLAS = [
         'un boton: TOCA cada tecla justo al pisarla',
         'a tiempo suena afinada; corrida se ensucia',
         'martillar no sirve: el boton se queda sordo',
         'si caes a la red, TOCA para volver arriba'
-      ].forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));
+      ];
+      REGLAS.forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));
+      // Los dos botones de abajo se anclan DEBAJO de las reglas, no a una
+      // fraccion suelta: las reglas usan pixeles fijos sobre un ancla
+      // fraccional, asi que en una pantalla baja (o apaisada) el recuadro
+      // opaco de SIN RED caia encima del ultimo renglon y lo borraba.
+      const finReglas = h * 0.50 + 26 + (REGLAS.length - 1) * 20;
+      const ySR = Math.max(h * 0.72, finReglas + 40);
+      const yCal = Math.max(h * 0.86, ySR + 52);
       // En un telefono el sonido sale tarde y el juego se siente roto sin que
       // sea culpa tuya. Esta linea es la diferencia entre "no me sale" y "no
       // estaba calibrado".
@@ -3496,14 +3571,14 @@ function arrancarNavegador () {
         const tSR = sinRedArmado ? 'SIN RED — armado: caer es el final' : 'SIN RED — caer mata, salvo donde la cancion manda rodar';
         const anchoSR = cx.measureText(tSR).width + 36;
         cx.fillStyle = C.fondo;                    // el menu no compite con el mundo
-        cx.fillRect(w / 2 - anchoSR / 2, h * 0.72 - 17, anchoSR, 26);
+        cx.fillRect(w / 2 - anchoSR / 2, ySR - 17, anchoSR, 26);
         cx.strokeStyle = sinRedArmado ? C.esfera : `rgba(${C.esferaRGB},0.35)`;
         cx.lineWidth = sinRedArmado ? 2 : 1;
-        cx.strokeRect(w / 2 - anchoSR / 2, h * 0.72 - 17, anchoSR, 26);
+        cx.strokeRect(w / 2 - anchoSR / 2, ySR - 17, anchoSR, 26);
         cx.fillStyle = sinRedArmado ? C.esfera : `rgba(${C.esferaRGB},0.6)`;
-        cx.fillText(tSR, w / 2, h * 0.72);
+        cx.fillText(tSR, w / 2, ySR);
         cx.fillStyle = C.tenue; cx.font = '11px system-ui';
-        cx.fillText('tocalo, o tecla S', w / 2, h * 0.72 + 20);
+        cx.fillText('tocalo, o tecla S', w / 2, ySR + 20);
       }
       // ...y dibujada como BOTON: en el telefono no hay tecla C, y esta es la
       // funcion que separa "se siente justo" de "se siente roto"
@@ -3511,13 +3586,17 @@ function arrancarNavegador () {
       cx.font = '13px system-ui';
       const anchoCal = cx.measureText(tCal).width + 36;
       cx.fillStyle = C.fondo;
-      cx.fillRect(w / 2 - anchoCal / 2, h * 0.86 - 17, anchoCal, 26);
+      cx.fillRect(w / 2 - anchoCal / 2, yCal - 17, anchoCal, 26);
       cx.strokeStyle = `rgba(${C.impulsoRGB},0.6)`; cx.lineWidth = 1;
-      cx.strokeRect(w / 2 - anchoCal / 2, h * 0.86 - 17, anchoCal, 26);
+      cx.strokeRect(w / 2 - anchoCal / 2, yCal - 17, anchoCal, 26);
       cx.fillStyle = C.impulso;
-      cx.fillText(tCal, w / 2, h * 0.86);
+      cx.fillText(tCal, w / 2, yCal);
       cx.fillStyle = C.tenue; cx.font = '11px system-ui';
-      cx.fillText('tocalo, o tecla C — recomendado en el telefono', w / 2, h * 0.86 + 22);
+      cx.fillText('tocalo, o tecla C — recomendado en el telefono', w / 2, yCal + 22);
+      // las franjas tactiles siguen a los carteles: si el cartel se corre, la
+      // franja se corre con el, o se toca una cosa y pasa otra
+      bandaSinRed = (ySR - 20) / h;
+      bandaCalib = (yCal - 20) / h;
     } else {
       cx.textAlign = 'left';
       cx.fillStyle = C.red; cx.font = '14px system-ui';
