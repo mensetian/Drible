@@ -268,12 +268,12 @@ probar('el record se guarda, se lee, y sin red es lo normal', () => {
 probar('morir espera: el informe se queda hasta que decidas', () => {
   // viene de la prueba anterior con la red sacada, asi que no tocar nada mata
   correrCuadros(900);
-  exigir(dijo('toca — otra vez'), 'la muerte no ofrecio volver a intentar');
-  exigir(dijo('ESC vuelve al menu'), 'la muerte no ofrecio la salida al menu');
-  const veces = textos.filter(t => t.includes('toca — otra vez')).length;
+  exigir(dijo('OTRA VEZ'), 'la muerte no ofrecio volver a intentar');
+  exigir(dijo('◀ menu'), 'la muerte no ofrecio la salida al menu');
+  const veces = textos.filter(t => t.includes('OTRA VEZ')).length;
   textos.length = 0;
   correrCuadros(400);                 // y no se va solo: sigue ahi
-  exigir(dijo('toca — otra vez'), 'el informe de muerte se fue solo');
+  exigir(dijo('OTRA VEZ'), 'el informe de muerte se fue solo');
   exigir(veces > 0, 'el informe de muerte no llego a dibujarse');
   // ...y ESC sale al menu sin tener que morirse otra vez
   disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
