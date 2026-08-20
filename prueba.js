@@ -26,7 +26,6 @@ const DT = 1 / 240;
 // y que eso pase es justamente el dato que este nivel existe para medir.
 const RASGOS = {
   esfera: { escaleras: false, ligaduras: 0, huecos: 1, techos: 0, saltos: 30, exigente: false },
-  aurora: { escaleras: true, ligaduras: 4, huecos: 3, techos: 1, saltos: 30, exigente: true },
   // el viaje es la cancion ENTERA del estudio: 64 compases y 139 s. Los unicos
   // techos son los dos vacios de NEBULOSA -- los silencios cortos ya no tiran a
   // la red, se sobrevuelan, y el motor es zona de dribleo (ahi se JUEGA).

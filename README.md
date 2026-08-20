@@ -59,13 +59,14 @@ se agrega, se reparte.
 | saltar de sección | `←` `→` (marca la corrida como ENSAYO: no puntúa) |
 | tras morir | el informe espera: tocar reintenta · `→` ensaya el tramo · `Esc` al menú |
 | en la meta | tocar reintenta · `Esc` vuelve al menú |
-| elegir nivel | `1` `2` `3`, o tocar su parada en el mapa |
+| elegir nivel | `1` `2`, o tocar su tarjeta en el mapa |
 | volver una pantalla | `Esc` |
 | calibrar el desfase | `C` — si tu pantalla o tus auriculares llegan tarde |
 | **modo fácil** (con red) | `F`, o en configuración |
 
-Tres canciones, cada una con su mapa: **ESFERA** (100 BPM), **AURORA 2.0** y
-**AURORA · EL VIAJE**, que va por actos y trae progresiones propias por sección.
+Dos canciones, cada una con su mapa: **ESFERA** (100 BPM), que enseña el gesto, y
+**AURORA · EL VIAJE**, la canción entera del estudio — 64 compases que van por
+actos, con una mecánica y una progresión propias por sección.
 
 **Caer es el final**, salvo en los silencios que la partitura manda rodar. Eso
 es el juego, no un extra: una canción no se pausa. La red existe igual, en
@@ -73,7 +74,13 @@ configuración, como **modo fácil** — es una muleta para aprender la canción
 dentro del juego ninguno de los dos modos se anuncia: un cartel que te recuerda
 en cuál estás es un cartel que te saca de la canción.
 
-La entrada tiene lo tuyo: el color de la esfera y la forma de su estela.
+La entrada tiene lo tuyo: el color de la esfera, la forma de su estela y la
+**marca** que lleva adentro (costura, cruz, gajos o núcleo) — que es lo único que
+deja ver que gira, así que es la parte que más se mira mientras se juega.
+
+Y sin red **el piso no se dibuja donde no existe**: la línea de la red aparece
+solo en los tramos que la partitura manda rodar, y el resto es oscuridad que se
+hunde. Dibujar una red que no aguanta sería mentir.
 
 ## Qué se persigue
 

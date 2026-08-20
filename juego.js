@@ -104,60 +104,6 @@ const CANCIONES = {
     }
   },
 
-  // AURORA 2.0 — la composicion aprobada del estudio (estudio/, 6-jul), portada
-  // a una sola voz. Primero el TEMA en notas largas (se aprende escuchando y
-  // sosteniendo), despues el CORO dos veces (el gancho de verdad, con el galope
-  // corchea-con-puntillo del synthwave), y el final que resuelve en La.
-  aurora: {
-    nombre: 'AURORA 2.0', bpm: 112,
-    rielMin: 1.5,
-    acordes: [
-      'Am',
-      'Am', 'F', 'C', 'G',
-      'Am', 'F', 'C', 'G',
-      'Am', 'F', 'C', 'G',
-      'Am', 'F', 'C', 'G',
-      'Am'
-    ],
-    compases: [
-      '-:4',                                              //  0  entrada
-      'E5:2 C5:1 A4:1',                                   //  1  Am  el tema, a lo grande
-      'C5:4',                                             //  2  F   y se sostiene
-      'E5:2 G5:1 E5:1',                                   //  3  C
-      'D5:4',                                             //  4  G   pregunta sin resolver
-      'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             //  5  Am  EL CORO: el galope
-      'E5:.75 D5:.75 C5:.5 D5:1.5 C5:.25 D5:.25',         //  6  F
-      'E5:.75 E5:.75 G5:.5 E5:1 D5:.5 C5:.5',             //  7  C
-      'D5:1.5 B4:.5 D5:2',                                //  8  G   respiro colgado del re
-      'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             //  9  Am  el coro otra vez
-      'E5:.75 D5:.75 C5:.5 D5:1 E5:.5 F5:.5',             // 10  F   ahora sube
-      'G5:.75 E5:.75 G5:.5 A5:1 G5:.5 E5:.5',             // 11  C   la cima del coro
-      'D5:2 B4:.5 C5:.5 D5:1',                            // 12  G
-      '-:4',                                              // 13  Am  SILENCIO: rodar
-      'C5:1 D5:1 E5:1 G5:1',                              // 14  F   el final trepa
-      'D5:.5 B4:.5 D5:3',                                 // 15  C
-      'A5:4',                                             // 16  G   la nota mas alta del mapa
-      'E5:1 C5:1 A4:2'                                    // 17  Am  y resuelve en la
-    ],
-    secciones: [
-      { x0: 0, n: 'salida' }, { x0: 4, n: 'el tema' }, { x0: 20, n: 'el coro' },
-      { x0: 36, n: 'el coro, mas arriba' }, { x0: 52, n: 'silencio · no toques' },
-      { x0: 56, n: 'el final' }
-    ],
-    // El arreglo: el motor del estudio, como el viaje -- misma bateria,
-    // mismo bajo sierra, mismo arpegio y pad. El tema respira, el coro entra
-    // con crash y drive, el silencio deja el pad solo, y el final brilla.
-    estudio (c) {
-      if (c === 0) return { drums: 'cuenta' };
-      if (c <= 2) return { drums: 'hats', arp: 'soft8', arpGan: 0.7, pad: true };            // el tema
-      if (c <= 4) return { drums: 'preFill', bajo: 'pulso', arp: 'soft8', pad: true, riser: c === 4 ? 1 : 0 };
-      if (c <= 12) return { drums: c % 4 === 0 ? 'fillTom' : 'coro', bajo: 'drive', arp: 'up16', pad: true, crash: c === 5 };  // el coro
-      if (c === 13) return { drums: 'silencio', arp: 'soft8', arpGan: 0.6, pad: true };      // el silencio
-      if (c <= 16) return { drums: 'coro', bajo: 'drive', arp: 'glitter', pad: true, crash: c === 14 };
-      return { drums: 'outro', bajo: 'pulso', arp: 'glitter', pad: true, crash: true };      // el final
-    }
-  },
-
   // AURORA · EL VIAJE — la cancion ENTERA del estudio (64 compases + entrada),
   // con una mecanica por seccion: AMANECER (el tema), MOTOR (teclas de bajo),
   // DESPEGUE (el coro), VUELO (zigzag entre las dos bandas), GRAVEDAD
@@ -222,14 +168,20 @@ const CANCIONES = {
       // largos con huecos enormes. Y aca vive el riesgo/premio: son rieles de
       // la segunda mitad, o sea que abajo no hay red. Sostener vale la vida, y
       // picar el riel para cosechar es apostar. El que no quiere, no pica.
-      'E5:4',                                             // 41  F   NEBULOSA
-      'C5:4',                                             // 42  G
-      '-:2 D5:2',                                         // 43  Am  el hueco se oye
-      'E5:4',                                             // 44  Am
+      // Cada nota es una NOTA DEL ACORDE. Antes eran suspensiones sostenidas
+      // cuatro tiempos --E sobre F, C sobre G, D sobre Am-- tres compases
+      // seguidos colgando sin resolver: por eso sonaba raro. Y la linea no iba
+      // a ningun lado. Ahora sube C-D-E, vuelve a C, calla, salta al G5 (el
+      // techo de la seccion, la unica frase que se mueve) y baja E-A: cae en la
+      // tonica y entrega el EMPUJE FINAL con el bajo ya apuntando a Dm.
+      'C5:4',                                             // 41  F   NEBULOSA: la 5a
+      'D5:4',                                             // 42  G   la 5a
+      '-:2 E5:2',                                         // 43  Am  el hueco se oye
+      'C5:4',                                             // 44  Am  la 3a: el fantasma baja
       '-:4',                                              // 45  F   el vacio: se rueda
-      'A4:1 C5:1 E5:2',                                   // 46  G
+      'B4:1 D5:1 G5:2',                                   // 46  G   la triada, subiendo
       '-:4',                                              // 47  Am
-      'D5:2 B4:2',                                        // 48  Am
+      'E5:2 A4:2',                                        // 48  Am  cadencia: 5a -> tonica
       // EMPUJE FINAL -- el build mas grande: el bajo TREPA (el patron climb del
       // estudio, ocho corcheas por compas) y arriba se arma el redoble.
       'D4!:.5 D4!:.5 F4!:.5 F4!:.5 G4!:.5 G4!:.5 A4!:.5 C5!:.5',        // 49  Dm
@@ -288,6 +240,13 @@ const CANCIONES = {
     // los rieles mas largos de la cancion y ahi sostener vale la vida-- salvo
     // los que entran despues de un silencio, que los saca la ley de arriba.
     sinAbismo: [{ x0: 244, x1: 260 }],
+    // NEBULOSA cambia de INSTRUMENTO. Es la unica seccion que no empuja: la
+    // bateria calla, quedan pad y arpegio, y la esfera sostiene hilos de cuatro
+    // tiempos. Con la voz de siempre --cuadrada seca, de ataque-- esos hilos
+    // sonaban a sintetizador de prueba. Aca la esfera toca CRISTAL: senoidales
+    // con un parcial inarmonico (3.01x, lo que hace campana a una campana),
+    // ataque lento y tremolo en vez de vibrato.
+    voces: [{ x0: 164, x1: 196, tipo: 'cristal' }],
     // SUPERNOVA dobla la melodia una octava arriba, como el estudio.
     octavas: [{ x0: 212, x1: 244 }],
     // MOTOR arranca con cuatro La seguidos: mismo tono, misma altura, una
@@ -389,7 +348,7 @@ const acordeEnCompas = c => {
   return acordeEstudio(a[Math.max(0, Math.min(c, a.length - 1))]);
 };
 
-export const NIVELES = ['esfera', 'aurora', 'viaje'];   // el orden en el menu
+export const NIVELES = ['esfera', 'viaje'];   // el orden en el menu
 
 // Los acordes disponibles: raiz del bajo + triada del pad. Esfera y aurora
 // ciclan Am F C G; el viaje trae progresiones propias por seccion (el estudio
@@ -817,6 +776,10 @@ export let TECHOS = [];
 // cancion en vez de sacarte.
 export let PISTONES = [];
 export let ZONAS_PISTON = [];      // las zonas declaradas por la cancion
+// Las zonas donde la esfera cambia de instrumento. La partitura manda: el timbre
+// es parte de la cancion, no una opcion de render.
+export let ZONAS_VOZ = [];
+export const vozEn = x => (ZONAS_VOZ.find(z => x >= z.x0 && x < z.x1) || {}).tipo || null;
 export const ROCE = 0.13;          // debajo de esto vas rasante: te agarra el vastago
 // El caño elige su golpe con JERARQUIA, no por cercania: el golpe entero
 // ('x' = bombo+caja+clap) manda sobre la caja, la caja sobre el clap, y el hat
@@ -1022,6 +985,7 @@ export function elegirCancion (id) {
   // 178 orbes se llevaban los golpes buenos y al caño le tocaba un hat.
   PASOS_BATERIA = new Set(); PASOS_BAJO = new Set(); PASOS_ARP = new Set(); PASOS_PISTON = new Set();
   ZONAS_PISTON = c.pistones || [];
+  ZONAS_VOZ = c.voces || [];
   PISTONES = pistones();
   ORBES = orbes();
   ZONAS_BAJO = NOTAS.filter(n => n.bajo)
@@ -1033,7 +997,7 @@ export function elegirCancion (id) {
 export const nombreCancion = id => CANCIONES[id || CANCION_ID].nombre;
 const planCompas = c => CANCIONES[CANCION_ID].plan(c);
 
-elegirCancion('aurora');   // el default de siempre: los tests corren contra esta
+elegirCancion('viaje');   // el default: la cancion entera
 
 // --- simulacion --------------------------------------------------------------
 
@@ -1552,11 +1516,19 @@ function arrancarNavegador () {
     { nom: 'hueso', rgb: '240,236,226' }
   ];
   const ESTELAS = ['cometa', 'gotas', 'sin estela'];
-  let mira = { color: 0, estela: 0 };
+  const MARCAS = ['costura', 'cruz', 'gajos', 'nucleo'];
+  let mira = { color: 0, estela: 0, marca: 0 };
   try {
     const g = JSON.parse(localStorage.getItem('drible:mira'));
-    if (g) mira = { color: (g.color | 0) % PALETA.length, estela: (g.estela | 0) % ESTELAS.length };
+    if (g) mira = {
+      color: (g.color | 0) % PALETA.length,
+      estela: (g.estela | 0) % ESTELAS.length,
+      marca: (g.marca | 0) % MARCAS.length
+    };
   } catch (_) {}
+  // la marca sale de TU color, oscurecida: antes era un marron fijo que solo
+  // pegaba con el ambar y ensuciaba los otros cuatro
+  const rgbMarca = () => C.esferaRGB.split(',').map(v => Math.round(v * 0.33)).join(',');
   function aplicarMira () {
     C.esferaRGB = PALETA[mira.color].rgb;
     C.esfera = `rgb(${C.esferaRGB})`;
@@ -1705,11 +1677,19 @@ function arrancarNavegador () {
   // atras se lavan hacia el cielo (perspectiva aerea, lo que hace la neblina en
   // una sierra de verdad) y las de adelante van oscuras y contrastadas.
   // `l` es cuanto se lava: 0 es el frente, 1 es el horizonte.
+  // ...y `giro` las DESALINEA. Este era el motivo de fondo de que el parallax no
+  // se viera: las cuatro capas dibujan la MISMA melodia, asi que sus picos
+  // caian sobre los mismos compases que el jugador esta tocando. Aunque cada
+  // una se desplace a otra velocidad, ver la misma forma repetida en cuatro
+  // tamaños se lee como una sola cosa pegada a la esfera. Con un corrimiento
+  // propio --cada capa toma sus alturas de otra parte de la partitura, dando la
+  // vuelta al final para no quedarse sin notas-- las siluetas dejan de rimar y
+  // recien ahi la diferencia de velocidad se ve.
   const CAPAS = [
-    { f: 0.05, k: 0.70, base: 0.44, a: 0.16, salto: 8, l: 1 },
-    { f: 0.16, k: 0.58, base: 0.28, a: 0.18, salto: 5, l: 0.62 },
-    { f: 0.34, k: 0.42, base: 0.14, a: 0.20, salto: 3, l: 0.28 },
-    { f: 0.60, k: 0.24, base: 0.02, a: 0.24, salto: 2, l: 0 }
+    { f: 0.04, k: 0.70, base: 0.46, a: 0.15, salto: 8, l: 1, giro: 0 },
+    { f: 0.11, k: 0.58, base: 0.30, a: 0.18, salto: 5, l: 0.62, giro: 37 },
+    { f: 0.22, k: 0.42, base: 0.16, a: 0.22, salto: 3, l: 0.28, giro: 91 },
+    { f: 0.36, k: 0.26, base: 0.04, a: 0.28, salto: 2, l: 0, giro: 149 }
   ];
   const TINTE = {
     Am: [70, 95, 165], F: [160, 110, 70], C: [80, 150, 130],
@@ -2016,6 +1996,28 @@ function arrancarNavegador () {
   // proposito: un instrumento no tiene dos estados, y el escalon --perfecto a
   // los 95 ms, roto a los 97-- era lo que delataba a la maquina.
   function lead (t, f, dur = 0.4, gan = 0.26, desde = 0, suc = 0) {
+    // CRISTAL: donde la cancion lo pide, la esfera cambia de instrumento.
+    // Senoidales puras mas un parcial INARMONICO (3.01x) -- eso, y no el
+    // volumen, es lo que hace que una campana suene a campana-- con cola larga
+    // y ataque suave. En NEBULOSA la bateria calla y el pluck seco quedaba
+    // desnudo; esto flota, que es lo que la seccion pide.
+    if (vozEn(s.x) === 'cristal') {
+      const g = ac.createGain(), lp = ac.createBiquadFilter();
+      const durC = Math.max(0.7, dur * 1.6);
+      lp.type = 'lowpass'; lp.Q.value = 0.7;
+      lp.frequency.setValueAtTime(Math.min(6200, f * 7) * (1 - 0.5 * suc), t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gan * 0.7 * (1 - 0.35 * suc), t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + durC);
+      g.connect(lp).connect(voz);
+      for (const [mul, v, des] of [[1, 1, 0], [2, 0.34, 4], [3.01, 0.16, -6]]) {
+        const o = ac.createOscillator(), gv = ac.createGain();
+        o.type = 'sine'; o.frequency.value = f * mul; gv.gain.value = v;
+        o.detune.value = des + 55 * suc;
+        o.connect(gv).connect(g); o.start(t); o.stop(t + durC + 0.02);
+      }
+      return;
+    }
     // En las canciones portadas del estudio, la nota justa en el pulso es la
     // voz del estudio calcada: cuadrada limpia, brillante, ataque de 4 ms.
     if (CANCIONES[CANCION_ID].estudio) {
@@ -2082,23 +2084,30 @@ function arrancarNavegador () {
   function rielAbrir (f, suc = 0) {
     rielCerrar();
     const t = ac.currentTime;
+    const cristal = vozEn(s.x) === 'cristal';
     const g = ac.createGain(), lp = ac.createBiquadFilter();
-    lp.type = 'lowpass'; lp.Q.value = 1.6;
-    lp.frequency.value = Math.min(3400 - 2200 * suc, f * 5);
+    lp.type = 'lowpass'; lp.Q.value = cristal ? 0.7 : 1.6;
+    lp.frequency.value = cristal ? Math.min(6200, f * 7) : Math.min(3400 - 2200 * suc, f * 5);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.2 - 0.05 * suc, t + 0.03);
+    // el cristal entra soplado, no golpeado: 120 ms de ataque
+    g.gain.exponentialRampToValueAtTime((cristal ? 0.17 : 0.2) - 0.05 * suc,
+      t + (cristal ? 0.12 : 0.03));
     g.connect(lp).connect(voz);
     if (suc > 0.25) ruido(t, 0.05, 0.09 * suc, 'bandpass', 900, 1.2);
     // Vibrato que entra despues del ataque. Una nota larga sin vibrato es un
     // tono de test: es lo que sonaba plano cuando se sostenia un riel.
     const lfo = ac.createOscillator(), lfoG = ac.createGain();
-    lfo.type = 'sine'; lfo.frequency.value = 5.2;
+    // el cristal no vibra la afinacion: RESPIRA. Un vibrato de 5.2 Hz sobre una
+    // campana suena a sirena; lo que hace vivo a un sonido de vidrio sostenido
+    // es un batido lento y muy poca profundidad.
+    lfo.type = 'sine'; lfo.frequency.value = cristal ? 1.6 : 5.2;
     lfoG.gain.setValueAtTime(0, t);
-    lfoG.gain.linearRampToValueAtTime(7, t + 0.35);
+    lfoG.gain.linearRampToValueAtTime(cristal ? 2.5 : 7, t + (cristal ? 0.8 : 0.35));
     lfo.connect(lfoG); lfo.start(t);
     const osc = [];
-    for (const [tipo, mul, v, des] of
-      [['triangle', 1, 1, -45], ['sawtooth', 1, 0.3, -45], ['sine', 0.5, 0.5, 28]]) {
+    for (const [tipo, mul, v, des] of (cristal
+      ? [['sine', 1, 1, 0], ['sine', 2, 0.30, 5], ['sine', 3.01, 0.14, -7]]
+      : [['triangle', 1, 1, -45], ['sawtooth', 1, 0.3, -45], ['sine', 0.5, 0.5, 28]])) {
       const o = ac.createOscillator(), gv = ac.createGain();
       o.type = tipo; o.frequency.value = f * mul; gv.gain.value = v;
       o.detune.value = des * suc;
@@ -3179,6 +3188,24 @@ function arrancarNavegador () {
     cx.beginPath(); cx.arc(cxp, yy, rr * 3, 0, Math.PI * 2); cx.fill();
     cx.fillStyle = C.esfera;
     cx.beginPath(); cx.arc(cxp, yy, rr, 0, Math.PI * 2); cx.fill();
+    // la marca, girando como gira jugando: el preview no sirve si miente
+    cx.save();
+    cx.beginPath(); cx.arc(cxp, yy, rr, 0, Math.PI * 2); cx.clip();
+    cx.translate(cxp, yy); cx.rotate(t * 2.4);
+    cx.strokeStyle = `rgba(${rgbMarca()},0.6)`;
+    cx.lineWidth = 2;
+    cx.beginPath();
+    if (mira.marca === 0) { cx.moveTo(-rr, 0); cx.lineTo(rr, 0); }
+    else if (mira.marca === 1) { cx.moveTo(-rr, 0); cx.lineTo(rr, 0); cx.moveTo(0, -rr); cx.lineTo(0, rr); }
+    else if (mira.marca === 2) {
+      for (let g = 0; g < 3; g++) {
+        const a = g * Math.PI / 3;
+        cx.moveTo(-Math.cos(a) * rr, -Math.sin(a) * rr);
+        cx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+    } else { cx.moveTo(rr * 0.55, 0); cx.arc(0, 0, rr * 0.55, 0, Math.PI * 2); }
+    cx.stroke();
+    cx.restore();
     cx.fillStyle = 'rgba(255,255,255,0.35)';
     cx.beginPath(); cx.arc(cxp + rr * 0.35, yy - rr * 0.35, rr * 0.22, 0, Math.PI * 2); cx.fill();
   }
@@ -3187,24 +3214,29 @@ function arrancarNavegador () {
   // esfera moviendose de verdad, sus dos opciones, y un solo camino adelante.
   function dibujarInicio (w, h) {
     velo(w, h);
-    const chico = h < 520;
+    // LA ENTRADA SE APILA CON UN CURSOR, no con fracciones de alto sueltas. Con
+    // tres filas de opciones, las fracciones se pisaban entre si en cuanto la
+    // pantalla se hacia baja: cada renglon se colocaba solo y ninguno sabia
+    // donde habia terminado el anterior. Aca cada cosa se apoya sobre la de
+    // arriba, y en pantalla baja se aprieta el paso, no se superpone.
+    const chico = h < 580;
     cx.fillStyle = C.peligro;
     cx.font = `bold ${Math.min(52, w / 8.5, h / 9)}px system-ui`;
-    cx.fillText('DRIBLE', w / 2, h * 0.17);
-    cx.fillStyle = `rgba(232,230,224,0.35)`; cx.font = '12px system-ui';
-    cx.fillText('un boton.  la cancion no espera.', w / 2, h * 0.17 + 24);
+    cx.fillText('DRIBLE', w / 2, h * (chico ? 0.13 : 0.17));
+    cx.fillStyle = 'rgba(232,230,224,0.35)'; cx.font = '12px system-ui';
+    cx.fillText('un boton.  la cancion no espera.', w / 2, h * (chico ? 0.13 : 0.17) + 22);
 
     // la tarima de la esfera: un marco tenue que separa el preview del resto
-    const rr = Math.max(11, Math.min(20, h / 26));
-    const tw = Math.min(260, w * 0.7), th = rr * 6.4;
-    const ty = h * (chico ? 0.32 : 0.30);
+    const rr = Math.max(10, Math.min(chico ? 15 : 20, h / 26));
+    const tw = Math.min(260, w * 0.7), th = rr * (chico ? 5 : 6.4);
+    const ty = h * (chico ? 0.22 : 0.28);
     caja(w / 2 - tw / 2, ty, tw, th, 12);
     cx.fillStyle = 'rgba(232,230,224,0.03)'; cx.fill();
     cx.strokeStyle = 'rgba(232,230,224,0.08)'; cx.lineWidth = 1; cx.stroke();
     esferaMuestra(w / 2, ty + th * 0.72, rr);
 
     // el color: cinco fichas, y la tuya con el aro puesto
-    const yCol = ty + th + 26, sep = Math.min(42, w / 9);
+    const yCol = ty + th + (chico ? 20 : 26), sep = Math.min(42, w / 9);
     PALETA.forEach((p, i) => {
       const xx = w / 2 + (i - (PALETA.length - 1) / 2) * sep;
       const r = { x0: xx - sep / 2, y0: yCol - 16, x1: xx + sep / 2, y1: yCol + 16,
@@ -3220,18 +3252,31 @@ function arrancarNavegador () {
     });
     // la estela: las tres a la vista, no una que cicla. Ciclar esconde las
     // opciones y obliga a tocar tres veces para volver a donde estabas.
-    const yEs = yCol + 46, anE = Math.min(96, (w - 24) / 3);
+    const yEs = yCol + (chico ? 42 : 52), anE = Math.min(96, (w - 24) / 3);
     ESTELAS.forEach((nom, i) => {
       btn(nom, w / 2 + (i - 1) * (anE + 6), yEs,
         () => { mira.estela = i; aplicarMira(); },
         { activo: i === mira.estela, ancho: anE, alto: 26, fuente: '11px system-ui' });
     });
-    cx.fillStyle = C.tenue; cx.font = '10px system-ui';
-    cx.fillText('estela', w / 2, yEs - 24);
+    // sin rotulo: los botones ya dicen "cometa", "gotas", "sin estela". Una
+    // etiqueta encima de opciones que se nombran solas es ruido, y en pantalla
+    // baja se metia entre las fichas de color.
+    // LA MARCA DE ADENTRO: la linea que la esfera lleva en el cuerpo. Es lo
+    // unico que deja ver que gira, asi que no puede ser un detalle fijo -- es la
+    // parte de la esfera que mas se mira mientras se juega.
+    const yMa = yEs + (chico ? 38 : 46), anM = Math.min(74, (w - 24) / 4);
+    MARCAS.forEach((nom, i) => {
+      btn(nom, w / 2 + (i - (MARCAS.length - 1) / 2) * (anM + 5), yMa,
+        () => { mira.marca = i; aplicarMira(); },
+        { activo: i === mira.marca, ancho: anM, alto: 24, fuente: '10.5px system-ui' });
+    });
 
-    btn('EMPEZAR', w / 2, Math.max(h * 0.78, yEs + 52), () => { pantalla = 'mapa'; },
-      { activo: true, ancho: Math.min(210, w * 0.6), alto: 40, fuente: 'bold 16px system-ui' });
-    btn('configuracion', w / 2, Math.max(h * 0.78, yEs + 52) + 46, () => { pantalla = 'config'; },
+
+    const yEmp = yMa + (chico ? 42 : 50);
+    btn('EMPEZAR', w / 2, yEmp, () => { pantalla = 'mapa'; },
+      { activo: true, ancho: Math.min(210, w * 0.6), alto: chico ? 34 : 40,
+        fuente: `bold ${chico ? 14 : 16}px system-ui` });
+    btn('configuracion', w / 2, yEmp + (chico ? 36 : 44), () => { pantalla = 'config'; },
       { rgb: C.impulsoRGB, fuente: '12px system-ui', alto: 26 });
     // el rango mas alto que tenes, que es lo unico que este juego colecciona
     const alto = NIVELES.map(leerRecord).filter(r => r && r.rango)
@@ -3248,33 +3293,38 @@ function arrancarNavegador () {
     velo(w, h);
     cx.fillStyle = C.peligro; cx.font = 'bold 17px system-ui';
     cx.fillText('elegi el nivel', w / 2, h * 0.12);
-    const col = [C.teclaRGB, C.esferaRGB, C.impulsoRGB];
-    const sub = ['negras y blancas · 100 BPM', 'el galope del coro · 112 BPM',
-      'la cancion entera · 64 compases'];
+    // color y subtitulo POR ID, no por posicion: cuando se saco AURORA 2.0 del
+    // medio, un arreglo indexado le hubiera puesto al viaje el color y el
+    // subtitulo del nivel que ya no existe
+    const COL = { esfera: C.teclaRGB, viaje: C.impulsoRGB };
+    const SUB = {
+      esfera: 'negras y blancas · 100 BPM',
+      viaje: 'la cancion entera del estudio · 64 compases'
+    };
     // En un telefono las tarjetas se apilan: tres en fila sobre 420 px daban
     // 140 px por tarjeta y los nombres se montaban unos sobre otros.
     const vert = w < 640;
-    const anT = vert ? Math.min(360, w - 28) : Math.min(230, (w - 56) / 3);
+    const anT = vert ? Math.min(360, w - 28) : Math.min(250, (w - 56) / NIVELES.length);
     const alT = vert ? Math.min(78, (h * 0.5) / 3) : 142;
     const sepT = vert ? alT + 10 : anT + 14;
     const y0T = vert ? h * 0.22 : h * 0.24;
     NIVELES.forEach((id, i) => {
       const m = marcaNivel(id);
-      const cxT = vert ? w / 2 : w / 2 + (i - 1) * sepT;
+      const cxT = vert ? w / 2 : w / 2 + (i - (NIVELES.length - 1) / 2) * sepT;
       const cyT = vert ? y0T + i * sepT + alT / 2 : y0T + alT / 2;
       const x0 = cxT - anT / 2, yy0 = cyT - alT / 2;
       const r = { x0, y0: yy0, x1: x0 + anT, y1: yy0 + alT, ac: () => empezar(id) };
       const sobre = raton.x >= x0 && raton.x <= r.x1 && raton.y >= yy0 && raton.y <= r.y1;
       caja(x0, yy0, anT, alT, 10);
-      cx.fillStyle = sobre ? `rgba(${col[i]},0.10)` : 'rgba(232,230,224,0.035)';
+      cx.fillStyle = sobre ? `rgba(${COL[id]},0.10)` : 'rgba(232,230,224,0.035)';
       cx.fill();
-      cx.strokeStyle = sobre ? `rgb(${col[i]})` : `rgba(${col[i]},${m.rango ? 0.55 : 0.25})`;
+      cx.strokeStyle = sobre ? `rgb(${COL[id]})` : `rgba(${COL[id]},${m.rango ? 0.55 : 0.25})`;
       cx.lineWidth = sobre ? 2 : 1; cx.stroke();
       // el numero, en su medallon
       const nx = vert ? x0 + 30 : cxT, ny = vert ? cyT : yy0 + 34;
-      cx.strokeStyle = `rgba(${col[i]},0.5)`; cx.lineWidth = 1.5;
+      cx.strokeStyle = `rgba(${COL[id]},0.5)`; cx.lineWidth = 1.5;
       cx.beginPath(); cx.arc(nx, ny, 17, 0, Math.PI * 2); cx.stroke();
-      cx.fillStyle = `rgb(${col[i]})`; cx.font = 'bold 18px system-ui';
+      cx.fillStyle = `rgb(${COL[id]})`; cx.font = 'bold 18px system-ui';
       cx.fillText(String(i + 1), nx, ny + 6);
       // el nombre y el subtitulo
       cx.textAlign = vert ? 'left' : 'center';
@@ -3283,9 +3333,9 @@ function arrancarNavegador () {
       cx.fillStyle = C.peligro; cx.font = 'bold 13px system-ui';
       cx.fillText(nombreCancion(id), tx, ty);
       cx.fillStyle = 'rgba(232,230,224,0.30)'; cx.font = '10.5px system-ui';
-      cx.fillText(sub[i], tx, ty + 14);
+      cx.fillText(SUB[id], tx, ty + 14);
       // LO TUYO: rango, limpias, y la barrita de cuanto de la cancion llegaste
-      cx.fillStyle = m.hay ? `rgba(${col[i]},0.9)` : C.tenue;
+      cx.fillStyle = m.hay ? `rgba(${COL[id]},0.9)` : C.tenue;
       cx.font = m.hay ? 'bold 11px system-ui' : '11px system-ui';
       // un record sin rango es de antes de que existieran los rangos: igual
       // tiene notas limpias, y esconderlas seria decirle 'sin tocar' al que ya
@@ -3299,11 +3349,11 @@ function arrancarNavegador () {
       const bx = vert ? x0 + 58 : cxT - bw / 2;
       const by = vert ? yy0 + alT - 12 : yy0 + alT - 14;
       cx.fillStyle = 'rgba(232,230,224,0.10)'; cx.fillRect(bx, by, bw, 3);
-      cx.fillStyle = `rgb(${col[i]})`; cx.fillRect(bx, by, bw * Math.min(1, m.pct / 100), 3);
+      cx.fillStyle = `rgb(${COL[id]})`; cx.fillRect(bx, by, bw * Math.min(1, m.pct / 100), 3);
       cx.textAlign = 'center';
       botones.push(r);
     });
-    const finT = vert ? y0T + 2 * sepT + alT : y0T + alT;
+    const finT = vert ? y0T + (NIVELES.length - 1) * sepT + alT : y0T + alT;
     // la zanahoria concreta: que le falta a tu mejor cancion para el proximo
     // rango. Un objetivo visible y contado es lo que trae de vuelta.
     const paso = NIVELES.map(id => ({ id, r: leerRecord(id) }))
@@ -3438,6 +3488,16 @@ function arrancarNavegador () {
     // y por eso cada tramo del viaje se ve distinto sin que nadie lo pinte:
     // el amanecer es una loma, el drop es una sierra, el motor es una meseta.
     if (corriendo) {
+      // EL CIELO NO SE MUEVE, y eso es lo que hace que lo demas se vea moverse.
+      // Sin una referencia fija el ojo no tiene contra que medir: cuatro capas
+      // desplazandose, todas distinto, se leen igual de bien como "una cosa
+      // pegada a la esfera". Con un resplandor de horizonte clavado a la
+      // pantalla, cada capa se despega de el a su propia velocidad.
+      const cielo = cx.createLinearGradient(0, y0 - 0.9 * esc, 0, y0);
+      cielo.addColorStop(0, `rgba(${tinte.join(',')},0)`);
+      cielo.addColorStop(1, `rgba(${tinte.join(',')},${0.10 + 0.10 * padLuz})`);
+      cx.fillStyle = cielo;
+      cx.fillRect(0, y0 - 0.9 * esc, w, 0.9 * esc);
       for (const c of CAPAS) {
         // la perspectiva aerea: cuanto mas lejos, mas lavada hacia el cielo del
         // tinte del acorde. Es lo que separa una sierra de un recorte de papel.
@@ -3454,7 +3514,10 @@ function arrancarNavegador () {
           const X = ((n.xm - s.x) * c.f + 1.9) * esc;
           if (X < -60) continue;
           if (X > w + 60) break;
-          cx.lineTo(X, y0 - pisada * pisada * 5 * c.l - (c.base + n.y * c.k) * esc);
+          // la ALTURA viene de otro tramo de la cancion: misma partitura, otro
+          // pasaje, asi que las cuatro siluetas no riman entre si
+          const nh = NOTAS[(i + c.giro) % NOTAS.length];
+          cx.lineTo(X, y0 - pisada * pisada * 5 * c.l - (c.base + (nh.silencio ? 0.1 : nh.y) * c.k) * esc);
           hubo = true;
         }
         if (!hubo) continue;
@@ -3464,11 +3527,36 @@ function arrancarNavegador () {
       }
     }
 
-    // la red, con sus abismos
+    // DONDE HAY RED, Y DONDE NO HAY NADA. Sin red, dibujar la red seria mentir:
+    // se ve una linea que aguanta y abajo no hay nada. Asi que la red se dibuja
+    // exactamente donde EXISTE --los tramos que la partitura manda rodar-- y el
+    // resto se ve como lo que es: un abismo, con los mismos dientes y el mismo
+    // degradado que ya significaban muerte en los huecos. El modo no se dice en
+    // ninguna esquina; se ve en el piso, que es donde importa.
+    const V0 = s.x - 3, V1 = s.x + 7;
+    let conRed = sinRed ? TRAMOS_RODAR.map(t => [t.x0, t.x1]) : [[-2, LARGO + 6]];
+    for (const g of HUECOS) {
+      const resto = [];
+      for (const [a, b] of conRed) {
+        if (g.x1 <= a || g.x0 >= b) { resto.push([a, b]); continue; }
+        if (g.x0 > a) resto.push([a, g.x0]);
+        if (g.x1 < b) resto.push([g.x1, b]);
+      }
+      conRed = resto;
+    }
+    conRed = conRed.map(([a, b]) => [Math.max(a, V0), Math.min(b, V1)])
+      .filter(([a, b]) => b > a).sort((p, q) => p[0] - q[0]);
+    // el vacio es el complemento, calculado dentro de la ventana visible
+    const vacios = [];
+    let corre = V0;
+    for (const [a, b] of conRed) {
+      if (a > corre) vacios.push([corre, a]);
+      corre = Math.max(corre, b);
+    }
+    if (corre < V1) vacios.push([corre, V1]);
     cx.strokeStyle = `rgba(232,230,224,${0.14 + 0.12 * padLuz})`; cx.lineWidth = 2;
-    const cortes = [0, ...HUECOS.flatMap(g => [g.x0, g.x1]), LARGO + 6];
-    for (let i = 0; i < cortes.length; i += 2) {
-      cx.beginPath(); cx.moveTo(px(cortes[i]), py(0)); cx.lineTo(px(cortes[i + 1]), py(0)); cx.stroke();
+    for (const [a, b] of conRed) {
+      cx.beginPath(); cx.moveTo(px(a), py(0)); cx.lineTo(px(b), py(0)); cx.stroke();
     }
     // compases
     cx.strokeStyle = C.tenue; cx.lineWidth = 1;
@@ -3628,22 +3716,38 @@ function arrancarNavegador () {
     // Los ABISMOS se ven como peligro, no como ausencia: dientes en los dos
     // bordes y un degradado que se hunde. Antes el hueco era solo un corte en
     // la linea de la red y de lejos ni se notaba.
-    for (const h of HUECOS) {
-      if (h.x1 < s.x - 3 || h.x0 > s.x + 7) continue;
-      const a0 = px(h.x0), a1 = px(h.x1), yy = py(0);
-      const gr = cx.createLinearGradient(0, yy, 0, yy + 46);
-      gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      cx.fillStyle = gr; cx.fillRect(a0, yy, a1 - a0, 46);
-      cx.strokeStyle = `rgba(${C.esferaRGB},0.8)`; cx.lineWidth = 2;
-      cx.beginPath();
-      const dientes = Math.max(3, Math.round((a1 - a0) / 9));
-      for (let i = 0; i <= dientes; i++) {
-        const xx = a0 + (a1 - a0) * i / dientes;
-        cx.lineTo(xx, yy + (i % 2 ? 7 : 1));
+    // ...y sin red el abismo es casi todo el piso, asi que los dientes se
+    // espacian y se apagan un poco: lo que tiene que gritar es el BORDE --donde
+    // la red se termina-- no el kilometro de vacio que viene despues.
+    for (const [a, b] of vacios) {
+      const a0 = px(a), a1 = px(b), yy = py(0);
+      if (a1 - a0 < 2) continue;
+      const hondo = b - a > 6 ? 72 : 46;
+      const gr = cx.createLinearGradient(0, yy, 0, yy + hondo);
+      gr.addColorStop(0, 'rgba(0,0,0,0.72)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = gr; cx.fillRect(a0, yy, a1 - a0, hondo);
+      // Un vacio LARGO no lleva dientes. Sin red el abismo es casi todo el piso,
+      // y un zigzag de punta a punta dejaba de leerse como peligro: se veia como
+      // agua, o como una textura. Lo que dice "aca no hay nada" es la ausencia:
+      // oscuridad que se hunde, y nada mas. Los dientes quedan para el hueco
+      // corto, donde son un aviso puntual dentro de una red que sigue.
+      const largo = b - a > 6;
+      if (!largo) {
+        cx.strokeStyle = `rgba(${C.esferaRGB},0.8)`; cx.lineWidth = 2;
+        cx.beginPath();
+        const dientes = Math.max(3, Math.round((a1 - a0) / 9));
+        for (let i = 0; i <= dientes; i++) {
+          const xx = a0 + (a1 - a0) * i / dientes;
+          cx.lineTo(xx, yy + (i % 2 ? 7 : 1));
+        }
+        cx.stroke();
       }
+      // el borde: donde se acaba lo que te sostiene. Ese si, siempre fuerte.
+      cx.strokeStyle = `rgba(${C.esferaRGB},0.85)`;
+      cx.beginPath();
+      if (a > V0 + 0.05) { cx.moveTo(a0, yy - 7); cx.lineTo(a0, yy + 4); }
+      if (b < V1 - 0.05) { cx.moveTo(a1, yy - 7); cx.lineTo(a1, yy + 4); }
       cx.stroke();
-      cx.beginPath(); cx.moveTo(a0, yy - 5); cx.lineTo(a0, yy + 3);
-      cx.moveTo(a1, yy - 5); cx.lineTo(a1, yy + 3); cx.stroke();
     }
 
     // La linea del AHORA. La esfera esta siempre en el mismo punto de la
@@ -3707,12 +3811,31 @@ function arrancarNavegador () {
         // veces. Cada tecla se corta antes de la que sigue y lleva su ATAQUE,
         // una marca clara en el borde donde empieza. La separacion es de la
         // partitura, no del dibujo: donde hay dos ataques, hay dos notas.
+        // LA TECLA TIENE CUERPO. Era un rectangulo de 5 px: informacion
+        // correcta y cero caracter. Ahora es una barra con esquinas, un filo de
+        // luz arriba --de donde viene la nota-- y una sombra abajo que la
+        // despega del fondo. Y las dos familias se distinguen de lejos por la
+        // FORMA, no solo por el color: la del bajo es mas gruesa y lleva su
+        // patita al medio, como una tecla pisada por otra mano.
         const anK = Math.max(4, (k.x1 - k.x0) * esc);
-        cx.fillRect(px(k.x0), py(k.y + hh), Math.max(3, anK - 3), alto);
+        const ax = px(k.x0), ay = py(k.y + hh), an = Math.max(3, anK - 3);
+        const grueso = k.bajo ? alto + 3 : alto;
+        cx.fillStyle = 'rgba(0,0,0,0.35)';
+        caja(ax, ay + 2, an, grueso, grueso / 2); cx.fill();
+        cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
+        caja(ax, ay, an, grueso, grueso / 2); cx.fill();
+        // el filo: una linea mas clara sobre el lomo. Es lo que convierte una
+        // barra plana en algo con volumen, y cuesta una llamada.
+        cx.fillStyle = limpia ? 'rgba(255,252,240,0.55)' : 'rgba(255,255,255,0.22)';
+        cx.fillRect(ax + 1.5, ay + 0.5, Math.max(1, an - 3), 1.5);
+        if (k.bajo) {                    // la patita del bajo
+          cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
+          cx.fillRect(ax + an / 2 - 1.5, ay + grueso, 3, 5);
+        }
         const antK = NOTAS[k.i - 1];
         if (antK && !antK.silencio && !antK.riel && Math.abs(antK.x1 - k.x0) < 0.02) {
           cx.fillStyle = limpia ? 'rgb(255,252,240)' : sono ? C.sucia : 'rgba(232,230,224,0.85)';
-          cx.fillRect(px(k.x0), py(k.y + hh) - 3, 2, alto + 6);
+          cx.fillRect(ax, ay - 3, 2, grueso + 6);
         }
       }
       cx.shadowBlur = 0;
@@ -3917,8 +4040,27 @@ function arrancarNavegador () {
     cx.save();
     cx.beginPath(); cx.ellipse(cxb, cyb, rx, ry, ang, 0, Math.PI * 2); cx.clip();
     cx.translate(cxb, cyb); cx.rotate(giro);
-    cx.strokeStyle = 'rgba(120,60,10,0.45)'; cx.lineWidth = 2;
-    cx.beginPath(); cx.moveTo(-rx, 0); cx.lineTo(rx, 0); cx.stroke();
+    // LA MARCA. Es lo unico que deja VER que la esfera gira, y ahora la elegis
+    // vos: costura, cruz, gajos o nucleo.
+    cx.strokeStyle = `rgba(${rgbMarca()},0.6)`;
+    cx.lineWidth = 2;
+    cx.beginPath();
+    if (mira.marca === 0) {                       // costura: un solo meridiano
+      cx.moveTo(-rx, 0); cx.lineTo(rx, 0);
+    } else if (mira.marca === 1) {                // cruz: dos, como una pelota de cuero
+      cx.moveTo(-rx, 0); cx.lineTo(rx, 0);
+      cx.moveTo(0, -ry); cx.lineTo(0, ry);
+    } else if (mira.marca === 2) {                // gajos: tres a 60 grados
+      for (let g = 0; g < 3; g++) {
+        const a = g * Math.PI / 3;
+        cx.moveTo(-Math.cos(a) * rx, -Math.sin(a) * ry);
+        cx.lineTo(Math.cos(a) * rx, Math.sin(a) * ry);
+      }
+    } else {                                      // nucleo: un anillo que gira
+      cx.moveTo(rx * 0.55, 0);
+      cx.ellipse(0, 0, rx * 0.55, ry * 0.55, 0, 0, Math.PI * 2);
+    }
+    cx.stroke();
     cx.fillStyle = 'rgba(255,255,255,0.35)';
     cx.beginPath(); cx.arc(rx * 0.45, -ry * 0.42, Math.max(1.5, rx * 0.17), 0, Math.PI * 2); cx.fill();
     cx.restore();

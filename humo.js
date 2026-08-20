@@ -179,7 +179,7 @@ probar('esfera: llegar a la meta dibuja el rango y el informe por seccion', () =
   exigir(dijo('elegi el nivel'), 'ESC en la meta no vuelve al menu');
 });
 
-for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'aurora'], ['3', 'viaje']]) {
+for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'viaje']]) {
   probar(`${nivel}: arranca, juega, y sobrevive 400 cuadros`, () => {
     disparar('keydown', { key: tecla, code: 'Digit' + tecla, preventDefault () {}, repeat: false });
     correrCuadros(30);
