@@ -29,7 +29,9 @@ class AudioContextFalso {
   constructor () { this.sampleRate = 44100; this.destination = nodoAudio(); this.state = 'running'; }
   // el reloj avanza con los cuadros: asi se recorre de verdad el camino donde
   // la imagen consume los golpes agendados (el latido del fondo)
-  get currentTime () { return reloj / 1000; }
+  // el reloj del AUDIO es otro hardware: puede correr a otro ritmo que el del
+  // sistema, y `derivaAudio` es lo que deja simular esa diferencia
+  get currentTime () { return reloj * derivaAudio / 1000; }
   resume () {}
   suspend () {}
   createGain () { return nodoAudio(); }
@@ -37,6 +39,7 @@ class AudioContextFalso {
   createBiquadFilter () { return nodoAudio(); }
   createDynamicsCompressor () { return nodoAudio(); }
   createBufferSource () { return nodoAudio(); }
+  createDelay () { return nodoAudio(); }
   createBuffer () { return nodoAudio(); }
 }
 
@@ -83,9 +86,11 @@ globalThis.addEventListener = (tipo, f) => { (oyentes[tipo] ||= []).push(f); };
 globalThis.devicePixelRatio = 1;
 
 let reloj = 0;
+let derivaAudio = 1;
 const cuadros = [];
 globalThis.requestAnimationFrame = f => { cuadros.push(f); return cuadros.length; };
 
+globalThis.__dribleDiag = true;
 await import('./juego.js');
 
 const disparar = (tipo, ev) => (oyentes[tipo] || []).forEach(f => f(ev));
@@ -105,6 +110,14 @@ const probar = (que, fn) => {
   catch (e) { fallas++; console.log(' FALLA  ' + que + '\n         ' + e.message); }
 };
 const exigir = (cond, msg) => { if (!cond) throw new Error(msg); };
+// la red esta puesta si configuracion lo dice; sirve para no alternarla al azar
+const dijoModoFacil = () => {
+  const antes = textos.length;
+  disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
+  correrCuadros(2);
+  const si = textos.slice(antes).some(t => t.includes('MODO FACIL — con red'));
+  return si;
+};
 const tocar1 = () => {
   disparar('keydown', { key: ' ', code: 'Space', preventDefault () {}, repeat: false });
   disparar('keyup', { key: ' ', code: 'Space', preventDefault () {} });
@@ -280,6 +293,31 @@ probar('morir espera: el informe se queda hasta que decidas', () => {
   textos.length = 0;
   correrCuadros(5);
   exigir(dijo('elegi el nivel'), 'ESC tras morir no vuelve al menu');
+});
+
+// EL MUNDO CONTRA EL RELOJ DEL AUDIO. La musica se agenda contra ac.currentTime
+// y el mundo avanzaba integrando cuadros (performance.now): dos relojes de
+// hardware distintos, que no estan sincronizados. Una deriva de 0.3% --normal
+// entre la placa de sonido y el sistema-- son mas de 0.2 tiempos de desfase en
+// 45 segundos, creciendo, y no lo ve NINGUNA otra prueba porque no se dibuja.
+probar('el mundo no se despega del reloj del audio', () => {
+  derivaAudio = 1.003;                 // el audio corre 0.3% mas rapido
+  // con red y sin tocar nada: la esfera rueda, no muere y no reinicia, asi que
+  // lo unico que puede separar al mundo del audio es la deriva
+  if (!dijoModoFacil()) disparar('keydown', { key: 'f', code: 'KeyF', preventDefault () {}, repeat: false });
+  disparar('keydown', { key: '1', code: 'Digit1', preventDefault () {}, repeat: false });
+  correrCuadros(40);
+  let peor = 0, tomas = 0;
+  for (let i = 0; i < 40; i++) {
+    correrCuadros(50);
+    const d = globalThis.__dribleDiag();
+    if (d.b < 1 || d.x <= 0) continue;          // todavia no arranco
+    tomas++;
+    peor = Math.max(peor, Math.abs(d.b - d.x));
+  }
+  derivaAudio = 1;
+  exigir(tomas > 20, `no se pudo medir: solo ${tomas} tomas`);
+  exigir(peor < 0.05, `el mundo se corrio ${peor.toFixed(3)} tiempos del audio`);
 });
 
 console.log(fallas ? `\n${fallas} FALLAS` : '\nsin fallas');

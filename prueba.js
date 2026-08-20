@@ -26,10 +26,12 @@ const DT = 1 / 240;
 // y que eso pase es justamente el dato que este nivel existe para medir.
 const RASGOS = {
   esfera: { escaleras: false, ligaduras: 0, huecos: 1, techos: 0, saltos: 30, exigente: false },
-  // el viaje es la cancion ENTERA del estudio: 64 compases y 139 s. Los unicos
-  // techos son los dos vacios de NEBULOSA -- los silencios cortos ya no tiran a
-  // la red, se sobrevuelan, y el motor es zona de dribleo (ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 2, saltos: 30, exigente: true, orbes: 120, pistones: 8 }
+  // El viaje es la cancion ENTERA del estudio: 64 compases y 139 s. Sin techos:
+  // NEBULOSA dejo de tener silencios de cuatro tiempos (eran los unicos), asi
+  // que ya no hay ningun tramo donde haga falta rodar por la red -- que es
+  // exactamente lo que hace que "caer mata" valga en todo el recorrido. El
+  // motor es zona de dribleo (ahi se JUEGA).
+  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 0, saltos: 30, exigente: true, orbes: 120, pistones: 8 }
 };
 
 let fallas = 0;

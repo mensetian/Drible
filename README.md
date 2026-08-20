@@ -45,6 +45,13 @@ se agrega, se reparte.
   semicorchea —se hunde a la mitad, pase lo que pase— y caerle encima lo llena
   con tu golpe: el hi-hat se abre, y vuelve con eco. Si pasás de largo, el
   cráter suena vacío: la banda se agachó para un golpe que no llegó.
+- **El eco de NEBULOSA.** Es la única sección que no empuja, y la única donde la
+  esfera cambia de instrumento: toca **cristal** (senoidales con un parcial
+  inarmónico a 3.01x, ataque soplado, un batido lento en vez de vibrato) y cada
+  nota **vuelve**, atada al tempo, cada vez más apagada. Lo que llena el aire no
+  lo agrega el arreglo: son tus propias notas. Y se ve — dos fantasmas de la
+  esfera recorren, atrás, el camino que hiciste una y dos negras con puntillo
+  antes.
 - **Sobre un riel no hay orbes.** El riel es la única nota que se *sostiene*, y
   un orbe encima pedía picar: dos órdenes opuestas al mismo dedo, en el mismo
   instante. La cosecha vive donde el dedo está libre — el arpegio y el vuelo
@@ -68,8 +75,10 @@ Dos canciones, cada una con su mapa: **ESFERA** (100 BPM), que enseña el gesto,
 **AURORA · EL VIAJE**, la canción entera del estudio — 64 compases que van por
 actos, con una mecánica y una progresión propias por sección.
 
-**Caer es el final**, salvo en los silencios que la partitura manda rodar. Eso
-es el juego, no un extra: una canción no se pausa. La red existe igual, en
+**Caer es el final** en todo el recorrido. Eso es el juego, no un extra: una
+canción no se pausa. (La red sigue existiendo en el código, para los tramos que
+una partitura futura mande rodar; hoy ninguna canción tiene uno — el único que
+quedaba, el respiro de NEBULOSA, dejó de ser un silencio.) La red existe igual, en
 configuración, como **modo fácil** — es una muleta para aprender la canción, y
 dentro del juego ninguno de los dos modos se anuncia: un cartel que te recuerda
 en cuál estás es un cartel que te saca de la canción.

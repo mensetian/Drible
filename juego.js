@@ -139,14 +139,21 @@ const CANCIONES = {
       // VUELO -- el verso: el BAJO es el protagonista (cadencia andaluza), y
       // el mapa lo dice con el cuerpo: la melodia canta arriba, el bajo espera
       // abajo, y cada compas es un zigzag entre las dos bandas.
-      'A4!:1 A4:.5 A4:.5 G4:.5 E4:1 E5!:.5',              // 21  Am
-      'G4!:1 G4:.5 G4:.5 B4:.5 G4:1 D5!:.5',              // 22  G
-      'F4!:1 A4:.5 A4:.5 C5:.5 A4:1 C5!:.5',              // 23  F
-      'E4!:1 G#4:.5 B4:.5 G#4:.5 E4:1 B4!:.5',            // 24  E   la andaluza
-      'A4!:1 A4:.5 A4:.5 G4:.5 E4:1 E5!:.5',              // 25  Am  y otra vuelta
-      'G4!:1 G4:.5 G4:.5 B4:.5 G4:1 D5!:.5',              // 26  G
-      'F4!:1 A4:.5 A4:.5 C5:.5 A4:1 C5!:.5',              // 27  F
-      'E4!:1 G#4:.5 B4:.5 G#4:.5 E4:1 B4!:.5',            // 28  E
+      // LA NOTA QUE ANTICIPA VA EN EL 13, NO EN EL 14. Cerraba en la corchea
+      // del 4 (paso 14) y el bajo del arreglo toca en el 13: dos graves a un
+      // semicorchea de distancia, un flam sucio contra el que el jugador
+      // sincronizaba. Corrida al 13, esa nota ES la del bajo. Con eso los seis
+      // ataques del compas caen sobre un golpe real -- 0 bombo+bajo, 4 clap,
+      // 6 bajo, 8 bombo+bajo, 10 bombo, 13 bajo -- y el compas deja de pelearse
+      // con el pulso que se siente.
+      'A4!:1 A4:.5 A4:.5 G4:.5 E4:.75 E5!:.75',           // 21  Am
+      'G4!:1 G4:.5 G4:.5 B4:.5 G4:.75 D5!:.75',           // 22  G
+      'F4!:1 A4:.5 A4:.5 C5:.5 A4:.75 C5!:.75',           // 23  F
+      'E4!:1 G#4:.5 B4:.5 G#4:.5 E4:.75 B4!:.75',         // 24  E   la andaluza
+      'A4!:1 A4:.5 A4:.5 G4:.5 E4:.75 E5!:.75',           // 25  Am  y otra vuelta
+      'G4!:1 G4:.5 G4:.5 B4:.5 G4:.75 D5!:.75',           // 26  G
+      'F4!:1 A4:.5 A4:.5 C5:.5 A4:.75 C5!:.75',           // 27  F
+      'E4!:1 G#4:.5 B4:.5 G#4:.5 E4:.75 B4!:.75',         // 28  E
       // GRAVEDAD -- el segundo build: puro bajo trepando, y los PISTONES
       // armandose a la vista. Aca la urgencia empuja a adelantarse, que es
       // justo lo que el martillo cobra.
@@ -174,14 +181,14 @@ const CANCIONES = {
       // a ningun lado. Ahora sube C-D-E, vuelve a C, calla, salta al G5 (el
       // techo de la seccion, la unica frase que se mueve) y baja E-A: cae en la
       // tonica y entrega el EMPUJE FINAL con el bajo ya apuntando a Dm.
-      'C5:4',                                             // 41  F   NEBULOSA: la 5a
-      'D5:4',                                             // 42  G   la 5a
-      '-:2 E5:2',                                         // 43  Am  el hueco se oye
-      'C5:4',                                             // 44  Am  la 3a: el fantasma baja
-      '-:4',                                              // 45  F   el vacio: se rueda
-      'B4:1 D5:1 G5:2',                                   // 46  G   la triada, subiendo
-      '-:4',                                              // 47  Am
-      'E5:2 A4:2',                                        // 48  Am  cadencia: 5a -> tonica
+      'C5:3 A4:1',                                        // 41  F   5a, y la 3a responde
+      'D5:3 B4:1',                                        // 42  G   igual, un tono arriba
+      'E5:2 C5:1 A4:1',                                   // 43  Am  la triada, cayendo
+      'C5:4',                                             // 44  Am  el hilo largo
+      'A4:2 C5:2',                                        // 45  F   la respuesta sube
+      'B4:1 D5:1 G5:2',                                   // 46  G   la triada, subiendo al techo
+      'E5:2 C5:2',                                        // 47  Am  y baja
+      'A4:4',                                             // 48  Am  la tonica, sostenida
       // EMPUJE FINAL -- el build mas grande: el bajo TREPA (el patron climb del
       // estudio, ocho corcheas por compas) y arriba se arma el redoble.
       'D4!:.5 D4!:.5 F4!:.5 F4!:.5 G4!:.5 G4!:.5 A4!:.5 C5!:.5',        // 49  Dm
@@ -282,9 +289,16 @@ const CANCIONES = {
       if (c === 31) return { drums: 'roll', bajo: 'corchea', arp: 'up16', pad: true, riser: 2 };
       if (c === 32) return { drums: 'rollBig', bajo: 'corchea', arp: 'up16', pad: true };
       if (c <= 40) return { drums: (c - 33) % 4 === 3 ? 'fillTom' : 'coroB', bajo: 'drive', arp: 'up16', pad: true, crash: c === 33 };  // despegue II
-      // NEBULOSA: el respiro. Cuatro compases casi mudos y cuatro con pulso.
-      if (c <= 44) return { drums: 'silencio', arp: 'soft8', arpGan: 0.6, pad: true };
-      if (c <= 48) return { drums: 'pulso', bajo: 'pulso', arp: 'soft8', arpGan: 0.6, pad: true };
+      // NEBULOSA: el respiro, en CUATRO escalones y no en dos. Cuatro compases
+      // mudos y cuatro con pulso eran dos mesetas planas: la seccion entraba,
+      // se quedaba quieta y salia. Ahora entra en el aire (41-42), vuelve el
+      // latido (43-44), aparece el bajo (45-46) y los hats la empiezan a
+      // levantar hacia el EMPUJE FINAL (47-48). Sigue siendo la pausa mas
+      // tranquila de la cancion, pero va a algun lado mientras descansa.
+      if (c <= 42) return { drums: 'silencio', arp: 'soft8', arpGan: 0.75, pad: true };
+      if (c <= 44) return { drums: 'pulso', arp: 'soft8', arpGan: 0.75, pad: true };
+      if (c <= 46) return { drums: 'pulso', bajo: 'pulso', arp: 'soft8', arpGan: 0.8, pad: true };
+      if (c <= 48) return { drums: 'hats', bajo: 'pulso', arp: 'soft8', arpGan: 0.8, pad: true };
       // EMPUJE FINAL: el build mas grande -- dos compases de redoble y riser
       if (c <= 50) return { drums: 'coro', bajo: 'climb', arp: 'up16', pad: true, riser: c === 50 ? 3 : 0 };
       if (c <= 52) return { drums: 'rollBig', bajo: 'climb', arp: 'up16', pad: true };
@@ -311,7 +325,9 @@ const E_BATERIA = {
   coro: 'k.h.x.h.k.h.x.h.',
   coroB: 'k.h.x.h.k.h.x.hH',
   doble: 'k.hhx.hhk.hhx.hH',
-  verso: 'k.h.x.h..Hk.x.h.',
+  // el bombo del 3 (paso 8) faltaba: el verso saltaba del 1 al contratiempo
+  // del 3 y el compas se quedaba sin piso justo donde la melodia ataca
+  verso: 'k.h.x.h.kHk.x.h.',
   rollBig: 'K.ss.ss.ssssssss',
   fillTom: 'k.h.x.h.k.u.T.t.',
   roll: 'k.s.s.s.ssssssss',
@@ -1581,6 +1597,7 @@ function arrancarNavegador () {
   let ac = null, master = null, voz = null, t0 = 0, proxBeat = 0;
   let solo = null, fondo = null;      // el que toca la esfera, y el arreglo
   let craterBus = null;               // el pozo que el arreglo abre para el caño
+  let ecoRet = null, ecoLP = null, ecoFB = null, ecoMix = null;   // el eco de NEBULOSA
   // El solista entra: el arreglo se agacha un instante para dejarlo pasar.
   // EL CRATER. En el paso de semicorchea que un caño reclamo, el arreglo
   // entero se ABRE --se hunde a la mitad por un tercio de segundo-- pase lo
@@ -1620,6 +1637,13 @@ function arrancarNavegador () {
   // girando en la direccion en que venia la esfera. Es la unica cosa del mundo
   // que la esfera destruye, y se nota.
   const rotos = [];
+  // EL ECO SE VE. En NEBULOSA lo que suena de mas son tus propias notas
+  // volviendo, asi que lo que se ve de mas sos vos mismo, atras: dos fantasmas
+  // de la esfera recorriendo el camino que hiciste una y dos negras con
+  // puntillo antes. No son obstaculo ni premio -- son la seccion diciendo en
+  // que consiste, que es la unica forma de que un efecto de audio se entienda.
+  const rastroEco = [];
+  const ECO_T = 1.5;
   const avisos = [], marcas = [];     // cuanto te corriste, dicho y dibujado
   let squash = 0, flash = 0, rielVoz = null;
   // LA CEREMONIA DEL ACIERTO. El juego sabia castigar con matices --la voz se
@@ -1686,10 +1710,10 @@ function arrancarNavegador () {
   // vuelta al final para no quedarse sin notas-- las siluetas dejan de rimar y
   // recien ahi la diferencia de velocidad se ve.
   const CAPAS = [
-    { f: 0.04, k: 0.70, base: 0.46, a: 0.15, salto: 8, l: 1, giro: 0 },
-    { f: 0.11, k: 0.58, base: 0.30, a: 0.18, salto: 5, l: 0.62, giro: 37 },
-    { f: 0.22, k: 0.42, base: 0.16, a: 0.22, salto: 3, l: 0.28, giro: 91 },
-    { f: 0.36, k: 0.26, base: 0.04, a: 0.28, salto: 2, l: 0, giro: 149 }
+    { f: 0.015, k: 0.70, base: 0.46, a: 0.15, salto: 8, l: 1, giro: 0 },
+    { f: 0.05, k: 0.58, base: 0.30, a: 0.18, salto: 5, l: 0.62, giro: 37 },
+    { f: 0.11, k: 0.42, base: 0.16, a: 0.22, salto: 3, l: 0.28, giro: 91 },
+    { f: 0.20, k: 0.26, base: 0.04, a: 0.28, salto: 2, l: 0, giro: 149 }
   ];
   const TINTE = {
     Am: [70, 95, 165], F: [160, 110, 70], C: [80, 150, 130],
@@ -1709,6 +1733,11 @@ function arrancarNavegador () {
   try { desfase = Math.max(0, Math.min(0.35, +localStorage.getItem('drible:desfase') || 0)); } catch (_) {}
   const ahoraAudio = () => ac ? (ac.currentTime - t0) / SPB : 0;
   const ahora = () => ac ? (ac.currentTime - t0 - desfase) / SPB : 0;
+  // Un asomo para la prueba de humo, y SOLO si alguien lo pidio antes de cargar
+  // el modulo (en el navegador no existe nunca). La distancia entre el mundo y
+  // el reloj del audio no la dibuja nada: es exactamente el tipo de error que
+  // se cuela durante minutos sin que ninguna prueba lo pueda ver.
+  if (globalThis.__dribleDiag) globalThis.__dribleDiag = () => ({ x: s.x, b: ahora() });
 
   // --- sintesis --------------------------------------------------------------
 
@@ -1743,7 +1772,25 @@ function arrancarNavegador () {
       craterBus = ac.createGain();
       craterBus.gain.value = 1;
       fondo.connect(craterBus).connect(master);
+      // EL ECO. La melodia va seca y al frente en toda la cancion --el apreton
+      // tiene que ser la nota-- salvo donde la partitura lo pide. En NEBULOSA
+      // lo pide: es la seccion que no empuja, y con la voz seca sonaba a un
+      // sintetizador probando notas en una sala vacia. Aca cada nota que tocas
+      // VUELVE, atada al tempo (negra con puntillo) y cada vez mas apagada, y
+      // esas repeticiones son las que llenan el aire entre nota y nota. Lo que
+      // suena no lo agrega el arreglo: lo agregas vos, y de lo que ya tocaste.
+      ecoRet = ac.createDelay(2);
+      ecoLP = ac.createBiquadFilter();
+      ecoLP.type = 'lowpass'; ecoLP.frequency.value = 2100;
+      ecoFB = ac.createGain(); ecoFB.gain.value = 0.42;
+      ecoMix = ac.createGain(); ecoMix.gain.value = 0;
+      voz.connect(ecoRet);
+      solo.connect(ecoRet);
+      ecoRet.connect(ecoLP).connect(ecoFB).connect(ecoRet);
+      ecoLP.connect(ecoMix).connect(master);
     }
+    // el retardo es MUSICAL: una negra con puntillo del tempo de esta cancion
+    if (ecoRet) ecoRet.delayTime.value = 1.5 * SPB;
     ac.resume();
     rodadaAbrir();
     t0 = ac.currentTime + 0.12;
@@ -2527,7 +2574,7 @@ function arrancarNavegador () {
     t0 = ac.currentTime + 1.0;
     proxBeat = 0;
     try { ac.suspend(); } catch (_) {}
-    estela.length = 0; rotos.length = 0;
+    estela.length = 0; rotos.length = 0; rastroEco.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
@@ -2559,7 +2606,7 @@ function arrancarNavegador () {
     metaEn = 0; muerteVista = null; leccionViva = null; vecesRed = 0;
     s = crearSim({ sinRed });
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
-    rotos.length = 0;
+    rotos.length = 0; rastroEco.length = 0;
     corriendo = true;
     arrancarAudio();
   }
@@ -2770,7 +2817,7 @@ function arrancarNavegador () {
     t0 = ac.currentTime - desfase - s.x * SPB;   // el juego va s.x; el audio, adelante
     proxBeat = Math.floor(ahoraAudio() * 4) / 4;
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
-    rotos.length = 0;
+    rotos.length = 0; rastroEco.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
@@ -2977,10 +3024,27 @@ function arrancarNavegador () {
     const b = ahora();
     if (b < 0) { dibujar(dtSeg); return; }
 
-    const dtBeat = dtSeg / SPB;
+    // EL MUNDO SE ATA AL RELOJ DEL AUDIO, no al de los cuadros. Integrar dtSeg
+    // parecia equivalente --la suma de los cuadros ES el tiempo transcurrido--
+    // pero son DOS RELOJES DE HARDWARE distintos: performance.now() sale del
+    // sistema y ac.currentTime del reloj de la placa de sonido, y no estan
+    // sincronizados. Una deriva de 0.1% es normal; sobre los 139 s del viaje son
+    // 139 ms de desfase acumulado, creciendo. La musica se agenda contra el
+    // reloj del audio y el mundo corria contra el otro: por eso al principio
+    // sentia bien y mas adelante se sentia corrido, y por eso calibrar no lo
+    // arreglaba (calibrar corrige un offset fijo, no una deriva).
+    // Ahora s.x --que ES la posicion en tiempos-- persigue a ahora(). El paso
+    // se acota para que un tiron no dispare medio compas de fisica de golpe.
+    const dtBeat = Math.max(0, Math.min(b - s.x, 0.05 / SPB));
     const n = Math.max(1, Math.ceil(dtBeat / (1 / 240)));
     for (let i = 0; i < n && s.viva && !s.meta; i++) paso(s, dtBeat / n);
 
+    // el eco se abre y se cierra con la ZONA, con una rampa larga: entrar y
+    // salir de golpe se escucharia como un interruptor, no como un lugar
+    if (ecoMix) {
+      const quiere = vozEn(s.x) === 'cristal' ? 0.5 : 0;
+      ecoMix.gain.setTargetAtTime(quiere, ac.currentTime, 0.35);
+    }
     procesar();
     if (!s.viva) { golpe(ac.currentTime, 90, 0.3, 0.4, 'sawtooth'); ruido(ac.currentTime, 0.2, 0.28); morirOReiniciar(); }
     if (s.meta && !finSonado) {
@@ -3878,21 +3942,12 @@ function arrancarNavegador () {
         for (let x = k.x0; x < k.x1; x += 0.25) {
           cx.beginPath(); cx.moveTo(px(x), py(k.y)); cx.lineTo(px(x) - 5, py(k.y) + 9); cx.stroke();
         }
-        // El tramo final: aca ya podes soltar sin caerte. Era una barra RECTA
-        // dibujada a la altura de la base mientras la tabla se curva hacia
-        // arriba, asi que se despegaba del riel y quedaba una raya suelta en el
-        // aire -- lo mismo que pasaba con las flechas. Ahora va por encima de la
-        // tabla, siguiendo la rampa: es parte del riel, no un objeto aparte.
-        const suelta = Math.max(k.x0, k.x1 - SUELTA);
-        cx.strokeStyle = `rgba(${C.esferaRGB},${sono ? 0.9 : 0.45})`;
-        cx.lineWidth = 2.5; cx.lineCap = 'butt';
-        cx.beginPath();
-        for (let i = 0; i <= 8; i++) {
-          const xx = suelta + (k.x1 - suelta) * i / 8;
-          const Y = py(k.y + hh + subidaRiel(k, xx)) - 4;
-          if (i) cx.lineTo(px(xx), Y); else cx.moveTo(px(xx), Y);
-        }
-        cx.stroke();
+        // SIN BANDA DE SOLTAR. Ya la habia pegado a la rampa para que dejara de
+        // ser una raya suelta, y seguia leyendose como una raya de mas al final
+        // del riel: cualquier trazo extra ahi arriba compite con la tabla y no
+        // se entiende que dice. El tramo donde ya se puede soltar lo cuenta la
+        // rampa, que es lo que se ve subir, y sobre todo lo cuenta el cuerpo:
+        // soltar tarde no castiga, asi que nadie necesita el aviso al pixel.
       }
     }
     // EL PULSO DE ANTICIPACION. Un anillo que se cierra sobre la proxima nota y
@@ -4029,6 +4084,23 @@ function arrancarNavegador () {
         cx.fill();
       }
     }
+    // los dos fantasmas del eco, detras: se dibujan ANTES que la esfera para
+    // que nunca le tapen el cuerpo
+    if (corriendo && vozEn(s.x) === 'cristal') {
+      rastroEco.push({ x: s.x, y: s.y });
+      while (rastroEco.length && rastroEco[0].x < s.x - 2 * ECO_T - 0.2) rastroEco.shift();
+      for (const [atras, alfa] of [[ECO_T, 0.30], [2 * ECO_T, 0.14]]) {
+        const meta = s.x - atras;
+        if (meta < 0) continue;
+        let mejor = null;
+        for (const q of rastroEco) if (!mejor || Math.abs(q.x - meta) < Math.abs(mejor.x - meta)) mejor = q;
+        if (!mejor || Math.abs(mejor.x - meta) > 0.15) continue;
+        cx.fillStyle = `rgba(${C.esferaRGB},${alfa})`;
+        cx.beginPath();
+        cx.arc(px(mejor.x), py(mejor.y + R), R * esc, 0, Math.PI * 2);
+        cx.fill();
+      }
+    } else if (rastroEco.length) rastroEco.length = 0;
     const sordo = s.x < s.bloqueo;              // el boton no responde, y se ve
     cx.fillStyle = sordo ? C.sucia : C.esfera;
     cx.shadowColor = sordo ? C.sucia : C.esfera; cx.shadowBlur = sordo ? 4 : 12;
