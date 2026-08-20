@@ -45,8 +45,10 @@ se agrega, se reparte.
   semicorchea —se hunde a la mitad, pase lo que pase— y caerle encima lo llena
   con tu golpe: el hi-hat se abre, y vuelve con eco. Si pasás de largo, el
   cráter suena vacío: la banda se agachó para un golpe que no llegó.
-- **En NEBULOSA** los rieles cuelgan sobre el vacío y llevan notas del arpegio:
-  picar para cosecharlas es apostar la vida. El que no quiere, no pica.
+- **Sobre un riel no hay orbes.** El riel es la única nota que se *sostiene*, y
+  un orbe encima pedía picar: dos órdenes opuestas al mismo dedo, en el mismo
+  instante. La cosecha vive donde el dedo está libre — el arpegio y el vuelo
+  largo entre plataformas.
 
 ## Cómo se juega
 
@@ -57,16 +59,21 @@ se agrega, se reparte.
 | saltar de sección | `←` `→` (marca la corrida como ENSAYO: no puntúa) |
 | tras morir, `→` | ensaya directo el tramo que te tiró |
 | en la meta | tocar reintenta · `Esc` vuelve al menú |
-| elegir nivel | `1` `2` `3` en el menú |
+| elegir nivel | `1` `2` `3`, o tocar su parada en el mapa |
+| volver una pantalla | `Esc` |
 | calibrar el desfase | `C` — si tu pantalla o tus auriculares llegan tarde |
-| **SIN RED** | `S` en el menú, una vez que terminaste alguna canción |
+| **modo fácil** (con red) | `F`, o en configuración |
 
 Tres canciones, cada una con su mapa: **ESFERA** (100 BPM), **AURORA 2.0** y
 **AURORA · EL VIAJE**, que va por actos y trae progresiones propias por sección.
 
-**SIN RED** es el concierto del que ya se sabe la canción: caer es el final,
-salvo en los silencios que la partitura manda rodar. La promesa base —el error
-cuesta la nota, no el tramo— la cambiás vos, a sabiendas, por la de los abismos.
+**Caer es el final**, salvo en los silencios que la partitura manda rodar. Eso
+es el juego, no un extra: una canción no se pausa. La red existe igual, en
+configuración, como **modo fácil** — es una muleta para aprender la canción, y
+dentro del juego ninguno de los dos modos se anuncia: un cartel que te recuerda
+en cuál estás es un cartel que te saca de la canción.
+
+La entrada tiene lo tuyo: el color de la esfera y la forma de su estela.
 
 ## Qué se persigue
 

@@ -713,37 +713,13 @@ function orbes () {
     const sig = NOTAS[n.i + 1];
     if (n.silencio || !sig || sig.silencio) continue;
     if (n.escalera || sig.escalera || n.ligada) continue;
-    // Sobre los RIELES largos: orbes que piden el saltito (tocar de nuevo
-    // mientras sostenes). Flotan mas arriba de lo que alcanza rodar: solo el
-    // saltito los toca. Tambien reclaman golpes reales -- y donde la bateria
-    // calla (NEBULOSA: drums en silencio, solo arpegio y pad), reclaman la
-    // nota del ARPEGIO. Esa es la apuesta que el mapa promete: los rieles de
-    // NEBULOSA llevan abismo, asi que picar para cosechar es jugarse la vida
-    // -- y el que no quiere, no pica.
-    if (extra && spec && n.riel && n.x1 - n.xm > 1.6) {
-      for (let tx = n.xm + 0.7; tx < n.x1 - 1.1; tx += 1) {
-        let mr = null;
-        for (let p = Math.ceil((tx - 0.3) * 4); p <= Math.floor((tx + 0.3) * 4); p++) {
-          if (PASOS_BATERIA.has(p) || PASOS_BAJO.has(p) || PASOS_ARP.has(p)) continue;   // los caños eligen primero
-          const cc = Math.floor(p / 16), i16 = p % 16;
-          const pl = spec(cc); if (!pl) continue;
-          const bat = E_BATERIA[pl.drums];
-          const golpe = bat && 'hHsc'.includes(bat[i16]) ? bat[i16] : null;
-          const nb = pl.bajo && E_BAJO[pl.bajo] ? E_BAJO[pl.bajo][i16] : null;
-          const na = pl.arp && E_ARP[pl.arp] ? E_ARP[pl.arp][i16] : null;
-          if (golpe == null && nb == null && na == null) continue;
-          const d = Math.abs(p / 4 - tx);
-          if (!mr || d < mr.d) mr = { p, golpe, nb, na, d, cc };
-        }
-        if (!mr) continue;
-        const o = { i: r.length, x: +(mr.p / 4).toFixed(3), y: +(n.y + 0.13).toFixed(3), c: mr.cc };
-        if (mr.nb != null && mr.golpe == null) { o.instr = 'bajo'; o.semi = mr.nb; PASOS_BAJO.add(mr.p); }
-        else if (mr.golpe) { o.instr = mr.golpe; PASOS_BATERIA.add(mr.p); }
-        else if (mr.na != null) { o.instr = 'arpz'; o.semi = mr.na; PASOS_ARP.add(mr.p); }
-        else continue;
-        r.push(o);
-      }
-    }
+    // SOBRE UN RIEL NO HAY ORBES, y no es que no entren: entraban. El riel es
+    // la unica nota que se SOSTIENE, y sostener es lo contrario de picar. Un
+    // orbe flotando arriba pedia soltar el gesto que la nota esta pidiendo --
+    // dos ordenes opuestas al mismo dedo, en el mismo instante. La cosecha
+    // vive donde la esfera ya esta en el aire y el dedo esta libre: el arpegio
+    // (tres semicorcheas por arco, el lugar donde esto se siente perfecto) y
+    // el vuelo largo entre plataformas. Ahi no compite con nada.
     // el arco ideal: el mismo que calcula lanzar() desde el toque en el pulso
     const x0 = n.riel ? n.x1 : n.xm, y0 = n.y + (n.riel ? RAMPA : 0);
     const tv = vueloMinimo(sig.y - y0);
@@ -1563,6 +1539,42 @@ function arrancarNavegador () {
     tenue: 'rgba(232,230,224,0.18)'
   };
 
+  // TU ESFERA. El juego no tiene personaje ni nombre: lo unico que sos es esa
+  // bola. Elegirle el color es la unica propiedad que se puede tener acá, y
+  // cuesta cinco lineas. Los tonos evitan el verde del impulso y el azul de
+  // las teclas: si tu esfera se confunde con lo que tenes que leer, el
+  // adorno se comio la legibilidad.
+  const PALETA = [
+    { nom: 'ambar', rgb: '255,179,71' },
+    { nom: 'rosa', rgb: '255,120,170' },
+    { nom: 'violeta', rgb: '190,140,255' },
+    { nom: 'turquesa', rgb: '80,222,228' },
+    { nom: 'hueso', rgb: '240,236,226' }
+  ];
+  const ESTELAS = ['cometa', 'gotas', 'sin estela'];
+  let mira = { color: 0, estela: 0 };
+  try {
+    const g = JSON.parse(localStorage.getItem('drible:mira'));
+    if (g) mira = { color: (g.color | 0) % PALETA.length, estela: (g.estela | 0) % ESTELAS.length };
+  } catch (_) {}
+  function aplicarMira () {
+    C.esferaRGB = PALETA[mira.color].rgb;
+    C.esfera = `rgb(${C.esferaRGB})`;
+    try { localStorage.setItem('drible:mira', JSON.stringify(mira)); } catch (_) {}
+  }
+  aplicarMira();
+
+  // MODO FACIL: la red. Caer y volver a subir es una muleta de aprendizaje, no
+  // el juego -- el juego es que la cancion no se puede pausar. Asi que la red
+  // es la excepcion y hay que ir a buscarla a configuracion; lo normal es que
+  // caer sea el final. Y adentro NO SE VE ninguna de las dos cosas: un cartel
+  // que te recuerda en que modo estas es un cartel que te saca de la cancion.
+  let modoFacil = false;
+  try { modoFacil = localStorage.getItem('drible:facil') === '1'; } catch (_) {}
+  const guardarFacil = () => {
+    try { localStorage.setItem('drible:facil', modoFacil ? '1' : '0'); } catch (_) {}
+  };
+
   let s = crearSim();
   let intento = 1, mejor = 0;
 
@@ -1630,6 +1642,12 @@ function arrancarNavegador () {
   let corriendo = false, finSonado = false;
 
   const estela = [], particulas = [], destellos = [], desvios = [];
+  // Los orbes ROTOS: un orbe cosechado desaparecia y ya. Cosechar es el unico
+  // premio opcional del juego --nadie te obliga a pasar por ahi-- y el premio
+  // se sentia igual que no hacer nada. Ahora se ROMPE: casquitos que salen
+  // girando en la direccion en que venia la esfera. Es la unica cosa del mundo
+  // que la esfera destruye, y se nota.
+  const rotos = [];
   const avisos = [], marcas = [];     // cuanto te corriste, dicho y dibujado
   let squash = 0, flash = 0, rielVoz = null;
   // LA CEREMONIA DEL ACIERTO. El juego sabia castigar con matices --la voz se
@@ -2347,6 +2365,15 @@ function arrancarNavegador () {
         } else golpeDeLaEsfera(e.instr, ac.currentTime);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
         chispas(e.x, e.y, 6, true, e.instr === 'arp' ? C.teclaRGB : C.esferaRGB);
+        // se rompe: los casquitos salen empujados por donde venia la esfera
+        rotos.push({
+          x: e.x, y: e.y, t: performance.now(),
+          rgb: e.instr === 'arp' ? C.teclaRGB : C.esferaRGB,
+          vx: s.vx || 6, vy: s.vy || 0,
+          cascos: Array.from({ length: 6 }, (_, k) => ({
+            a: k * Math.PI / 3 + (k % 2) * 0.4, v: 26 + 14 * (k % 3), giro: (k % 2 ? 1 : -1) * (3 + k)
+          }))
+        });
       } else if (e.tipo === 'rachaRota') {
         // perder una racha larga ES un momento: el numero cae, el brillo del
         // mundo se apaga DE GOLPE (no en lerp: perder x22 no puede verse igual
@@ -2412,7 +2439,10 @@ function arrancarNavegador () {
     dribleo: 'la red se corta entre piques — hay que PICAR al beat',
     // dice lo que paso, no lo que se supone que lo causo: fallar una nota no
     // siempre tira a la red -- lo que mata, aca, es tocarla
-    red: 'SIN RED: tocaste la red — aca abajo no hay nada'
+    // sin nombre de modo: el que cayo no necesita saber como se llama esto,
+    // necesita saber que caer termina la corrida. Y si le sobra, la red se
+    // pone en configuracion -- eso ya se dijo en el mapa, antes de tocar.
+    red: 'tocaste el piso — caer es el final'
   };
   let avisoMuerte = null;
   function morirOReiniciar () {
@@ -2463,7 +2493,7 @@ function arrancarNavegador () {
     // compas 1 reclame los dedos. Sigue siendo automatico: nadie toca nada.
     t0 = ac.currentTime + 1.4;
     proxBeat = 0;
-    estela.length = 0;
+    estela.length = 0; rotos.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
@@ -2481,7 +2511,7 @@ function arrancarNavegador () {
     elegirCancion(id);
     armarLecciones();
     ensayo = false;                 // arrancar de cero es el unico concierto
-    sinRed = sinRedArmado;          // el modo se elige en el menu y dura la corrida
+    sinRed = !modoFacil;            // el modo se elige en configuracion y dura la corrida
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
@@ -2494,6 +2524,7 @@ function arrancarNavegador () {
     metaEn = 0; muerteVista = null; leccionViva = null; vecesRed = 0;
     s = crearSim({ sinRed });
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
+    rotos.length = 0;
     corriendo = true;
     arrancarAudio();
   }
@@ -2691,12 +2722,9 @@ function arrancarNavegador () {
   // no es un record: es una trampa contra uno mismo. Desde el primer salto la
   // corrida queda marcada como ENSAYO y no puntua hasta que se arranque de cero.
   let ensayo = false;
-  // SIN RED: se arma en el menu (solo despues de terminar alguna cancion) y
-  // dura toda la corrida, reintentos incluidos.
-  let sinRed = false, sinRedArmado = false;
-  // donde quedaron dibujados los dos botones del menu, en fraccion de alto: el
-  // dibujo las escribe y la entrada las lee, asi lo que se toca es lo que se ve
-  let bandaSinRed = 0.66, bandaCalib = 0.80;
+  // SIN RED es el juego, no un extra: se juega asi salvo que en configuracion
+  // este puesto el modo facil. Dura toda la corrida, reintentos incluidos.
+  let sinRed = false;
   let avisoSeccion = null;
   function saltarA (bx) {
     rielCerrar(); eRielCerrar();
@@ -2707,6 +2735,7 @@ function arrancarNavegador () {
     t0 = ac.currentTime - desfase - s.x * SPB;   // el juego va s.x; el audio, adelante
     proxBeat = Math.floor(ahoraAudio() * 4) / 4;
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
+    rotos.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
@@ -2733,25 +2762,22 @@ function arrancarNavegador () {
     leccionViva = null; rachaRota = null; avisoSeccion = null;
     metaEn = 0; muerteVista = null; leccionViva = null; avisoMuerte = null;
     corriendo = false; finSonado = false; sinRed = false;
+    pantalla = 'mapa';        // se vuelve al mapa, que es de donde saliste
     s = crearSim();
   }
 
-  // En el menu, un toque pelado (espacio, click) arranca el nivel 1; el nivel
-  // se elige con 1/2 en el teclado o tocando su renglon.
-  function bajar (nivel = 0) {
+  // En el juego, bajar es TOCAR. En las pantallas de entrada no hace falta que
+  // adivine nada: el boton de teclado avanza la pantalla en la que estas, y el
+  // dedo va directo al rectangulo que ve (eso lo resuelve pointerdown).
+  function bajar (nivel = null) {
     if (pausado) { alternarPausa(); return; }   // en pausa, tocar es seguir
     if (calib) { tocarCalib(); return; }
-    if (nivel === 'calibrar') { calibrar(); return; }
-    if (nivel === 'sinred') {
-      // solo se arma cuando ya terminaste algo: es el concierto del que ya se
-      // sabe la cancion, no una trampa para el que recien llega. Y si todavia
-      // no esta a la vista, esa franja de pantalla no puede ser un toque
-      // muerto: vale la promesa de siempre, un toque arranca el nivel 1.
-      if (NIVELES.some(id => ((leerRecord(id) || {}).pct || 0) >= 100)) { sinRedArmado = !sinRedArmado; return; }
-      if (!corriendo) { empezar(NIVELES[0]); }
+    if (!corriendo) {
+      if (nivel != null) { empezar(NIVELES[nivel] || NIVELES[0]); return; }
+      if (pantalla === 'mapa') { empezar(NIVELES[0]); return; }
+      pantalla = 'mapa';                        // desde la entrada, el boton es EMPEZAR
       return;
     }
-    if (!corriendo) { empezar(NIVELES[nivel] || NIVELES[0]); return; }
     // En la meta, el toque es OTRA VEZ: el momento de maxima ganas de mejorar
     // la marca no puede desembocar en el menu. Al menu se sale con ESC (o
     // tocando la franja de abajo, para el telefono).
@@ -2774,6 +2800,9 @@ function arrancarNavegador () {
       e.preventDefault();
       if (e.repeat) return;
       if (corriendo && s.meta) { alMenu(); return; }    // desde la meta, ESC sale
+      // en las pantallas de entrada, ESC es VOLVER: la misma tecla que en el
+      // juego te saca de la cancion te saca de la pantalla donde estas
+      if (!corriendo && !calib) { pantalla = 'inicio'; return; }
       alternarPausa(); return;
     }
     // en pausa, M es la salida al menu (y no puede caer en el camino del boton
@@ -2804,8 +2833,12 @@ function arrancarNavegador () {
     if (!esBoton(e)) return;
     e.preventDefault();
     if (e.repeat) return;
-    if (!corriendo && !calib && (e.key === 'c' || e.key === 'C')) { bajar('calibrar'); return; }
-    if (!corriendo && !calib && (e.key === 's' || e.key === 'S')) { bajar('sinred'); return; }
+    if (!corriendo && !calib && (e.key === 'c' || e.key === 'C')) { calibrar(); return; }
+    // el modo facil tiene tecla propia: el que juega con teclado no deberia
+    // tener que entrar a configuracion para poner o sacar la red
+    if (!corriendo && !calib && (e.key === 'f' || e.key === 'F')) {
+      modoFacil = !modoFacil; guardarFacil(); pantalla = 'config'; return;
+    }
     if (!corriendo && !calib && e.key >= '1' && e.key <= String(NIVELES.length)) { bajar(+e.key - 1); return; }
     bajar();
   }, { capture: true });
@@ -2828,13 +2861,15 @@ function arrancarNavegador () {
     }
     if (!corriendo) {
       if (calib) { bajar(); return; }
-      // cada renglon del menu es una franja AJUSTADA a su renglon: tocar el
-      // espacio vacio o las reglas arranca el nivel 1, no el 3 -- el texto lo
-      // promete ("un toque arranca el nivel 1") y antes media pantalla
-      // arrancaba VIAJE, los 64 compases mas dificiles, a un pulgar despistado
-      const y = e.offsetY / cv.clientHeight;
-      bajar(y > bandaCalib ? 'calibrar' : y > bandaSinRed ? 'sinred'
-        : y > 0.435 ? 0 : y > 0.37 ? 2 : y > 0.295 ? 1 : 0);
+      // se busca de atras para adelante: lo ultimo dibujado esta arriba, y es
+      // lo que el dedo cree estar tocando. Fuera de todo boton no pasa NADA --
+      // en un menu, el toque perdido que arranca un nivel es peor que el toque
+      // perdido que no hace nada.
+      const bx = e.offsetX, by = e.offsetY;
+      for (let i = botones.length - 1; i >= 0; i--) {
+        const b = botones[i];
+        if (bx >= b.x0 && bx <= b.x1 && by >= b.y0 && by <= b.y1) { b.ac(); return; }
+      }
       return;
     }
     // en la meta, la franja de abajo es la salida al menu (tactil sin ESC)
@@ -2872,7 +2907,7 @@ function arrancarNavegador () {
     }
     if (calib) {
       if (!calib.listo && ac.currentTime > calib.fin) cerrarCalib();
-      else if (calib.listo && ac.currentTime > calib.fin + 3.2) calib = null;
+      else if (calib.listo && ac.currentTime > calib.fin + 3.2) { calib = null; pantalla = 'config'; }
       dibujar(dtSeg); return;
     }
     if (!corriendo) { dibujar(dtSeg); return; }
@@ -2993,6 +3028,214 @@ function arrancarNavegador () {
       }
       cx.restore();
     });
+  }
+
+  // --- las pantallas de entrada ---------------------------------------------
+  // El menu entero era un bloque de texto, y la entrada adivinaba en que
+  // renglon habias tocado con fracciones de alto escritas a mano -- por eso
+  // tocar entre el 37% y el 80% de la pantalla arrancaba VIAJE, los 64
+  // compases mas dificiles, cuando el cartel prometia el nivel 1. Ahora el
+  // dibujo ESCRIBE los rectangulos y la entrada los LEE: lo que se toca es,
+  // siempre, lo que se ve. Y son tres pantallas, no una: la entrada (quien
+  // sos), el mapa (a donde vas) y la configuracion (como se porta la maquina).
+  let pantalla = 'inicio';
+  const botones = [];
+  function btn (txt, cxp, cyp, ac, o = {}) {
+    const rgb = o.rgb || C.esferaRGB;
+    cx.font = o.fuente || (o.activo ? 'bold 13px system-ui' : '13px system-ui');
+    cx.textAlign = 'center';
+    const anc = Math.max(o.ancho || 0, cx.measureText(txt).width + 34);
+    const alt = o.alto || 30;
+    const x0 = cxp - anc / 2, y0 = cyp - alt / 2;
+    cx.fillStyle = o.activo ? `rgba(${rgb},0.16)` : C.fondo;   // el menu no compite con el mundo
+    cx.fillRect(x0, y0, anc, alt);
+    cx.strokeStyle = o.activo ? `rgb(${rgb})` : `rgba(${rgb},0.35)`;
+    cx.lineWidth = o.activo ? 2 : 1;
+    cx.strokeRect(x0, y0, anc, alt);
+    cx.fillStyle = o.activo ? `rgb(${rgb})` : `rgba(${rgb},0.8)`;
+    cx.fillText(txt, cxp, cyp + 4.5);
+    botones.push({ x0, y0, x1: x0 + anc, y1: y0 + alt, ac });
+  }
+  const contarNotas = id => CANCIONES[id].compases
+    .flatMap(c => c.trim().split(/\s+/)).filter(t => !t.startsWith('-')).length;
+  // La marca de una cancion dice el RANGO y sobre cuanto: "completa" para
+  // siempre mataba la zanahoria. El ✦ es la marca de honor -- terminada sin
+  // red, que es lo normal, y por eso su ausencia dice algo.
+  function marcaNivel (id) {
+    const r = leerRecord(id);
+    if (!r) return { txt: 'sin tocar', rango: null, sr: '' };
+    return {
+      rango: r.rango || null,
+      txt: `♪ ${r.limpias || 0}/${contarNotas(id)}${r.pct >= 100 ? '' : `  ·  ${r.pct || 0}%`}`,
+      sr: r.sinRedPct >= 100 ? '✦' : ''
+    };
+  }
+  // la esfera de muestra: rebota sobre su propia red, con la estela elegida.
+  // Es un preview honesto -- lo que se ve acá es lo que se ve jugando.
+  function esferaMuestra (cxp, cyp, rr) {
+    const t = performance.now() / 1000;
+    const salto = Math.abs(Math.sin(t * 2.1));
+    const yy = cyp - salto * rr * 2.2;
+    cx.strokeStyle = C.red; cx.lineWidth = 1;
+    cx.beginPath(); cx.moveTo(cxp - rr * 3.2, cyp + rr); cx.lineTo(cxp + rr * 3.2, cyp + rr); cx.stroke();
+    if (mira.estela !== 2) {
+      for (let i = 1; i <= 6; i++) {
+        const st = Math.abs(Math.sin((t - i * 0.045) * 2.1));
+        const f = 1 - i / 7;
+        cx.fillStyle = `rgba(${C.esferaRGB},${(mira.estela === 1 ? 0.30 : 0.16) * f})`;
+        cx.beginPath();
+        cx.arc(cxp - i * (mira.estela === 1 ? 3.5 : 1.6), cyp - st * rr * 2.2,
+          rr * (mira.estela === 1 ? 0.3 : 0.35 + 0.5 * f), 0, Math.PI * 2);
+        cx.fill();
+      }
+    }
+    const halo = cx.createRadialGradient(cxp, yy, 0, cxp, yy, rr * 3);
+    halo.addColorStop(0, `rgba(${C.esferaRGB},0.16)`);
+    halo.addColorStop(1, `rgba(${C.esferaRGB},0)`);
+    cx.fillStyle = halo;
+    cx.beginPath(); cx.arc(cxp, yy, rr * 3, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = C.esfera;
+    cx.beginPath(); cx.arc(cxp, yy, rr, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = 'rgba(255,255,255,0.35)';
+    cx.beginPath(); cx.arc(cxp + rr * 0.35, yy - rr * 0.35, rr * 0.22, 0, Math.PI * 2); cx.fill();
+  }
+
+  function dibujarInicio (w, h) {
+    cx.fillStyle = C.peligro; cx.font = `bold ${Math.min(46, w / 9)}px system-ui`;
+    cx.fillText('DRIBLE', w / 2, h * 0.17);
+    cx.fillStyle = C.tenue; cx.font = '13px system-ui';
+    cx.fillText('un boton. la cancion no espera.', w / 2, h * 0.17 + 22);
+    esferaMuestra(w / 2, h * 0.40, Math.max(12, Math.min(20, h / 26)));
+    // el color: cinco fichas, y la tuya con el aro puesto
+    const yCol = h * 0.50, sep = Math.min(44, w / 9);
+    PALETA.forEach((p, i) => {
+      const xx = w / 2 + (i - (PALETA.length - 1) / 2) * sep;
+      cx.fillStyle = `rgb(${p.rgb})`;
+      cx.beginPath(); cx.arc(xx, yCol, 9, 0, Math.PI * 2); cx.fill();
+      if (i === mira.color) {
+        cx.strokeStyle = 'rgba(232,230,224,0.9)'; cx.lineWidth = 2;
+        cx.beginPath(); cx.arc(xx, yCol, 14, 0, Math.PI * 2); cx.stroke();
+      }
+      botones.push({ x0: xx - 16, y0: yCol - 16, x1: xx + 16, y1: yCol + 16,
+        ac: () => { mira.color = i; aplicarMira(); } });
+    });
+    btn(`estela: ${ESTELAS[mira.estela]}`, w / 2, h * 0.50 + 34,
+      () => { mira.estela = (mira.estela + 1) % ESTELAS.length; aplicarMira(); },
+      { fuente: '12px system-ui' });
+    btn('EMPEZAR', w / 2, h * 0.68, () => { pantalla = 'mapa'; },
+      { activo: true, ancho: Math.min(200, w * 0.6), alto: 38, fuente: 'bold 16px system-ui' });
+    btn('configuracion', w / 2, h * 0.68 + 44, () => { pantalla = 'config'; },
+      { rgb: C.impulsoRGB, fuente: '12px system-ui' });
+    // el rango mas alto que tenes, que es lo unico que este juego colecciona
+    const alto = NIVELES.map(leerRecord).filter(r => r && r.rango)
+      .sort((a, b) => RANGOS.indexOf(b.rango) - RANGOS.indexOf(a.rango))[0];
+    cx.fillStyle = C.tenue; cx.font = '12px system-ui';
+    cx.fillText(alto ? `☆ ${alto.rango}` : 'ESPACIO o toca EMPEZAR', w / 2, h * 0.93);
+  }
+
+  function dibujarNiveles (w, h) {
+    cx.fillStyle = C.peligro; cx.font = '17px system-ui';
+    cx.fillText('elegi el nivel', w / 2, h * 0.13);
+    // Los tres niveles como paradas de un camino. Misma cancion de fondo, mismo
+    // margen de error: si el 1 sale y el 3 no, la dificultad era la cancion.
+    const col = [C.tecla, C.esfera, C.impulso];
+    const sub = ['negras y blancas · 100 BPM', 'el galope del coro · 112 BPM', 'la cancion entera · 64 compases'];
+    // En un telefono el camino se pone DE PIE. Tres paradas en fila sobre 420
+    // px daban 140 px por parada para escribir "AURORA · EL VIAJE" y su
+    // subtitulo: los nombres se montaban unos sobre otros y el mapa quedaba
+    // ilegible justo donde mas hace falta. La forma sigue a la pantalla.
+    const vert = w < 560;
+    const rr = vert ? 20 : Math.min(26, w / 14);
+    const sep = vert ? Math.min(78, h * 0.13) : Math.min(150, w / 3.4);
+    const ejeX = vert ? Math.max(46, w * 0.16) : w / 2;
+    const yN = vert ? h * 0.26 : h * 0.34;
+    const pos = i => vert ? { x: ejeX, y: yN + i * sep } : { x: w / 2 + (i - 1) * sep, y: yN };
+    cx.strokeStyle = C.tenue; cx.lineWidth = 2;
+    cx.beginPath();
+    if (vert) { cx.moveTo(ejeX, yN); cx.lineTo(ejeX, yN + 2 * sep); }
+    else { cx.moveTo(w / 2 - sep, yN); cx.lineTo(w / 2 + sep, yN); }
+    cx.stroke();
+    NIVELES.forEach((id, i) => {
+      const { x: xx, y: yy } = pos(i), m = marcaNivel(id);
+      cx.textAlign = vert ? 'left' : 'center';
+      const tx = vert ? xx + rr + 14 : xx;
+      cx.fillStyle = C.fondo;
+      cx.beginPath(); cx.arc(xx, yy, rr, 0, Math.PI * 2); cx.fill();
+      cx.strokeStyle = col[i]; cx.lineWidth = m.rango ? 3 : 1.5;
+      cx.beginPath(); cx.arc(xx, yy, rr, 0, Math.PI * 2); cx.stroke();
+      cx.textAlign = 'center';
+      cx.fillStyle = col[i]; cx.font = `bold ${rr}px system-ui`;
+      cx.fillText(String(i + 1), xx, yy + rr * 0.36);
+      if (m.sr) {                          // terminada sin red: la marca de honor
+        cx.font = '13px system-ui';
+        cx.fillText(m.sr, xx + rr - 2, yy - rr + 4);
+      }
+      cx.textAlign = vert ? 'left' : 'center';
+      const ty = vert ? yy - 8 : yy + rr + 20;
+      cx.fillStyle = C.peligro; cx.font = '13px system-ui';
+      cx.fillText(nombreCancion(id), tx, ty);
+      cx.fillStyle = C.tenue; cx.font = '10.5px system-ui';
+      cx.fillText(m.rango ? `☆ ${m.rango}  ${m.txt}` : m.txt, tx, ty + 15);
+      cx.fillText(sub[i], tx, ty + 29);
+      botones.push(vert
+        ? { x0: xx - rr - 6, y0: yy - rr - 4, x1: w - 8, y1: yy + rr + 4, ac: () => empezar(id) }
+        : { x0: xx - sep / 2, y0: yy - rr - 10, x1: xx + sep / 2, y1: yy + rr + 66, ac: () => empezar(id) });
+    });
+    cx.textAlign = 'center';
+    // la zanahoria concreta: que le falta a tu mejor cancion para el proximo
+    // rango. Un objetivo visible y contado es lo que trae de vuelta.
+    const paso = NIVELES.map(id => ({ id, r: leerRecord(id) }))
+      .filter(q => q.r && q.r.rango && q.r.rango !== 'SUPERNOVA')
+      .sort((a, b) => RANGOS.indexOf(b.r.rango) - RANGOS.indexOf(a.r.rango))[0];
+    if (paso) {
+      const total = contarNotas(paso.id);
+      const sig = RANGOS[RANGOS.indexOf(paso.r.rango) + 1];
+      // SUPERNOVA es el unico que se mide en clavadas; el resto, en limpias
+      const faltan = sig === 'SUPERNOVA'
+        ? Math.ceil(total * UMBRAL.SUPERNOVA) - (paso.r.perf || 0)
+        : Math.ceil(total * UMBRAL[sig]) - paso.r.limpias;
+      if (faltan > 0) {
+        const que = sig === 'SUPERNOVA' ? (faltan === 1 ? 'clavada' : 'clavadas')
+          : (faltan === 1 ? 'limpia' : 'limpias');
+        cx.fillStyle = C.impulso; cx.font = '12px system-ui';
+        cx.fillText(`${nombreCancion(paso.id)}: a ${faltan} ${que} de ${sig}`, w / 2, h * 0.60);
+      }
+    }
+    // Un puñado de reglas, y acá: es la ultima pantalla antes de tocar. Todo
+    // lo demas lo enseña el mapa cuando pasa -- un muro de once renglones no
+    // lo lee nadie.
+    cx.fillStyle = C.tenue; cx.font = '12px system-ui';
+    const REGLAS = [
+      'un boton: TOCA cada tecla justo al pisarla',
+      'a tiempo suena afinada; corrida se ensucia',
+      'martillar no sirve: el boton se queda sordo',
+      modoFacil ? 'si caes a la red, TOCA para volver arriba' : 'caer es el final'
+    ];
+    REGLAS.forEach((t, i) => cx.fillText(t, w / 2, h * 0.68 + i * 18));
+    btn('◀ volver', w / 2, Math.max(h * 0.93, h * 0.68 + REGLAS.length * 18 + 18),
+      () => { pantalla = 'inicio'; }, { rgb: '232,230,224', fuente: '12px system-ui' });
+  }
+
+  function dibujarConfig (w, h) {
+    cx.fillStyle = C.peligro; cx.font = '17px system-ui';
+    cx.fillText('configuracion', w / 2, h * 0.16);
+    btn(modoFacil ? 'MODO FACIL — con red' : 'MODO FACIL — apagado', w / 2, h * 0.34,
+      () => { modoFacil = !modoFacil; guardarFacil(); },
+      { activo: modoFacil, ancho: Math.min(300, w * 0.8), alto: 34 });
+    cx.fillStyle = C.tenue; cx.font = '11.5px system-ui';
+    cx.fillText(modoFacil ? 'caes a la red y volves arriba: se pierden notas, no la corrida'
+      : 'caer es el final, salvo donde la cancion manda rodar', w / 2, h * 0.34 + 32);
+    cx.fillText('la red es para aprender la cancion. despues estorba.', w / 2, h * 0.34 + 48);
+    // En un telefono el sonido sale tarde y el juego se siente roto sin que sea
+    // culpa tuya. Este boton es la diferencia entre "no me sale" y "no estaba
+    // calibrado", y por eso es un boton y no una tecla: en el telefono no hay C.
+    btn(desfase ? `calibrar el sonido · ${Math.round(desfase * 1000)} ms` : 'calibrar el sonido',
+      w / 2, h * 0.58, () => calibrar(), { rgb: C.impulsoRGB, ancho: Math.min(300, w * 0.8), alto: 34 });
+    cx.fillStyle = C.tenue; cx.font = '11.5px system-ui';
+    cx.fillText('recomendado en el telefono · tecla C', w / 2, h * 0.58 + 30);
+    cx.fillText('en el juego: ESC pausa · ◀ ▶ saltan de seccion', w / 2, h * 0.74);
+    btn('◀ volver', w / 2, h * 0.88, () => { pantalla = 'inicio'; },
+      { rgb: '232,230,224', fuente: '12px system-ui' });
   }
 
   function dibujar (dtSeg) {
@@ -3117,9 +3360,15 @@ function arrancarNavegador () {
       const reg = cabezas.get(p.paso);
       const edad = reg ? (performance.now() - reg.t) / 1000 : 0;
       const gastado = s.pistones.has(p.x) && (!reg || edad > 0.08);
-      // la carga por escalones: cada beat que falta es un escalon menos
-      const carga = falta > 3 ? 0.12 : falta > 2 ? 0.38 : falta > 1 ? 0.68 : 1;
-      let f = carga;                                 // fraccion de la altura
+      // SUBE PAREJO, no por escalones. Los escalones querian marcar el compas,
+      // pero el caño se mueve tambien mientras la camara se mueve, y las dos
+      // velocidades juntas se leian como un tironeo: parecia roto, no ritmico.
+      // Ahora es una rampa suave que llega arriba un beat antes del contacto
+      // --la fisica solo mira [x0,x1] y ahi ya esta entero-- y el compas se
+      // marca donde no estorba: en el brillo, que late con el bombo.
+      const crudo = Math.max(0, Math.min(1, (3.6 - falta) / 2.6));
+      const carga = 1 - Math.pow(1 - crudo, 3);      // arranca rapido, llega blando
+      let f = 0.1 + 0.9 * carga;                     // fraccion de la altura
       if (reg && reg.modo === 'encima') {
         // pisado: se comprime de golpe y rebota a un rescoldo bajo
         f = edad < 0.08 ? 1 - (1 - 0.12) * (edad / 0.08)
@@ -3129,32 +3378,59 @@ function arrancarNavegador () {
         // perdido: se desploma lento, un mecanismo que se apaga
         f = edad < 0.45 ? 1 - (1 - 0.18) * (edad / 0.45) : 0.18;
       } else if (gastado) f = 0.18;
-      const alto = Math.max(3, (py(0) - py(p.y)) * f + (f >= 1 ? 2.5 * pump : 0));
+      const alto = Math.max(3, (py(0) - py(p.y)) * f + (carga >= 0.99 ? 2.5 * pump : 0));
       const a0 = px(p.x0), an = (p.x1 - p.x0) * esc;
       const yTope = py(0) - alto;
       const pisado = reg && reg.modo === 'encima';
+      const listo = carga > 0.98 && !gastado && !reg;
       // el cobrado conserva un rescoldo naranja; el perdido muere gris frio
       cx.fillStyle = pisado ? `rgba(${C.esferaRGB},0.4)`
         : gastado ? 'rgba(150,140,130,0.35)' : `rgba(${C.esferaRGB},${0.22 + 0.3 * carga})`;
       cx.fillRect(a0 + an * 0.34, yTope, an * 0.32, alto);      // el vastago
+      // LA CABEZA SE OFRECE. Antes era una barrita de 6 px: para el ojo, una
+      // pieza de escenografia mas. Ahora es una plataforma con panza y con luz
+      // propia, del verde que en este juego significa "esto te AYUDA".
+      if (listo) {
+        const halo = cx.createRadialGradient(a0 + an / 2, yTope, 0, a0 + an / 2, yTope, 26);
+        halo.addColorStop(0, `rgba(${C.impulsoRGB},${0.20 + 0.14 * pump})`);
+        halo.addColorStop(1, `rgba(${C.impulsoRGB},0)`);
+        cx.fillStyle = halo;
+        cx.beginPath(); cx.arc(a0 + an / 2, yTope, 26, 0, Math.PI * 2); cx.fill();
+      }
       cx.fillStyle = pisado && edad < 0.06 ? 'rgb(255,252,240)'
         : pisado ? C.esfera : gastado ? 'rgba(150,140,130,0.5)' : C.impulso;
-      cx.fillRect(a0, yTope - 3, an, 6);                        // la plataforma
+      cx.fillRect(a0, yTope - 4, an, 8);                        // la plataforma
+      if (listo) {                                              // el filo que la ilumina
+        cx.fillStyle = 'rgba(255,255,255,0.75)';
+        cx.fillRect(a0, yTope - 4, an, 2);
+      }
       if (!gastado && !reg) {
-        // el punto del golpe que GUARDA, latiendo como un orbe: esta
-        // plataforma tiene un golpe adentro, tocalo vos o no lo toca nadie
-        cx.fillStyle = `rgba(${C.esferaRGB},${0.4 + 0.4 * latOrbe})`;
-        cx.beginPath(); cx.arc(a0 + an / 2, yTope - 9, 3 + 1.2 * latOrbe, 0, Math.PI * 2); cx.fill();
-        if (carga >= 1) {                            // la flecha: caele
-          cx.fillStyle = `rgba(${C.impulsoRGB},0.8)`;
-          cx.beginPath();
-          cx.moveTo(a0 + an / 2 - 5, yTope - 20); cx.lineTo(a0 + an / 2 + 5, yTope - 20);
-          cx.lineTo(a0 + an / 2, yTope - 14); cx.closePath(); cx.fill();
+        // EL CIRCULO QUE CIERRA, el mismo de las notas: el aro se encoge sobre
+        // la cabeza y toca su borde exactamente cuando hay que estar ahi. Es
+        // el unico lenguaje de tiempo que el juego ya enseño, y decirlo dos
+        // veces distinto era lo que hacia al caño ilegible.
+        if (falta > -0.2 && falta < 3.2) {
+          const fr = Math.max(0, Math.min(1, falta / 3.2));
+          const rAro = 9 + 44 * fr;
+          cx.strokeStyle = `rgba(${C.impulsoRGB},${0.85 - 0.5 * fr})`;
+          cx.lineWidth = fr < 0.12 ? 3 : 1.8;
+          cx.beginPath(); cx.arc(a0 + an / 2, yTope - 12, rAro, 0, Math.PI * 2); cx.stroke();
         }
+        // el golpe que la cabeza GUARDA, latiendo: tocalo vos o no lo toca nadie
+        cx.fillStyle = `rgba(${C.esferaRGB},${0.4 + 0.4 * latOrbe})`;
+        cx.beginPath(); cx.arc(a0 + an / 2, yTope - 12, 3.5 + 1.2 * latOrbe, 0, Math.PI * 2); cx.fill();
+        // y la flecha: no espera a estar cargado --si aparece recien al final
+        // no hay tiempo de leerla-- crece con la carga y apunta a la cabeza
+        const fl = 0.35 + 0.65 * carga;
+        cx.fillStyle = `rgba(${C.impulsoRGB},${0.35 + 0.5 * carga})`;
+        cx.beginPath();
+        const cxm = a0 + an / 2, yF = yTope - 24 - 6 * (1 - carga) + 3 * Math.sin(performance.now() / 220);
+        cx.moveTo(cxm - 6 * fl, yF - 5 * fl); cx.lineTo(cxm + 6 * fl, yF - 5 * fl);
+        cx.lineTo(cxm, yF + 4 * fl); cx.closePath(); cx.fill();
       } else if (reg && reg.modo === 'perdido') {
         // el golpe que nadie toco queda gris y quieto, como un orbe mudo
         cx.fillStyle = 'rgba(150,140,130,0.6)';
-        cx.beginPath(); cx.arc(a0 + an / 2, yTope - 9, 3, 0, Math.PI * 2); cx.fill();
+        cx.beginPath(); cx.arc(a0 + an / 2, yTope - 12, 3, 0, Math.PI * 2); cx.fill();
       }
     }
 
@@ -3165,10 +3441,49 @@ function arrancarNavegador () {
       if (o.x < s.x - 3 || o.x > s.x + 7) continue;
       if (s.orbesTocados.has(o.i)) continue;
       const rgbO = o.instr === 'arp' ? C.teclaRGB : C.esferaRGB;
-      cx.fillStyle = `rgba(${rgbO},${0.35 + 0.35 * latOrbe})`;
-      cx.beginPath(); cx.arc(px(o.x), py(o.y), 4 + 1.5 * latOrbe, 0, Math.PI * 2); cx.fill();
-      cx.strokeStyle = `rgba(${rgbO},0.25)`; cx.lineWidth = 1;
-      cx.beginPath(); cx.arc(px(o.x), py(o.y), 8, 0, Math.PI * 2); cx.stroke();
+      // un CRISTAL, no un punto: seis caras que giran despacio. Se dibuja como
+      // algo que se puede quebrar, para que quebrarlo sea la respuesta obvia.
+      const ox = px(o.x), oy = py(o.y), rad = 5 + 1.6 * latOrbe;
+      const gir = performance.now() / 900 + o.i;
+      cx.save(); cx.translate(ox, oy); cx.rotate(gir);
+      cx.fillStyle = `rgba(${rgbO},${0.30 + 0.30 * latOrbe})`;
+      cx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const a = k * Math.PI / 3;
+        cx[k ? 'lineTo' : 'moveTo'](Math.cos(a) * rad, Math.sin(a) * rad);
+      }
+      cx.closePath(); cx.fill();
+      cx.strokeStyle = `rgba(${rgbO},0.75)`; cx.lineWidth = 1.2; cx.stroke();
+      // la veta: la linea por donde se parte
+      cx.strokeStyle = `rgba(255,255,255,${0.25 + 0.25 * latOrbe})`; cx.lineWidth = 1;
+      cx.beginPath(); cx.moveTo(-rad * 0.7, 0); cx.lineTo(rad * 0.7, 0); cx.stroke();
+      cx.restore();
+      cx.strokeStyle = `rgba(${rgbO},0.22)`; cx.lineWidth = 1;
+      cx.beginPath(); cx.arc(ox, oy, 9, 0, Math.PI * 2); cx.stroke();
+    }
+    // los casquitos de los orbes rotos: salen girando, arrastrados por la
+    // esfera, y se apagan en medio segundo
+    for (let i = rotos.length - 1; i >= 0; i--) {
+      const q = rotos[i];
+      const e = (performance.now() - q.t) / 520;
+      if (e >= 1) { rotos.splice(i, 1); continue; }
+      const bx = px(q.x + q.vx * 0.05 * e), by = py(q.y + q.vy * 0.05 * e - 1.5 * e * e);
+      cx.fillStyle = `rgba(${q.rgb},${0.85 * (1 - e)})`;
+      for (const c of q.cascos) {
+        const d = c.v * e * (2 - e);
+        cx.save();
+        cx.translate(bx + Math.cos(c.a) * d, by + Math.sin(c.a) * d);
+        cx.rotate(c.giro * e);
+        const t = 4 * (1 - e * 0.7);
+        cx.beginPath(); cx.moveTo(-t, t * 0.7); cx.lineTo(t, t * 0.4); cx.lineTo(0, -t);
+        cx.closePath(); cx.fill();
+        cx.restore();
+      }
+      // el fogonazo del quiebre, corto
+      if (e < 0.3) {
+        cx.strokeStyle = `rgba(255,255,255,${0.7 * (1 - e / 0.3)})`; cx.lineWidth = 2;
+        cx.beginPath(); cx.arc(bx, by, 6 + 26 * e, 0, Math.PI * 2); cx.stroke();
+      }
     }
     // Los ABISMOS se ven como peligro, no como ausencia: dientes en los dos
     // bordes y un degradado que se hunde. Antes el hueco era solo un corte en
@@ -3430,13 +3745,19 @@ function arrancarNavegador () {
     cx.ellipse(cxb, py(0) + 1, R * esc * (0.55 + 0.85 * cerca), R * esc * 0.30 * cerca, 0, 0, Math.PI * 2);
     cx.fill();
 
-    // los fantasmas del rastro, detras de la esfera
-    for (let i = 0; i < estela.length; i++) {
-      const f = (i + 1) / estela.length;
-      cx.fillStyle = `rgba(${C.esferaRGB},${f * f * 0.13})`;
-      cx.beginPath();
-      cx.ellipse(px(estela[i].x), py(estela[i].y), R * esc * (0.35 + 0.55 * f), R * esc * (0.35 + 0.55 * f), 0, 0, Math.PI * 2);
-      cx.fill();
+    // los fantasmas del rastro, detras de la esfera -- con la forma que
+    // elegiste en la entrada. Nunca mas fuerte que eso: la estela es adorno y
+    // el arco de la esfera es informacion.
+    if (mira.estela !== 2) {
+      const gotas = mira.estela === 1;
+      for (let i = 0; i < estela.length; i++) {
+        const f = (i + 1) / estela.length;
+        cx.fillStyle = `rgba(${C.esferaRGB},${gotas ? f * f * 0.22 : f * f * 0.13})`;
+        const rr = R * esc * (gotas ? 0.16 + 0.30 * f : 0.35 + 0.55 * f);
+        cx.beginPath();
+        cx.ellipse(px(estela[i].x), py(estela[i].y), rr, rr, 0, 0, Math.PI * 2);
+        cx.fill();
+      }
     }
     const sordo = s.x < s.bloqueo;              // el boton no responde, y se ve
     cx.fillStyle = sordo ? C.sucia : C.esfera;
@@ -3489,114 +3810,11 @@ function arrancarNavegador () {
     // HUD
     if (!corriendo) {
       if (calib) { dibujarCalib(w, h); hud.textContent = ''; return; }
+      botones.length = 0;
       cx.textAlign = 'center';
-      cx.fillStyle = C.peligro; cx.font = '17px system-ui';
-      cx.fillText('DRIBLE — elegi el nivel', w / 2, h * 0.16);
-      // Dos canciones, mismo margen de error: si el nivel 1 sale facil y el 2
-      // no, la dificultad era la cancion, no el margen.
-      // La marca dice el RANGO y sobre cuanto: "completa" para siempre mataba
-      // la zanahoria -- ahora una cancion terminada sigue debiendo algo.
-      const contarNotas = id => CANCIONES[id].compases
-        .flatMap(c => c.trim().split(/\s+/)).filter(t => !t.startsWith('-')).length;
-      const marca = id => {
-        const r = leerRecord(id);
-        if (!r) return '';
-        // el ✦ es la marca de honor: esta cancion la terminaste SIN RED
-        const sr = r.sinRedPct >= 100 ? ' ✦' : r.sinRedPct ? ` ✦${r.sinRedPct}%` : '';
-        if (r.rango) return `   ☆ ${r.rango} · ♪ ${r.limpias}/${contarNotas(id)}${sr}`;
-        return `   ${r.pct >= 100 ? '★ completa' : (r.pct || 0) + '%'} · ♪ ${r.limpias || 0}`;
-      };
-      const filas = [
-        [C.tecla, `1 — ${nombreCancion('esfera')} · negras y blancas · 100 BPM${marca('esfera')}`],
-        [C.esfera, `2 — ${nombreCancion('aurora')} · el galope del coro · 112 BPM${marca('aurora')}`],
-        [C.impulso, `3 — ${nombreCancion('viaje')} · la cancion entera del estudio${marca('viaje')}`]
-      ];
-      // el renglon se achica hasta entrar: con el rango y el progreso al lado,
-      // en un telefono angosto la primera fila se salia de la pantalla
-      let cuerpo = 15;
-      cx.font = `${cuerpo}px system-ui`;
-      const masAncho = Math.max(...filas.map(([, t]) => cx.measureText(t).width));
-      if (masAncho > w - 24) cuerpo = Math.max(9, 15 * (w - 24) / masAncho);
-      cx.font = `${cuerpo.toFixed(1)}px system-ui`;
-      filas.forEach(([color, t], i) => {
-        cx.fillStyle = color;
-        cx.fillText(t, w / 2, h * (0.26 + i * 0.07));
-      });
-      cx.fillStyle = C.tenue; cx.font = '12px system-ui';
-      cx.fillText('teclas 1/2/3, o toca su renglon · ESPACIO arranca el nivel 1', w / 2, h * 0.46);
-      // la zanahoria concreta: que le falta a tu mejor cancion para el
-      // proximo rango. Un objetivo visible y contado es lo que trae de vuelta.
-      const paso = NIVELES.map(id => ({ id, r: leerRecord(id) }))
-        .filter(q => q.r && q.r.rango && q.r.rango !== 'SUPERNOVA')
-        .sort((a, b) => RANGOS.indexOf(b.r.rango) - RANGOS.indexOf(a.r.rango))[0];
-      if (paso) {
-        const total = contarNotas(paso.id);
-        const sig = RANGOS[RANGOS.indexOf(paso.r.rango) + 1];
-        // SUPERNOVA es el unico que se mide en clavadas; el resto, en limpias
-        const faltan = sig === 'SUPERNOVA'
-          ? Math.ceil(total * UMBRAL.SUPERNOVA) - (paso.r.perf || 0)
-          : Math.ceil(total * UMBRAL[sig]) - paso.r.limpias;
-        if (faltan > 0) {
-          const que = sig === 'SUPERNOVA' ? (faltan === 1 ? 'clavada' : 'clavadas')
-            : (faltan === 1 ? 'limpia' : 'limpias');
-          cx.fillStyle = C.tenue; cx.font = '12px system-ui';
-          cx.fillText(`${nombreCancion(paso.id)}: a ${faltan} ${que} de ${sig}`, w / 2, h * 0.50 + 6);
-        }
-      }
-      cx.font = '13px system-ui';
-      // Un solo boton y tres reglas. Todo lo demas lo enseña el mapa cuando
-      // pasa: un muro de once renglones no lo lee nadie.
-      const REGLAS = [
-        'un boton: TOCA cada tecla justo al pisarla',
-        'a tiempo suena afinada; corrida se ensucia',
-        'martillar no sirve: el boton se queda sordo',
-        'si caes a la red, TOCA para volver arriba'
-      ];
-      REGLAS.forEach((t, i) => cx.fillText(t, w / 2, h * 0.50 + 26 + i * 20));
-      // Los dos botones de abajo se anclan DEBAJO de las reglas, no a una
-      // fraccion suelta: las reglas usan pixeles fijos sobre un ancla
-      // fraccional, asi que en una pantalla baja (o apaisada) el recuadro
-      // opaco de SIN RED caia encima del ultimo renglon y lo borraba.
-      const finReglas = h * 0.50 + 26 + (REGLAS.length - 1) * 20;
-      const ySR = Math.max(h * 0.72, finReglas + 40);
-      const yCal = Math.max(h * 0.86, ySR + 52);
-      // En un telefono el sonido sale tarde y el juego se siente roto sin que
-      // sea culpa tuya. Esta linea es la diferencia entre "no me sale" y "no
-      // estaba calibrado".
-      // SIN RED: el endgame, y solo para el que ya termino algo. Antes de eso
-      // ni se menciona -- una promesa rota de dificultad no le sirve a nadie
-      // que todavia esta aprendiendo el gesto.
-      if (NIVELES.some(id => ((leerRecord(id) || {}).pct || 0) >= 100)) {
-        cx.font = sinRedArmado ? 'bold 13px system-ui' : '13px system-ui';
-        const tSR = sinRedArmado ? 'SIN RED — armado: caer es el final' : 'SIN RED — caer mata, salvo donde la cancion manda rodar';
-        const anchoSR = cx.measureText(tSR).width + 36;
-        cx.fillStyle = C.fondo;                    // el menu no compite con el mundo
-        cx.fillRect(w / 2 - anchoSR / 2, ySR - 17, anchoSR, 26);
-        cx.strokeStyle = sinRedArmado ? C.esfera : `rgba(${C.esferaRGB},0.35)`;
-        cx.lineWidth = sinRedArmado ? 2 : 1;
-        cx.strokeRect(w / 2 - anchoSR / 2, ySR - 17, anchoSR, 26);
-        cx.fillStyle = sinRedArmado ? C.esfera : `rgba(${C.esferaRGB},0.6)`;
-        cx.fillText(tSR, w / 2, ySR);
-        cx.fillStyle = C.tenue; cx.font = '11px system-ui';
-        cx.fillText('tocalo, o tecla S', w / 2, ySR + 20);
-      }
-      // ...y dibujada como BOTON: en el telefono no hay tecla C, y esta es la
-      // funcion que separa "se siente justo" de "se siente roto"
-      const tCal = desfase ? `calibrar el sonido · ${Math.round(desfase * 1000)} ms` : 'calibrar el sonido';
-      cx.font = '13px system-ui';
-      const anchoCal = cx.measureText(tCal).width + 36;
-      cx.fillStyle = C.fondo;
-      cx.fillRect(w / 2 - anchoCal / 2, yCal - 17, anchoCal, 26);
-      cx.strokeStyle = `rgba(${C.impulsoRGB},0.6)`; cx.lineWidth = 1;
-      cx.strokeRect(w / 2 - anchoCal / 2, yCal - 17, anchoCal, 26);
-      cx.fillStyle = C.impulso;
-      cx.fillText(tCal, w / 2, yCal);
-      cx.fillStyle = C.tenue; cx.font = '11px system-ui';
-      cx.fillText('tocalo, o tecla C — recomendado en el telefono', w / 2, yCal + 22);
-      // las franjas tactiles siguen a los carteles: si el cartel se corre, la
-      // franja se corre con el, o se toca una cosa y pasa otra
-      bandaSinRed = (ySR - 20) / h;
-      bandaCalib = (yCal - 20) / h;
+      if (pantalla === 'mapa') dibujarNiveles(w, h);
+      else if (pantalla === 'config') dibujarConfig(w, h);
+      else dibujarInicio(w, h);
     } else {
       cx.textAlign = 'left';
       cx.fillStyle = C.red; cx.font = '14px system-ui';
@@ -3609,10 +3827,9 @@ function arrancarNavegador () {
         cx.fillStyle = C.sucia; cx.font = 'bold 11px system-ui';
         cx.fillText('ENSAYO', w - 62, h - 10);
       }
-      if (sinRed) {                 // ...y que se sepa que abajo no hay nada
-        cx.fillStyle = C.esfera; cx.font = 'bold 11px system-ui';
-        cx.fillText('SIN RED', w - 62, h - 26);
-      }
+      // Sin cartel de modo. Estar sin red no es una condicion que haya que
+      // recordar mirando una esquina: se sabe la primera vez que caes. Un
+      // recordatorio permanente solo sirve para sacarte de la cancion.
       if (avisoMuerte) {
         const dt = (performance.now() - avisoMuerte.t) / 4200;
         if (dt >= 1) avisoMuerte = null;

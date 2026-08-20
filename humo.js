@@ -112,10 +112,26 @@ const tocar1 = () => {
 
 console.log('\n=== HUMO: la capa de navegador ===');
 
-probar('el menu se dibuja', () => {
+// LAS TRES PANTALLAS DE ENTRADA. Entrada -> mapa -> configuracion, y de
+// vuelta. Cada paso tiene que dejar una marca de texto propia: si una pantalla
+// deja de dibujarse, el juego se ve igual de vivo y el jugador queda encerrado.
+probar('la entrada se dibuja, y lleva al mapa y a configuracion', () => {
   correrCuadros(3);
-  exigir(dijo('elegi el nivel'), 'el menu no escribio su titulo');
-  exigir(dijo('calibrar'), 'el menu no ofrece calibrar');
+  exigir(dijo('DRIBLE'), 'la entrada no escribio su titulo');
+  exigir(dijo('EMPEZAR'), 'la entrada no ofrece empezar');
+  exigir(dijo('estela'), 'la entrada no deja elegir la estela');
+  tocar1();                       // el boton, desde la entrada, es EMPEZAR
+  textos.length = 0; correrCuadros(3);
+  exigir(dijo('elegi el nivel'), 'EMPEZAR no llevo al mapa de niveles');
+  disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
+  textos.length = 0; correrCuadros(3);
+  exigir(dijo('DRIBLE'), 'ESC en el mapa no vuelve a la entrada');
+  // configuracion: la red es una opcion que hay que ir a buscar, y esta ahi
+  disparar('keydown', { key: 'f', code: 'KeyF', preventDefault () {}, repeat: false });
+  textos.length = 0; correrCuadros(3);
+  exigir(dijo('configuracion'), 'la tecla F no abrio configuracion');
+  exigir(dijo('MODO FACIL — con red'), 'la tecla F no puso la red');
+  exigir(dijo('calibrar'), 'configuracion no ofrece calibrar');
 });
 
 // La calibracion es la pantalla que decide si el juego se siente roto en un
@@ -127,8 +143,8 @@ probar('calibrar: suena, se tocan los golpes, y guarda un numero', () => {
   exigir(dijo('toca con lo que ESCUCHAS'), 'no se abrio la pantalla de calibrar');
   correrCuadros(40, 200);            // hasta pasado el final de la cuenta
   exigir(textos.some(t => / ms$/.test(t)), 'la calibracion no dio un resultado en ms');
-  correrCuadros(30, 200);            // y vuelve sola al menu
-  exigir(dijo('elegi el nivel'), 'no volvio al menu despues de calibrar');
+  correrCuadros(30, 200);            // y vuelve sola a configuracion, de donde salio
+  exigir(dijo('configuracion'), 'no volvio a configuracion despues de calibrar');
 });
 
 // Llegar a la meta: se salta a la ultima seccion y se deja rodar por la red
@@ -210,7 +226,7 @@ for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'aurora'], ['3', 'viaje']])
 // en un try/catch, y sin localStorage de mentira no lo ejercitaba nadie: si su
 // firma se rompe, el juego sigue andando y el jugador pierde sus marcas en
 // silencio. Aca se lo obliga a escribir, a leer lo viejo y a habilitar el modo.
-probar('el record se guarda, se lee, y con el llega SIN RED', () => {
+probar('el record se guarda, se lee, y sin red es lo normal', () => {
   // salir de la corrida en curso: pausa y M. (Antes no habia salida al menu a
   // mitad de cancion -- para cambiar de nivel habia que dejarse matar.)
   disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
@@ -225,18 +241,19 @@ probar('el record se guarda, se lee, y con el llega SIN RED', () => {
   localStorage.setItem('drible:record:esfera', JSON.stringify({ pct: 100, limpias: 40 }));
   textos.length = 0;
   correrCuadros(4);
-  exigir(dijo('SIN RED'), 'con una cancion terminada, SIN RED no aparece en el menu');
-  // armarlo con la tecla S y arrancar: la corrida tiene que quedar marcada
-  disparar('keydown', { key: 's', code: 'KeyS', preventDefault () {}, repeat: false });
+  exigir(dijo('☆') || dijo('♪'), 'el record viejo no aparece en el mapa');
+  // sacar la red: F la alterna, y el mapa tiene que decir la regla que rige
+  disparar('keydown', { key: 'f', code: 'KeyF', preventDefault () {}, repeat: false });
   correrCuadros(4);
   textos.length = 0;
   correrCuadros(4);
-  exigir(dijo('armado'), 'la tecla S no armo SIN RED');
+  exigir(dijo('MODO FACIL — apagado'), 'la tecla F no saco la red');
   disparar('keydown', { key: '1', code: 'Digit1', preventDefault () {}, repeat: false });
   correrCuadros(20);
   textos.length = 0;
   correrCuadros(6);
-  exigir(dijo('SIN RED'), 'la corrida sin red no lleva su marca en el HUD');
+  // ...y adentro NO se dice: el modo no es un cartel, se descubre cayendo
+  exigir(!dijo('SIN RED'), 'el modo sin red se anuncia en el HUD: tiene que ser invisible');
   // y que la escritura del record no explote: se juega y se muere sin tocar
   correrCuadros(600);
   exigir(JSON.parse(localStorage.getItem('drible:record:esfera')).limpias >= 40,
