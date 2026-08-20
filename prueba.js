@@ -12,7 +12,7 @@
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
   CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, ZONAS_PISTON, Y_GRAVE, HOLGURA,
-  TRAMOS_RODAR, mandaRodar, RANGOS, rango
+  TRAMOS_RODAR, mandaRodar, RANGOS, rango, UMBRAL, AFINADO, PERFECTO, ROCE
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -201,6 +201,44 @@ function correr (id) {
     s.sostiene = !!(k && k.riel);
     if (k && !k.riel && !k.silencio && !(k.porCaida && !k.bajo) &&
         s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
+  };
+
+  // LA VENTANA DEL CAÑO. Se toca la tecla anfitriona corrida justo lo que el
+  // juego todavia llama CLAVADA, para los dos lados, y se exige que la esfera
+  // igual le caiga encima al caño. Si el caño pidiera mas precision que una
+  // clavada, el juego estaria celebrando PERFECTO y negando el premio en el
+  // mismo instante -- que es exactamente lo que pasaba.
+  const ventanaCaños = () => PISTONES.map(p => {
+    const k = NOTAS.filter(n => !n.silencio && n.xm < p.x).pop();
+    if (!k) return { p, ok: false };
+    const modos = [-1, 1].map(signo => {
+      const s = crearSim();
+      s.x = k.x0; s.estado = 'apoyada'; s.tecla = k.i; s.y = k.y; s.saliendoDe = -1;
+      let toco = false, modo = null;
+      for (let i = 0; i < 4000 && s.viva && s.x < p.x1 + 0.5; i++) {
+        if (!toco && s.x >= k.xm + signo * AFINADO * PERFECTO) { tocar(s, s.x); toco = true; }
+        paso(s, DT);
+        for (const e of s.eventos) if (e.tipo === 'piston' && Math.abs(e.x - p.x) < 0.3) modo = e.modo;
+        s.eventos.length = 0;
+      }
+      return modo;
+    });
+    return { p, ok: modos.every(m => m === 'encima'), modos };
+  });
+  const ventanas = R.pistones ? ventanaCaños() : [];
+
+  // Pone la esfera dentro de la ventana del primer caño, a media altura de
+  // roce, y pregunta si el vastago la agarra. `aire` es el vuelo legitimo
+  // entre dos teclas bajas; `rodando`, el que se cayo y viene por la red.
+  const vastago = como => {
+    const p = PISTONES[0];
+    if (!p) return false;
+    const s = crearSim();
+    s.x = p.x0 + 0.01; s.tecla = -1; s.saliendoDe = -1;
+    if (como === 'aire') { s.estado = 'aire'; s.y = ROCE * 0.5; s.vy = 0.35; }
+    else { s.estado = 'apoyada'; s.y = 0; s.vy = 0; }
+    for (let i = 0; i < 12 && s.viva; i++) paso(s, DT);
+    return s.eventos.some(e => e.tipo === 'piston' && e.modo === 'abajo');
   };
 
   const rp = jugar(perfecta);
@@ -453,6 +491,24 @@ function correr (id) {
     // el caño suena un golpe REAL del arreglo, como los orbes: sin eso es
     // decorado, que es de donde veniamos
     ['todo piston reclama un golpe de la bateria', PISTONES.every(p => p.instr), ''],
+    // El caño no puede pedir MAS precision que la que el juego premia: si
+    // clavaste la nota, lo pisas. Con la cabeza puesta sobre el arco del toque
+    // exacto, cualquier desvio levantaba el arco y la esfera pasaba por
+    // encima -- PERFECTO en pantalla y el caño mudo.
+    ['toda clavada pisa el caño: no pide mas precision que la que se premia',
+      ventanas.every(v => v.ok),
+      ventanas.filter(v => !v.ok).map(v => `${v.p.x}:[${v.modos}]`).join(' ') ||
+        `${ventanas.length} caños, clavada ±${(AFINADO * PERFECTO * SPB * 1000).toFixed(0)} ms`],
+    // El vastago es el rescate del que RUEDA por la red, y la altura sola no
+    // alcanza para saberlo: en GRAVEDAD el arco normal entre teclas de bajo
+    // pasa entero por debajo de ROCE, asi que el caño le cobraba el castigo
+    // del rescate --racha a cero, un rato sordo-- a alguien que venia volando
+    // y no habia fallado nada. Se prueba el contrato de las dos puntas: al que
+    // vuela no lo agarra, al que rueda si.
+    ['el vastago agarra al que rueda por la red, y NO al que vuela bajo',
+      !R.pistones || (!vastago('aire') && vastago('rodando')),
+      !R.pistones ? 'sin pistones: no aplica'
+        : `volando: ${vastago('aire') ? 'LO AGARRO' : 'lo dejo pasar'} · rodando: ${vastago('rodando') ? 'lo rescato' : 'NO LO RESCATO'}`],
     // ...y sabe en que paso de semicorchea vive ese golpe (el crater del
     // arreglo se abre ahi), a menos de 0.2 tiempos del contacto: acento
     // humano, no flam
