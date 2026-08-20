@@ -2445,6 +2445,20 @@ function arrancarNavegador () {
     red: 'tocaste el piso — caer es el final'
   };
   let avisoMuerte = null;
+  // LA MUERTE ESPERA. El informe por seccion se dibujaba sobre el compas 1 de
+  // la corrida nueva, que ya habia arrancado: para leerlo habia que decidir
+  // entre leer y jugar, y el que queria salir al menu tenia que dejarse matar
+  // otra vez. Ahora el mundo se congela --se suspende el reloj del audio, la
+  // misma pausa de siempre-- y arranca cuando vos decis.
+  let esperando = false;
+  function reanudarMuerte () {
+    if (!esperando) return;
+    esperando = false;
+    avisoMuerte = null;
+    try { ac.resume(); } catch (_) {}
+    t0 = ac.currentTime + 1.0;      // el respiro justo antes del compas 1
+    proxBeat = 0;
+  }
   function morirOReiniciar () {
     // Cuanto de la cancion tocaste, contra tu propio techo. El porcentaje es
     // el que hace que el reintento salga solo: "me faltaba poco" es una frase
@@ -2489,10 +2503,12 @@ function arrancarNavegador () {
     };
     flashRGB = '255,120,90';
     s = crearSim({ sinRed });
-    // 1.4 s, no 0.7: el respiro justo para LEER el diagnostico antes de que el
-    // compas 1 reclame los dedos. Sigue siendo automatico: nadie toca nada.
-    t0 = ac.currentTime + 1.4;
+    // el mundo queda armado en la salida, pero quieto: el reloj del audio se
+    // suspende y con el cuelga todo, asi que al reanudar no hay nada corrido
+    esperando = true;
+    t0 = ac.currentTime + 1.0;
     proxBeat = 0;
+    try { ac.suspend(); } catch (_) {}
     estela.length = 0; rotos.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
@@ -2511,6 +2527,7 @@ function arrancarNavegador () {
     elegirCancion(id);
     armarLecciones();
     ensayo = false;                 // arrancar de cero es el unico concierto
+    esperando = false;
     sinRed = !modoFacil;            // el modo se elige en configuracion y dura la corrida
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
@@ -2675,7 +2692,7 @@ function arrancarNavegador () {
     Math.abs(px - (w - BOTON_PAUSA.x)) < BOTON_PAUSA.r + 6 &&
     Math.abs(py - BOTON_PAUSA.y) < BOTON_PAUSA.r + 6;
   function alternarPausa () {
-    if (!corriendo || s.meta || !ac) return;
+    if (!corriendo || s.meta || !ac || esperando) return;
     pausado = !pausado;
     if (pausado) {
       soltar(s);                       // que no quede el boton hundido al volver
@@ -2761,7 +2778,7 @@ function arrancarNavegador () {
     crashVista.length = 0; riserVista = null;
     leccionViva = null; rachaRota = null; avisoSeccion = null;
     metaEn = 0; muerteVista = null; leccionViva = null; avisoMuerte = null;
-    corriendo = false; finSonado = false; sinRed = false;
+    corriendo = false; finSonado = false; sinRed = false; esperando = false;
     pantalla = 'mapa';        // se vuelve al mapa, que es de donde saliste
     s = crearSim();
   }
@@ -2770,6 +2787,7 @@ function arrancarNavegador () {
   // adivine nada: el boton de teclado avanza la pantalla en la que estas, y el
   // dedo va directo al rectangulo que ve (eso lo resuelve pointerdown).
   function bajar (nivel = null) {
+    if (esperando) { reanudarMuerte(); return; }   // tras morir, tocar es OTRA VEZ
     if (pausado) { alternarPausa(); return; }   // en pausa, tocar es seguir
     if (calib) { tocarCalib(); return; }
     if (!corriendo) {
@@ -2799,6 +2817,7 @@ function arrancarNavegador () {
     if (e.key === 'Escape') {
       e.preventDefault();
       if (e.repeat) return;
+      if (esperando) { esperando = false; try { ac.resume(); } catch (_) {} alMenu(); return; }
       if (corriendo && s.meta) { alMenu(); return; }    // desde la meta, ESC sale
       // en las pantallas de entrada, ESC es VOLVER: la misma tecla que en el
       // juego te saca de la cancion te saca de la pantalla donde estas
@@ -2822,6 +2841,9 @@ function arrancarNavegador () {
       if (e.key === 'ArrowRight' && avisoMuerte && avisoMuerte.xm != null && corriendo && SECCIONES.length) {
         const z = SECCIONES.filter(z2 => z2.x0 <= avisoMuerte.xm).pop() || SECCIONES[0];
         ensayo = z.x0 !== 0;
+        // el mundo estaba congelado esperando: se descongela y saltarA reescribe
+        // t0 sobre el reloj ya corriendo
+        if (esperando) { esperando = false; try { ac.resume(); } catch (_) {} }
         saltarA(z.x0);
         avisoSeccion = { n: z.n, t: performance.now(), aviso: ensayo };
         avisoMuerte = null;
@@ -2854,6 +2876,13 @@ function arrancarNavegador () {
 
   cv.addEventListener('pointerdown', e => {
     e.preventDefault();
+    // tras morir: la franja de abajo sale al menu, el resto vuelve a intentar
+    if (esperando) {
+      if (e.offsetY / cv.clientHeight > 0.9) {
+        esperando = false; try { ac.resume(); } catch (_) {} alMenu();
+      } else reanudarMuerte();
+      return;
+    }
     // el boton de pausa se come el toque: si no, pausar seria tambien tocar
     if (corriendo && !s.meta && enBotonPausa(e.offsetX, e.offsetY, cv.clientWidth)) {
       alternarPausa();
@@ -2900,7 +2929,7 @@ function arrancarNavegador () {
     antes = t;
     // en pausa el reloj del audio esta congelado, asi que no hay nada que
     // devolver ni que adelantar: solo se sigue dibujando
-    if (pausado) { dibujar(0); return; }
+    if (pausado || esperando) { dibujar(0); return; }
     if (ac && crudo > dtSeg) {
       t0 += crudo - dtSeg;
       proxBeat = Math.max(proxBeat, Math.floor(ahoraAudio() * 4) / 4);
@@ -3244,12 +3273,18 @@ function arrancarNavegador () {
     cx.setTransform(dpr, 0, 0, dpr, 0, 0);
     cx.fillStyle = C.fondo; cx.fillRect(0, 0, w, h);
 
-    const esc = w / 9;
+    // EL ZOOM. Nueve tiempos a lo ancho dejaban todo chico y la mitad de arriba
+    // vacia. Ahora entran siete --28% mas grande-- y el alto pone su techo, para
+    // que en una pantalla apaisada y baja el mundo no se salga por arriba. No mas
+    // que esto porque lo que se gana en tamaño se paga en anticipacion: quedan
+    // 4.5 tiempos de cancion por delante, y el anillo que anuncia la proxima
+    // nota abre a 2.2. Achicando la ventana, el mapa deja de avisar a tiempo.
+    const esc = Math.min(w / 6.4, h / 3.0);
     // el pisoton hunde la pantalla entera unos pixeles -- solo vertical, para
     // no romper la lectura de la partitura -- y vuelve con resorte
     pisada = Math.max(0, pisada - dtSeg * 8);
     const y0 = h * 0.86 + pisada * pisada * 5;
-    const px = wx => (wx - s.x + 2.4) * esc;
+    const px = wx => (wx - s.x + 1.9) * esc;
     const py = wy => y0 - wy * esc;
 
     // Respirar. Los golpes se agendaron con el audio, asi que la imagen late
@@ -3560,7 +3595,21 @@ function arrancarNavegador () {
           cx.lineTo(px(xx), py(k.y + hh + subidaRiel(k, xx)) + alto / 2);
         }
         cx.stroke();
-      } else cx.fillRect(px(k.x0), py(k.y + hh), Math.max(4, (k.x1 - k.x0) * esc), alto);
+      } else {
+        // DOS NOTAS SEGUIDAS NO SON UNA NOTA LARGA. A la misma altura y pegadas
+        // --el vuelo esta lleno de eso-- las dos barras se soldaban en una sola
+        // y el ojo leia un riel: se esperaba sostener donde habia que tocar dos
+        // veces. Cada tecla se corta antes de la que sigue y lleva su ATAQUE,
+        // una marca clara en el borde donde empieza. La separacion es de la
+        // partitura, no del dibujo: donde hay dos ataques, hay dos notas.
+        const anK = Math.max(4, (k.x1 - k.x0) * esc);
+        cx.fillRect(px(k.x0), py(k.y + hh), Math.max(3, anK - 3), alto);
+        const antK = NOTAS[k.i - 1];
+        if (antK && !antK.silencio && !antK.riel && Math.abs(antK.x1 - k.x0) < 0.02) {
+          cx.fillStyle = limpia ? 'rgb(255,252,240)' : sono ? C.sucia : 'rgba(232,230,224,0.85)';
+          cx.fillRect(px(k.x0), py(k.y + hh) - 3, 2, alto + 6);
+        }
+      }
       cx.shadowBlur = 0;
       // El riel se ve como SOSTENER, no como otra tecla: rayado que corre a
       // lo largo mientras dura la nota. Y el primero de cada cancion lleva su
@@ -3575,14 +3624,11 @@ function arrancarNavegador () {
           cx.moveTo(xx, py(k.y + hh) + alto - 1); cx.lineTo(xx + 4, py(k.y + hh) + 1);
         }
         cx.stroke();
-        // la punta de la rampa: de aca salis despedido (y aca ya podes soltar)
-        const punta = py(k.y + hh + RAMPA);
-        cx.strokeStyle = `rgba(${C.impulsoRGB},${sono ? 0.5 : 0.85})`; cx.lineWidth = 2;
-        cx.beginPath();
-        cx.moveTo(px(k.x1) - 9, punta - 4);
-        cx.lineTo(px(k.x1) - 1, punta - 11);
-        cx.lineTo(px(k.x1) - 1, punta - 3);
-        cx.stroke();
+        // SIN FLECHA EN LA PUNTA. Habia dos --la de la rampa y la del
+        // lanzamiento-- apuntando casi al mismo lugar, y juntas leian como un
+        // error de dibujo antes que como una indicacion. La tabla ya se curva
+        // hacia arriba y la banda clara dice desde donde podes soltar: la
+        // rampa se explica sola.
       }
       if (k.ligada) {                             // el arco de ligadura: aca se cae
         const sig = NOTAS[k.i + 1];
@@ -3608,21 +3654,6 @@ function arrancarNavegador () {
         const suelta = Math.max(k.x0, k.x1 - SUELTA);
         cx.fillStyle = `rgba(${C.esferaRGB},${sono ? 0.85 : 0.35})`;
         cx.fillRect(px(suelta), py(k.y) - 4, (k.x1 - suelta) * esc, 3);
-        // y al final te lanza solo: la flecha lo dice, no hay que saltar
-        if (!k.ligada && NOTAS[k.i + 1] && !NOTAS[k.i + 1].silencio) {
-          const sig = NOTAS[k.i + 1];
-          const ang = Math.atan2(py(sig.y) - py(k.y) - 26, (sig.x0 - k.x1) * esc);
-          cx.strokeStyle = `rgba(${C.esferaRGB},0.8)`; cx.lineWidth = 2;
-          cx.beginPath();
-          cx.moveTo(px(k.x1), py(k.y) - 4);
-          cx.lineTo(px(k.x1) + Math.cos(ang) * 16, py(k.y) - 4 + Math.sin(ang) * 16);
-          for (const g of [2.5, -2.5]) {
-            cx.moveTo(px(k.x1) + Math.cos(ang) * 16, py(k.y) - 4 + Math.sin(ang) * 16);
-            cx.lineTo(px(k.x1) + Math.cos(ang + g) * 7 + Math.cos(ang) * 16,
-              py(k.y) - 4 + Math.sin(ang + g) * 7 + Math.sin(ang) * 16);
-          }
-          cx.stroke();
-        }
       }
     }
     // EL PULSO DE ANTICIPACION. Un anillo que se cierra sobre la proxima nota y
@@ -3791,7 +3822,7 @@ function arrancarNavegador () {
       const e = (performance.now() - muerteVista.t) / 600;
       if (e >= 1) muerteVista = null;
       else {
-        const ox = 2.4 * esc, oy = py(muerteVista.y + R);
+        const ox = 1.9 * esc, oy = py(muerteVista.y + R);
         cx.fillStyle = `rgba(${C.esferaRGB},${0.9 * (1 - e)})`;
         for (const q of muerteVista.esquirlas) {
           const qx = ox + Math.cos(q.a) * q.v * e;
@@ -3831,15 +3862,17 @@ function arrancarNavegador () {
       // recordar mirando una esquina: se sabe la primera vez que caes. Un
       // recordatorio permanente solo sirve para sacarte de la cancion.
       if (avisoMuerte) {
-        const dt = (performance.now() - avisoMuerte.t) / 4200;
+        // mientras espera, el velo no se va: el reloj del aviso se queda quieto
+        const dt = esperando ? 0 : (performance.now() - avisoMuerte.t) / 4200;
+        if (esperando) avisoMuerte.t = performance.now();
         if (dt >= 1) avisoMuerte = null;
         else {
           const a = avisoMuerte;
           cx.save();
           cx.textAlign = 'center'; cx.globalAlpha = Math.min(1, 4 * (1 - dt));
-          // un velo sobre la corrida nueva: el diagnostico tiene que LEERSE, y
-          // atras ya arranco el compas 1 con sus teclas y su paisaje
-          cx.fillStyle = 'rgba(17,18,20,0.72)';
+          // el velo: el diagnostico tiene que LEERSE, y atras esta el compas 1
+          // de la corrida nueva, armado y congelado esperando tu mano
+          cx.fillStyle = esperando ? 'rgba(17,18,20,0.86)' : 'rgba(17,18,20,0.72)';
           cx.fillRect(0, 0, w, h);
           if (a.txt) {
             cx.fillStyle = C.esfera; cx.font = 'bold 15px system-ui';
@@ -3861,6 +3894,18 @@ function arrancarNavegador () {
           if (a.seccion) {
             cx.fillStyle = C.impulso; cx.font = '13px system-ui';
             cx.fillText(`▶  ensayar ${a.seccion}`, w / 2, h * 0.33 + 66);
+          }
+          // LAS TRES SALIDAS, dichas donde se decide. El informe se lee con el
+          // tiempo que haga falta y despues elegis: otra vez, ensayar el tramo,
+          // o el menu. Antes la unica salida era volver a morirse.
+          if (esperando) {
+            cx.fillStyle = C.esfera; cx.font = 'bold 14px system-ui';
+            cx.fillText('toca — otra vez', w / 2, h * 0.33 + 96);
+            cx.fillStyle = C.tenue; cx.font = '12px system-ui';
+            cx.fillText(a.seccion ? '→ ensaya ese tramo   ·   ESC vuelve al menu'
+              : 'ESC vuelve al menu', w / 2, h * 0.33 + 116);
+            // la franja de abajo es el menu para el que juega con el dedo
+            cx.fillText('▾ tocar aca abajo sale al menu', w / 2, h - 16);
           }
           // el diagnostico entero: el informe por seccion, con la de la
           // muerte señalada -- se ve QUE tramo esta flojo, no solo cuanto
@@ -3931,12 +3976,25 @@ function arrancarNavegador () {
           cx.textAlign = 'left';
         }
       }
-      cx.fillStyle = C.tenue; cx.fillRect(w - 132, 16, 120, 4);
-      cx.fillStyle = C.esfera; cx.fillRect(w - 132, 16, 120 * Math.min(1, s.x / LARGO), 4);
+      // LA BARRA DE PROGRESO, de lado a lado y pegada al borde de arriba. Eran
+      // 120 px en la esquina derecha, justo debajo del boton de pausa, que la
+      // tapaba: el unico dato de "cuanto falta de la cancion" estaba escondido
+      // atras de un boton. Arriba de todo no compite con nada, y a lo ancho de
+      // la pantalla el avance se lee sin buscarlo.
+      cx.fillStyle = C.tenue; cx.fillRect(0, 0, w, 3);
+      cx.fillStyle = C.esfera; cx.fillRect(0, 0, w * Math.min(1, s.x / LARGO), 3);
+      // las secciones, marcadas sobre la barra: se ve en que acto vas
+      for (const z of SECCIONES) {
+        if (!z.x0) continue;
+        cx.fillStyle = 'rgba(17,18,20,0.9)';
+        cx.fillRect(w * z.x0 / LARGO, 0, 1, 3);
+      }
 
       // El medidor: donde cayeron tus ultimos toques respecto del punto exacto.
       // Una nota suelta corrida no se siente; diez marcas todas del mismo lado si.
-      if (!s.meta) {
+      // mientras la muerte espera no se dibuja: mide los ultimos toques de una
+      // corrida que ya termino, y ahi abajo va el cartel de la salida al menu
+      if (!s.meta && !esperando) {
         const mw = 160, my = h - 24, RANGO = 0.33;      // el ancho son +-200 ms
         const banda = (AFINADO / RANGO) * mw;
         cx.fillStyle = C.tenue; cx.fillRect(w / 2 - mw / 2, my, mw, 2);

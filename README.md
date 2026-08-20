@@ -57,7 +57,7 @@ se agrega, se reparte.
 | tocar | cualquier tecla, o tocar la pantalla |
 | pausa | `Esc`, o el botón de la esquina |
 | saltar de sección | `←` `→` (marca la corrida como ENSAYO: no puntúa) |
-| tras morir, `→` | ensaya directo el tramo que te tiró |
+| tras morir | el informe espera: tocar reintenta · `→` ensaya el tramo · `Esc` al menú |
 | en la meta | tocar reintenta · `Esc` vuelve al menú |
 | elegir nivel | `1` `2` `3`, o tocar su parada en el mapa |
 | volver una pantalla | `Esc` |
