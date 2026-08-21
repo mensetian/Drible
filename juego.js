@@ -278,6 +278,13 @@ const CANCIONES = {
     // te deposita exactamente sobre la primera nota. Es la tesis del juego
     // dicha en la puerta: la esfera driblea, y driblar es tocar.
     tambores: [1, 2, 3],
+    // EL MAR DEL VUELO: el verso entero se navega sobre agua. La red ahi es
+    // superficie -- se dibuja como olas y recibe con chapuzon, no con golpe.
+    aguas: [{ x0: 84, x1: 116 }],
+    // EL VIENTO. En los dos huecos del corte (el tiempo mudo antes de cada
+    // drop) una columna de aire te acompaña la subida: el whoosh llena el
+    // silencio que el arreglo dejo a proposito, y te entrega al crash.
+    vientos: [{ x: 51.4 }, { x: 211.4 }],
     // EL TUNEL. Los dos compases del redoble de GRAVEDAD se atraviesan por
     // adentro: la banda se AHOGA (pasabajos sobre el fondo), tu bajo sigue
     // nitido -- tu instrumento viaja con vos -- y el riser trepa limpio por
@@ -851,6 +858,9 @@ export const ROCE = 0.13;          // debajo de esto vas rasante: te agarra el v
 const PESO = { x: 4, s: 3, c: 2, H: 1, h: 0 };
 export let TAMBORES = [];              // los parches del conteo: pique = bombo
 export let TUNELES = [];               // tramos que se atraviesan por adentro
+export let AGUAS = [];                 // tramos donde la red es superficie de agua
+export let VIENTOS = [];               // columnas de aire en los cortes
+export const enAgua = x => AGUAS.some(z => x >= z.x0 && x < z.x1);
 export let PASOS_PISTON = new Set();   // pasos reclamados por caños: llevan crater
 function pistones () {
   const r = [];
@@ -1038,6 +1048,8 @@ export function elegirCancion (id) {
   // 178 orbes se llevaban los golpes buenos y al caño le tocaba un hat.
   PASOS_BATERIA = new Set(); PASOS_BAJO = new Set(); PASOS_ARP = new Set(); PASOS_PISTON = new Set();
   TUNELES = c.tuneles || [];
+  AGUAS = c.aguas || [];
+  VIENTOS = c.vientos || [];
   TAMBORES = (c.tambores || []).map((b, i) => ({ x: b, y: PISO ? PISO.y : 0, i }));
   for (const tb of TAMBORES) PASOS_BATERIA.add(tb.x * 4);   // ese bombo es tuyo
   ZONAS_PISTON = c.pistones || [];
@@ -1074,6 +1086,7 @@ export function crearSim (opts = {}) {
     ligadaDe: -1,           // te dejaste caer desde esta: la caida cobra la nota
     anticipos: [],          // toques que todavia no encontraron tecla
     tamboresHechos: new Set(),   // parches del conteo ya rebotados
+    avisoCaida: false,      // ya aviso que cae al vacio: el desplome sono
     apretadoEn: -Infinity,  // donde empezo el apriete: distingue toque de sostenido
     falsoEn: -Infinity,     // el ultimo toque en falso: los seguidos agravan el castigo
     castigoNivel: 0,
@@ -1316,7 +1329,13 @@ export function paso (s, dt) {
     } else if (s.x > k.x1) {
       if (k.ligada) {                     // no se vuelve a atacar: se cae ligado
         if (k.riel) s.eventos.push({ tipo: 'rielCorta' });
-        if (s.tocadas.has(k.i)) s.ligadaDe = k.i;   // solo se liga lo que sonaste
+        if (s.tocadas.has(k.i)) {
+          s.ligadaDe = k.i;               // solo se liga lo que sonaste
+          const sigL = NOTAS[k.i + 1];
+          // el tobogan: la bajada se toca -- la corridita del glissando
+          if (sigL) s.eventos.push({ tipo: 'tobogan', desde: k.f, hasta: sigL.f,
+            dur: Math.sqrt(2 * Math.max(0.01, k.y - sigL.y) / G) });
+        }
         s.vy = 0; despegar(s, k);
       } else if (k.riel || k.piso) {          // el riel y la salida lanzan solos
         if (k.riel) s.eventos.push({ tipo: 'rielCorta' });
@@ -1375,6 +1394,10 @@ export function paso (s, dt) {
       s.eventos.push({ tipo: 'piston', modo: 'perdido', x: p.x, y: p.y, instr: p.instr, paso: p.paso });
   }
 
+  if (s.estado === 'aire' && !s.avisoCaida && s.vy < 0 && s.y < -0.02 && enHueco(s.x)) {
+    s.avisoCaida = true;                 // condenada: que el desplome suene YA
+    s.eventos.push({ tipo: 'caida', x: s.x, y: s.y });
+  }
   if (s.y < CAIDA_MUERTE) { s.viva = false; s.causa = 'hueco'; return; }
   for (const t of TECHOS) {
     if (s.x > t.x0 && s.x < t.x1 && s.y + 2 * R > t.y) { s.viva = false; s.causa = 'techo'; return; }
@@ -1690,6 +1713,7 @@ function arrancarNavegador () {
     return n;
   }
   let ac = null, master = null, voz = null, t0 = 0, proxBeat = 0;
+  let troncal = null;                 // la salida despues del master: la muerte entra por aca
   let solo = null, fondo = null;      // el que toca la esfera, y el arreglo
   let craterBus = null;               // el pozo que el arreglo abre para el caño
   let ecoRet = null, ecoLP = null, ecoFB = null, ecoMix = null;   // el eco de NEBULOSA
@@ -1782,12 +1806,16 @@ function arrancarNavegador () {
   // la esfera se ve morir: esquirlas en coordenadas de PANTALLA (sobreviven al
   // teletransporte de la camara a x=0) -- y la meta se revela por tiempos
   let muerteVista = null, metaEn = 0;
+  let muerteSonada = false;             // el desplome ya sono (aviso de caida)
+  let muerteEn = 0;                     // cuando murio: el respiro antes del informe
   // Las teclas son un instrumento, no un piso: se hunden con el peso de la
   // esfera y vuelven solas. La que se esta pisando comparte el mismo resorte
   // que la esfera --por eso bajan juntas-- y al soltarla vuelve sola.
   const teclaHundida = new Map();
   let pump = 0, padLuz = 0, tinte = [70, 90, 150], brilloRacha = 0;
   let fugaz = null, auroraLuz = 0;    // la estrella del crash, y el cielo de NEBULOSA
+  let sacudida = 0;                   // la camara tiembla: muerte y golpes grandes
+  const vientosHechos = new Set();    // columnas ya sopladas (se rearman al volver atras)
   // Las tres capas del horizonte: cuanto se mueven (f), cuanto se achatan (k),
   // a que altura arrancan y cada cuantas notas toman un pico. La de mas lejos
   // toma una nota de cada seis: de lejos se ve la FORMA de la cancion, no sus
@@ -1881,6 +1909,7 @@ function arrancarNavegador () {
     if (!ac) {
       ac = new (window.AudioContext || window.webkitAudioContext)();
       const comp = ac.createDynamicsCompressor();
+      troncal = comp;
       master = ac.createGain();
       master.gain.value = 0.8;
       master.connect(comp).connect(ac.destination);
@@ -2038,10 +2067,14 @@ function arrancarNavegador () {
     const sonando = corriendo && s.viva && !s.meta && s.estado === 'apoyada';
     const obj = !sonando ? 0.0001 : k ? (k.riel ? 0.05 : 0.035) : 0.018;
     rodada.g.gain.setTargetAtTime(obj, ac.currentTime, 0.035);
-    // el roce respira: una superficie real no da un tono fijo
+    // el roce respira: una superficie real no da un tono fijo. Y el agua es
+    // OTRA superficie: rodar por el mar del vuelo suena hondo y gorgoteante,
+    // no al siseo seco de la red.
     const vv = 1 + 0.13 * Math.sin(vaiven) + 0.05 * Math.sin(vaiven * 2.7);
+    const agua = !k && enAgua(s.x);
     rodada.bq.frequency.setTargetAtTime(
-      (k ? Math.min(3800, 650 + (k.y - Y_GRAVE) * 5600) : 700) * vv, ac.currentTime, 0.06);
+      (k ? Math.min(3800, 650 + (k.y - Y_GRAVE) * 5600) : agua ? 320 : 700) *
+      (agua ? vv * (1 + 0.2 * Math.sin(vaiven * 5.3)) : vv), ac.currentTime, 0.06);
   }
 
   // EL MATIZ SE TOCA. La queja real era "la nota a veces empieza muy seca":
@@ -2619,15 +2652,16 @@ function arrancarNavegador () {
 
   function sonarMuerte () {
     const t = ac.currentTime;
-    // la banda se CORTA: todo lo agendado sigue existiendo, pero el bus del
-    // arreglo se hunde en 200 ms. El silencio subito es la mitad del golpe.
-    if (fondo) {
-      const g = fondo.gain;
-      g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
-      g.linearRampToValueAtTime(0.0001, t + 0.2);
-    }
+    // TODO lo que sonaba se hunde: el master entero baja en 200 ms. No alcanza
+    // con el bus del arreglo -- la bateria de ESFERA va directo al master y lo
+    // ya agendado seguia tapando la muerte. El silencio subito es la mitad del
+    // golpe, y tiene que ser silencio de verdad.
+    const g0 = master.gain;
+    g0.cancelScheduledValues(t); g0.setValueAtTime(g0.value, t);
+    g0.linearRampToValueAtTime(0.001, t + 0.2);
     // el apagon: la corriente que se va -- dos voces cayendo dos octavas y pico
     // con el filtro cerrandose encima. El gesto universal de "se termino".
+    // Entra DESPUES del master, directo al compresor: se hunde todo menos el.
     for (const [f0, tipo, gv] of [[196, 'sawtooth', 0.3], [98, 'square', 0.2]]) {
       const o = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter();
       o.type = tipo; o.frequency.setValueAtTime(f0, t);
@@ -2637,20 +2671,29 @@ function arrancarNavegador () {
       lp.frequency.exponentialRampToValueAtTime(140, t + 0.8);
       g.gain.setValueAtTime(gv, t);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
-      o.connect(lp).connect(g).connect(master);
+      o.connect(lp).connect(g).connect(troncal);
       o.start(t); o.stop(t + 0.95);
     }
     // ...y el cuerpo tocando el piso: el boom grave y el polvo que levanta
-    golpe(t + 0.06, 48, 0.55, 0.5);
-    ruido(t + 0.04, 0.35, 0.3, 'lowpass', 750);
+    const ob = ac.createOscillator(), gb = ac.createGain();
+    ob.type = 'sine'; ob.frequency.setValueAtTime(52, t + 0.06);
+    ob.frequency.exponentialRampToValueAtTime(30, t + 0.5);
+    gb.gain.setValueAtTime(0.5, t + 0.06);
+    gb.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+    ob.connect(gb).connect(troncal); ob.start(t + 0.06); ob.stop(t + 0.65);
+    ruido(t + 0.04, 0.35, 0.3, 'lowpass', 750, 1, troncal);
   }
   // la banda vuelve: el corte de la muerte no puede quedar pegado al proximo
   // intento -- el primer compas de la corrida nueva sale con el arreglo entero
   function bandaVuelve () {
-    if (!fondo || !ac) return;
+    if (!ac || !master) return;
     const t = ac.currentTime;
-    fondo.gain.cancelScheduledValues(t);
-    fondo.gain.setValueAtTime(1, t);
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(0.8, t);
+    if (fondo) {
+      fondo.gain.cancelScheduledValues(t);
+      fondo.gain.setValueAtTime(1, t);
+    }
   }
 
   function sonarFinal () {
@@ -2869,6 +2912,15 @@ function arrancarNavegador () {
           aprendidas.add('sordo');
           leccionViva = { txt: 'Martillaste — el botón quedó sordo un instante', t: performance.now() };
         }
+      } else if (e.tipo === 'tobogan') {
+        // la corridita: tres notas entre la larga y la que espera abajo,
+        // repartidas en el tiempo exacto de la caida. Bajito: es un adorno.
+        for (let i = 1; i <= 3; i++) {
+          const f = e.desde * Math.pow(e.hasta / e.desde, i / 4);
+          lead(ac.currentTime + e.dur * SPB * (i / 4) * 0.9, f, 0.09, 0.1, 0, 0);
+        }
+      } else if (e.tipo === 'caida') {
+        if (!muerteSonada) { muerteSonada = true; sonarMuerte(); }
       } else if (e.tipo === 'tambor') {
         // el bombo es tuyo: por el bus del solista, y el arreglo se agacha
         golpeDeLaEsfera('K', ac.currentTime);
@@ -2893,8 +2945,16 @@ function arrancarNavegador () {
         squash = 0.5 + 0.5 * Math.min(1, e.impacto);
         asientoV = -Math.min(1.1, e.impacto) * 0.5;
       } else if (e.tipo === 'red') {
-        ruido(ac.currentTime, 0.09, 0.09, 'lowpass', 700); squash = 0.9;
-        chispas(e.x, 0, 5);
+        if (enAgua(e.x)) {
+          // el chapuzon: grave y redondo, el bloop que se hunde, y burbujas
+          ruido(ac.currentTime, 0.18, 0.13, 'lowpass', 420);
+          eBeep(ac.currentTime, 300, 0.2, 'sine', 0.1, 120);
+          chispas(e.x, 0, 10, true, '110,200,235');
+        } else {
+          ruido(ac.currentTime, 0.09, 0.09, 'lowpass', 700);
+          chispas(e.x, 0, 5);
+        }
+        squash = 0.9;
         // la primera caida merece su leccion: la red no es el final, es un
         // toque de distancia de la cancion. Dos veces y basta -- al que no
         // reacciona no lo convence la tercera, y el cartel pasa a ser ruido.
@@ -2930,6 +2990,7 @@ function arrancarNavegador () {
   let esperando = false;
   function reanudarMuerte () {
     if (!esperando) return;
+    if (performance.now() - muerteEn < 800) return;   // el respiro: la muerte se ve entera
     esperando = false;
     avisoMuerte = null;
     try { ac.resume(); } catch (_) {}
@@ -2975,18 +3036,20 @@ function arrancarNavegador () {
     // teletransporto a la salida cuando esto se dibuja) y el flash se tiñe
     muerteVista = {
       y: s.y, t: performance.now(),
-      esquirlas: Array.from({ length: 14 }, () => ({
-        a: Math.random() * Math.PI * 2, v: 60 + Math.random() * 160
+      esquirlas: Array.from({ length: 18 }, () => ({
+        a: Math.random() * Math.PI * 2, v: 60 + Math.random() * 200
       }))
     };
+    sacudida = 1;                       // el golpe se siente en la camara
     flashRGB = '255,120,90';
     s = crearSim({ sinRed });
     // el mundo queda armado en la salida, pero quieto: el reloj del audio se
     // suspende y con el cuelga todo, asi que al reanudar no hay nada corrido
     esperando = true;
+    muerteEn = performance.now();
     t0 = ac.currentTime + 1.0;
     proxBeat = 0;
-    try { ac.suspend(); } catch (_) {}
+    setTimeout(() => { if (esperando) try { ac.suspend(); } catch (_) {} }, 1600);
     estela.length = 0; rotos.length = 0; rastroEco.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
@@ -3466,8 +3529,16 @@ function arrancarNavegador () {
       const dentro = TUNELES.some(z => s.x >= z.x0 && s.x < z.x1);
       tunelLP.frequency.setTargetAtTime(dentro ? 460 : 18000, ac.currentTime, dentro ? 0.3 : 0.05);
     }
+    // el viento sopla al cruzarlo -- una vez por pasada, y se rearma si volves
+    for (const v of VIENTOS) {
+      if (s.x >= v.x && s.x < v.x + 1.2 && !vientosHechos.has(v.x)) {
+        vientosHechos.add(v.x);
+        eRiser(ac.currentTime, 0.55);
+        chispas(s.x + 0.15, Math.max(0.1, s.y), 12, true, '180,220,255');
+      } else if (s.x < v.x - 1) vientosHechos.delete(v.x);
+    }
     procesar();
-    if (!s.viva) { sonarMuerte(); morirOReiniciar(); }
+    if (!s.viva) { if (!muerteSonada) sonarMuerte(); muerteSonada = false; morirOReiniciar(); }
     if (s.meta && !finSonado) {
       finSonado = true; rielCerrar(); eRielCerrar(); sonarFinal();
       metaEn = performance.now(); flash = 1; flashRGB = '255,215,130';
@@ -3707,14 +3778,30 @@ function arrancarNavegador () {
     const p = pos(t);
     cx.strokeStyle = C.red; cx.lineWidth = 1;
     cx.beginPath(); cx.moveTo(cxp - rr * 3.6, cyp + rr); cx.lineTo(cxp + rr * 3.6, cyp + rr); cx.stroke();
-    if (mira.estela !== 2) {
-      const gotas = mira.estela === 1;
-      for (let i = 8; i >= 1; i--) {
-        const q = pos(t - i * 0.09), f = 1 - i / 9;
-        // mas brillante que en juego: aca la estela es LA mercaderia
-        cx.fillStyle = `rgba(${C.esferaRGB},${(gotas ? 0.5 : 0.28) * f})`;
+    if (mira.estela === 0) {
+      // la cinta de la cometa, mas brillante que en juego: aca es LA mercaderia
+      const N = 9;
+      for (const [wf, aA] of [[0.8, 0.12], [0.4, 0.26]]) {
         cx.beginPath();
-        cx.arc(q.x, q.y, rr * (gotas ? 0.16 + 0.30 * f : 0.35 + 0.55 * f), 0, Math.PI * 2);
+        for (let i = N; i >= 1; i--) {
+          const q = pos(t - i * 0.06), f = 1 - i / (N + 1);
+          if (i === N) cx.moveTo(q.x, q.y - rr * wf * f);
+          else cx.lineTo(q.x, q.y - rr * wf * f);
+        }
+        for (let i = 1; i <= N; i++) {
+          const q = pos(t - i * 0.06), f = 1 - i / (N + 1);
+          cx.lineTo(q.x, q.y + rr * wf * f);
+        }
+        cx.closePath();
+        cx.fillStyle = `rgba(${C.esferaRGB},${aA})`; cx.fill();
+      }
+    } else if (mira.estela === 1) {
+      for (let i = 1; i <= 8; i++) {
+        const q = pos(t - i * 0.08), edad = i / 8;
+        cx.fillStyle = `rgba(${C.esferaRGB},${0.55 * (1 - edad)})`;
+        cx.beginPath();
+        cx.ellipse(q.x + Math.sin(i * 3.7) * 2.5, q.y + edad * edad * 20,
+          rr * (0.10 + 0.14 * (1 - edad)), rr * (0.14 + 0.18 * (1 - edad)), 0, 0, Math.PI * 2);
         cx.fill();
       }
     }
@@ -4020,7 +4107,13 @@ function arrancarNavegador () {
   function dibujar (dtSeg) {
     const w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
     if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
-    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // la sacudida vive en la transformacion: tiembla el mundo entero, no un
+    // dibujo. Decae sola y en reposo es exactamente cero.
+    sacudida = Math.max(0, sacudida - dtSeg * 2.4);
+    const tS = performance.now() / 1000;
+    const sacX = sacudida > 0 ? Math.sin(tS * 87) * 7 * sacudida * sacudida : 0;
+    const sacY = sacudida > 0 ? Math.cos(tS * 71) * 5 * sacudida * sacudida : 0;
+    cx.setTransform(dpr, 0, 0, dpr, sacX * dpr, sacY * dpr);
     cx.fillStyle = C.fondo; cx.fillRect(0, 0, w, h);
 
     // EL ZOOM. Nueve tiempos a lo ancho dejaban todo chico y la mitad de arriba
@@ -4297,9 +4390,39 @@ function arrancarNavegador () {
       corre = Math.max(corre, b);
     }
     if (corre < V1) vacios.push([corre, V1]);
-    cx.strokeStyle = `rgba(232,230,224,${0.14 + 0.12 * padLuz})`; cx.lineWidth = 2;
+    // la red seca es una linea; el MAR es olas que se mueven solas. Cada
+    // tramo de red se dibuja segun el terreno que la partitura le puso.
+    const tOla = performance.now() / 1000;
     for (const [a, b] of conRed) {
-      cx.beginPath(); cx.moveTo(px(a), py(0)); cx.lineTo(px(b), py(0)); cx.stroke();
+      let corte = a;
+      const tramos = [];
+      for (const az of AGUAS) {
+        const w0 = Math.max(corte, az.x0), w1 = Math.min(b, az.x1);
+        if (w1 <= w0) continue;
+        if (w0 > corte) tramos.push([corte, w0, false]);
+        tramos.push([w0, w1, true]);
+        corte = w1;
+      }
+      if (corte < b) tramos.push([corte, b, false]);
+      for (const [a2, b2, esAgua] of tramos) {
+        if (!esAgua) {
+          cx.strokeStyle = `rgba(232,230,224,${0.14 + 0.12 * padLuz})`; cx.lineWidth = 2;
+          cx.beginPath(); cx.moveTo(px(a2), py(0)); cx.lineTo(px(b2), py(0)); cx.stroke();
+          continue;
+        }
+        // la superficie: dos olas desfasadas, y un cuerpo de agua debajo
+        cx.fillStyle = 'rgba(110,200,235,0.08)';
+        cx.fillRect(px(a2), py(0), (b2 - a2) * esc, 14);
+        for (const [amp, vel, aA] of [[2.6, 1.6, 0.55], [1.6, -2.3, 0.30]]) {
+          cx.strokeStyle = `rgba(110,200,235,${aA})`; cx.lineWidth = 1.8;
+          cx.beginPath();
+          for (let xx = a2; xx <= b2 + 0.001; xx += 0.12) {
+            const Y = py(0) + Math.sin(xx * 5.2 + tOla * vel) * amp;
+            if (xx === a2) cx.moveTo(px(xx), Y); else cx.lineTo(px(xx), Y);
+          }
+          cx.stroke();
+        }
+      }
     }
     // compases
     cx.strokeStyle = C.tenue; cx.lineWidth = 1;
@@ -4311,6 +4434,24 @@ function arrancarNavegador () {
     // aparece: el cartel que la anuncia, el informe y esta marca del piso
     for (const z of SECCIONES) rotulo(z.n.toUpperCase(), px(z.x0) + 8, py(0) + 30, 'left', C.tenue);
     cx.textAlign = 'left';
+
+    // EL CAÑON DE VIENTO SE VE VENIR: una columna de rachas subiendo, del
+    // ancho del hueco que va a llenar. Cada racha es un trazo que nace abajo,
+    // sube acelerando y se desvanece -- aire, no un objeto.
+    for (const v of VIENTOS) {
+      if (v.x < s.x - 3 || v.x > s.x + 7) continue;
+      const vx = px(v.x + 0.3), tV = performance.now() / 1000;
+      for (let i = 0; i < 9; i++) {
+        const fase = (tV * (0.55 + (i % 3) * 0.2) + i * 0.31) % 1;
+        const X = vx + Math.sin(i * 2.3) * 0.22 * esc + fase * 6;
+        const Y0 = py(0) - fase * esc * 1.35;
+        const alto = 14 + fase * 26;
+        const aA = 0.28 * Math.sin(fase * Math.PI);
+        cx.strokeStyle = `rgba(180,220,255,${aA})`;
+        cx.lineWidth = 1.6;
+        cx.beginPath(); cx.moveTo(X, Y0); cx.lineTo(X + 4, Y0 - alto); cx.stroke();
+      }
+    }
 
     // EL TUNEL SE VE: la penumbra adentro, el lomo, las costillas y las dos
     // bocas. Cero fisica -- es un lugar, y se nota entrando (el sonido se
@@ -4675,15 +4816,28 @@ function arrancarNavegador () {
         // hacia arriba y la banda clara dice desde donde podes soltar: la
         // rampa se explica sola.
       }
-      if (k.ligada) {                             // el arco de ligadura: aca se cae
+      if (k.ligada) {                             // EL TOBOGAN: aca se cae tocando
+        // la rampa es la parabola REAL de la caida libre desde el borde: lo
+        // que se dibuja es exactamente por donde va a pasar la esfera
         const sig = NOTAS[k.i + 1];
-        cx.strokeStyle = `rgba(${C.teclaRGB},${sono ? 0.75 : 0.4})`;
-        cx.lineWidth = 2; cx.setLineDash([4, 4]);
+        const T = Math.sqrt(2 * Math.max(0.001, k.y - sig.y) / G);
+        const punto = q => ({ X: px(k.x1 + T * q), Y: py(k.y - G / 2 * (T * q) * (T * q)) });
+        cx.strokeStyle = `rgba(${C.teclaRGB},${sono ? 0.8 : 0.5})`;
+        cx.lineWidth = 2.5;
         cx.beginPath();
-        cx.moveTo(px(k.x1), py(k.y));
-        cx.quadraticCurveTo(px(k.x1), py(sig.y), px(sig.x0), py(sig.y));
+        for (let q = 0; q <= 1.001; q += 0.125) {
+          const p2 = punto(q);
+          if (q === 0) cx.moveTo(p2.X, p2.Y); else cx.lineTo(p2.X, p2.Y);
+        }
         cx.stroke();
-        cx.setLineDash([]);
+        // los travesaños: es una rampa con peldaños, no un alambre suelto
+        cx.lineWidth = 1.5;
+        cx.beginPath();
+        for (let q = 0.22; q < 1; q += 0.26) {
+          const p2 = punto(q);
+          cx.moveTo(p2.X - 5, p2.Y + 5); cx.lineTo(p2.X + 5, p2.Y + 5);
+        }
+        cx.stroke();
       }
       if (aqui && !sono) {                        // la ventana abierta, bien visible
         cx.strokeStyle = `rgba(${C.teclaRGB},0.9)`; cx.lineWidth = 2;
@@ -4826,14 +4980,35 @@ function arrancarNavegador () {
     // los fantasmas del rastro, detras de la esfera -- con la forma que
     // elegiste en la entrada. Nunca mas fuerte que eso: la estela es adorno y
     // el arco de la esfera es informacion.
-    if (mira.estela !== 2) {
-      const gotas = mira.estela === 1;
-      for (let i = 0; i < estela.length; i++) {
-        const f = (i + 1) / estela.length;
-        cx.fillStyle = `rgba(${C.esferaRGB},${gotas ? f * f * 0.22 : f * f * 0.13})`;
-        const rr = R * esc * (gotas ? 0.16 + 0.30 * f : 0.35 + 0.55 * f);
+    if (mira.estela === 0 && estela.length > 2) {
+      // la cometa: una cinta que nace ancha en la esfera y muere en nada
+      for (const [wf, aA] of [[0.8, 0.08], [0.4, 0.18]]) {
         cx.beginPath();
-        cx.ellipse(px(estela[i].x), py(estela[i].y), rr, rr, 0, 0, Math.PI * 2);
+        for (let i = 0; i < estela.length; i++) {
+          const f = (i + 1) / estela.length;
+          const X = px(estela[i].x), Y = py(estela[i].y);
+          const wdt = R * esc * wf * f;
+          if (i === 0) cx.moveTo(X, Y - wdt); else cx.lineTo(X, Y - wdt);
+        }
+        for (let i = estela.length - 1; i >= 0; i--) {
+          const f = (i + 1) / estela.length;
+          cx.lineTo(px(estela[i].x), py(estela[i].y) + R * esc * wf * f);
+        }
+        cx.closePath();
+        cx.fillStyle = `rgba(${C.esferaRGB},${aA})`;
+        cx.fill();
+      }
+    } else if (mira.estela === 1) {
+      // las gotas: se sueltan del arco y CAEN, cada una mas hundida y mas
+      // apagada cuanto mas vieja -- lluvia que la esfera va dejando
+      for (let i = 0; i < estela.length; i++) {
+        const edad = (estela.length - i) / estela.length;
+        const X = px(estela[i].x) + Math.sin(i * 3.7) * 3;
+        const Y = py(estela[i].y) + edad * edad * 38;
+        cx.fillStyle = `rgba(${C.esferaRGB},${0.5 * (1 - edad)})`;
+        cx.beginPath();
+        cx.ellipse(X, Y, R * esc * (0.09 + 0.13 * (1 - edad)),
+          R * esc * (0.13 + 0.16 * (1 - edad)), 0, 0, Math.PI * 2);
         cx.fill();
       }
     }
@@ -4884,17 +5059,41 @@ function arrancarNavegador () {
       cx.stroke();
     }
 
-    // las esquirlas de la muerte: caen con gravedad de pantalla y se apagan
+    // EL CINE DE LA MUERTE, en pantalla (la camara ya volvio a la salida):
+    // la esfera fantasma sigue cayendo, estirada por la velocidad; la onda
+    // expansiva dice DONDE; las esquirlas vuelan y caen con su gravedad.
     if (muerteVista) {
-      const e = (performance.now() - muerteVista.t) / 600;
+      const e = (performance.now() - muerteVista.t) / 900;
       if (e >= 1) muerteVista = null;
       else {
         const ox = 1.9 * esc, oy = py(muerteVista.y + R);
+        // la onda expansiva: un aro que crece y se apaga, rapido
+        if (e < 0.5) {
+          cx.strokeStyle = `rgba(255,160,120,${0.7 * (1 - e * 2)})`;
+          cx.lineWidth = 3 - e * 4;
+          cx.beginPath(); cx.arc(ox, oy, 14 + e * 260, 0, Math.PI * 2); cx.stroke();
+        }
+        // la esfera fantasma: cae acelerando, estirada en vertical, y se apaga
+        const gy = oy + 640 * e * e;
+        if (gy < h + 60) {
+          const est = 1 + e * 1.6;
+          cx.fillStyle = `rgba(${C.esferaRGB},${0.85 * (1 - e)})`;
+          cx.beginPath();
+          cx.ellipse(ox, gy, R * esc / Math.sqrt(est), R * esc * est, 0, 0, Math.PI * 2);
+          cx.fill();
+          // el rastro del desplome: una cinta que se afina hacia arriba
+          const cola = Math.min(90, 640 * e * e);
+          const grd = cx.createLinearGradient(0, gy - cola, 0, gy);
+          grd.addColorStop(0, `rgba(${C.esferaRGB},0)`);
+          grd.addColorStop(1, `rgba(${C.esferaRGB},${0.35 * (1 - e)})`);
+          cx.fillStyle = grd;
+          cx.fillRect(ox - R * esc * 0.35, gy - cola, R * esc * 0.7, cola);
+        }
         cx.fillStyle = `rgba(${C.esferaRGB},${0.9 * (1 - e)})`;
         for (const q of muerteVista.esquirlas) {
           const qx = ox + Math.cos(q.a) * q.v * e;
-          const qy = oy + Math.sin(q.a) * q.v * e + 240 * e * e;
-          cx.beginPath(); cx.arc(qx, qy, 3 * (1 - e * 0.6), 0, Math.PI * 2); cx.fill();
+          const qy = oy + Math.sin(q.a) * q.v * e + 300 * e * e;
+          cx.beginPath(); cx.arc(qx, qy, 3.2 * (1 - e * 0.6), 0, Math.PI * 2); cx.fill();
         }
       }
     }
@@ -4933,7 +5132,11 @@ function arrancarNavegador () {
         const dt = esperando ? 0 : (performance.now() - avisoMuerte.t) / 4200;
         if (esperando) avisoMuerte.t = performance.now();
         if (dt >= 1) avisoMuerte = null;
-        else {
+        else if (performance.now() - muerteEn < 800) {
+          // el cine de la muerte: velo apenas, sin panel -- la caida al frente
+          cx.fillStyle = `rgba(17,18,20,${0.5 * Math.min(1, (performance.now() - muerteEn) / 800)})`;
+          cx.fillRect(0, 0, w, h);
+        } else {
           const a = avisoMuerte;
           botonesMuerte.length = 0;
           cx.save();

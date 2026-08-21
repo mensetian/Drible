@@ -283,6 +283,12 @@ probar('el record se guarda, se lee, y sin red es lo normal', () => {
 probar('morir espera: el informe se queda hasta que decidas', () => {
   // viene de la prueba anterior con la red sacada, asi que no tocar nada mata
   correrCuadros(900);
+  // la muerte RESPIRA 800 ms de reloj de pared antes de mostrar el informe
+  // (el cine de la caida). El respiro corre en tiempo real, asi que la prueba
+  // tambien tiene que dejarlo pasar.
+  const t1 = performance.now();
+  while (performance.now() - t1 < 900);
+  correrCuadros(30);
   exigir(dijo('OTRA VEZ'), 'la muerte no ofrecio volver a intentar');
   exigir(dijo('◀  Menú'), 'la muerte no ofrecio la salida al menu');
   const veces = textos.filter(t => t.includes('OTRA VEZ')).length;
