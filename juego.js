@@ -195,7 +195,13 @@ const CANCIONES = {
       'A4:2 C5:2',                                        // 45  F   la respuesta sube
       'B4:1 D5:1 G5:2',                                   // 46  G   la triada, subiendo al techo
       'E5:2 C5:2',                                        // 47  Am  y baja
-      'A4:4',                                             // 48  Am  la tonica, sostenida
+      // EL CORTE. La tonica cae en el 1 y despues no queda NADA: tres tiempos
+      // de vacio con la esfera abajo, en la red, driblando el bombo sola. Es
+      // el gesto mas viejo y mas efectivo de la musica de baile --sacar todo
+      // para que lo que vuelve reviente-- y aca ademas lo toca el jugador con
+      // el cuerpo, que es la tesis del juego dicha en el peor momento posible
+      // para dudar: justo antes del build mas grande.
+      'A4:1 -:3',                                         // 48  Am  EL CORTE
       // EMPUJE FINAL -- el build mas grande: el bajo TREPA (el patron climb del
       // estudio, ocho corcheas por compas) y arriba se arma el redoble.
       'D4!:.5 D4!:.5 F4!:.5 F4!:.5 G4!:.5 G4!:.5 A4!:.5 C5!:.5',        // 49  Dm
@@ -219,7 +225,11 @@ const CANCIONES = {
       'C5:1 D5:1 E5:1 G5:1',                              // 61  F   aterrizaje
       'D5:.5 B4:.5 D5:3',                                 // 62  G
       'A5:4',                                             // 63  Am  el grito agudo
-      'E5:1 C5:1 A4:2'                                    // 64  Am  resuelve en La
+      'E5:1 C5:1 A4:2',                                   // 64  Am  resuelve en La
+      // LA VUELTA. Resuelto el tema, quedan cuatro tiempos de nada y la esfera
+      // rodando hasta la meta. Tres parches mas: el ultimo sonido de AURORA es
+      // tu propio bombo cruzando la linea, no un fundido.
+      '-:4'                                               // 65  Am  la vuelta
     ],
     acordes: [
       'Am',
@@ -233,7 +243,7 @@ const CANCIONES = {
       'F', 'G', 'Am', 'Am', 'F', 'G', 'Am', 'Am', // nebulosa
       'Dm', 'E', 'F', 'E',                        // empuje final
       'Am', 'F', 'C', 'G', 'Am', 'F', 'C', 'G',   // supernova
-      'F', 'G', 'Am', 'Am'                        // aterrizaje
+      'F', 'G', 'Am', 'Am', 'Am'                  // aterrizaje + la vuelta
     ],
     // El matiz por seccion: el arco del viaje, escrito. El amanecer se toca
     // dolce, los drops con pua, la nebulosa flota (y ademas cambia a cristal),
@@ -261,7 +271,7 @@ const CANCIONES = {
     // cobra con un susto. NEBULOSA si los lleva --sus hilos de 4 tiempos son
     // los rieles mas largos de la cancion y ahi sostener vale la vida-- salvo
     // los que entran despues de un silencio, que los saca la ley de arriba.
-    sinAbismo: [{ x0: 244, x1: 260 }],
+    sinAbismo: [{ x0: 244, x1: 264 }],
     // NEBULOSA cambia de INSTRUMENTO. Es la unica seccion que no empuja: la
     // bateria calla, quedan pad y arpegio, y la esfera sostiene hilos de cuatro
     // tiempos. Con la voz de siempre --cuadrada seca, de ataque-- esos hilos
@@ -277,10 +287,31 @@ const CANCIONES = {
     // conteo (el paso queda reclamado: el arreglo ahi calla). El ultimo pique
     // te deposita exactamente sobre la primera nota. Es la tesis del juego
     // dicha en la puerta: la esfera driblea, y driblar es tocar.
-    tambores: [1, 2, 3],
+    // LOS PARCHES. Tres en la salida (el conteo), dos en EL CORTE del compas
+    // 48 y tres en la vuelta final. Cada uno hace picar la esfera un pulso
+    // exacto, asi que el proximo pique cae en el proximo parche: la esfera
+    // driblea sola, en tiempo, y cada pique ES el bombo que el arreglo callo.
+    // El marcado `lanza` es el ultimo de una tanda: en vez de picar en el
+    // lugar, te devuelve a la linea de vuelo de la proxima tecla -- el golpe
+    // que te mete de nuevo en la cancion.
+    tambores: [1, 2, 3, 194, { x: 195, lanza: true }, 261, 262, 263],
     // EL MAR DEL VUELO: el verso entero se navega sobre agua. La red ahi es
     // superficie -- se dibuja como olas y recibe con chapuzon, no con golpe.
     aguas: [{ x0: 84, x1: 116 }],
+    // EL VIAJE PASA POR LUGARES. Abajo de las plataformas no hay un vacio
+    // generico: hay un sitio, y cambia con la seccion. Sale del bosque al
+    // amanecer, cruza la ciudad cuando arranca el motor, navega el mar en el
+    // vuelo, sube la cordillera en GRAVEDAD, atraviesa el desierto hacia
+    // SUPERNOVA y vuelve a la ciudad para aterrizar. NEBULOSA no lleva nada:
+    // ahi abajo no hay suelo porque estas en el espacio, y el hueco en la
+    // lista es la unica forma honesta de decirlo.
+    terrenos: [
+      { x0: -6, x1: 36, t: 'bosque' },
+      { x0: 36, x1: 84, t: 'ciudad' },
+      { x0: 116, x1: 164, t: 'montania' },
+      { x0: 196, x1: 244, t: 'desierto' },
+      { x0: 244, x1: 268, t: 'ciudad' }
+    ],
     // EL VIENTO. En los dos huecos del corte (el tiempo mudo antes de cada
     // drop) una columna de aire te acompaña la subida: el whoosh llena el
     // silencio que el arreglo dejo a proposito, y te entrega al crash.
@@ -341,7 +372,10 @@ const CANCIONES = {
       if (c <= 42) return { drums: 'silencio', arp: 'soft8', arpGan: 0.75, pad: true };
       if (c <= 44) return { drums: 'pulso', arp: 'soft8', arpGan: 0.75, pad: true };
       if (c <= 46) return { drums: 'pulso', bajo: 'pulso', arp: 'soft8', arpGan: 0.8, pad: true };
-      if (c <= 48) return { drums: 'hats', bajo: 'pulso', arp: 'soft8', arpGan: 0.8, pad: true };
+      if (c === 47) return { drums: 'hats', bajo: 'pulso', arp: 'soft8', arpGan: 0.8, pad: true };
+      // el CORTE: un bombo en el 1 y se va todo. Lo unico que suena en los
+      // tres tiempos que siguen son el pad y los parches que driblea la esfera
+      if (c === 48) return { drums: 'corte', pad: true };
       // EMPUJE FINAL: el build mas grande -- dos compases de redoble y riser
       if (c <= 50) return { drums: 'coro', bajo: 'climb', arp: 'up16', pad: true, riser: c === 50 ? 3 : 0 };
       // ...y el corte grande antes de SUPERNOVA: mismo trato, mas caida
@@ -352,6 +386,7 @@ const CANCIONES = {
       if (c <= 62) return { drums: 'outro', bajo: 'pulso', arp: 'glitter', pad: true, crash: c === 61 };
       if (c === 63) return { drums: 'pulso', bajo: 'pulso', arp: 'glitter', pad: true };
       if (c === 64) return { drums: 'silencio', bajo: 'pulso', arp: 'glitter', pad: true };
+      if (c === 65) return { drums: 'silencio', pad: true };   // la vuelta: solo vos
       return null;
     }
   }
@@ -362,6 +397,7 @@ const CANCIONES = {
 // x k+s+c · h hat · H hat abierto · u/T/t toms · . nada.
 const E_BATERIA = {
   cuenta: 'k...k...k...k...',
+  corte: 'k...............',            // el 1, y despues el vacio
   silencio: '................',
   pulso: 'k.......k.......',
   hats: 'h...h...h...h.h.',
@@ -702,6 +738,9 @@ export const enArpegio = x => ARPEGIOS.some(z => x > z.x0 && x < z.x1);
 // cancion: ahi abajo la red sigue estando, en todo el resto no.
 export let TRAMOS_RODAR = [];
 export const mandaRodar = x => TRAMOS_RODAR.some(t => x >= t.x0 && x <= t.x1);
+// Hay un parche de red esperando aca nomas: el corte todavia no termino.
+const parcheAdelante = s => TAMBORES.some(tb => !tb.piso &&
+  !s.tamboresHechos.has(tb.i) && tb.x > s.x - 0.4 && tb.x - s.x < 2.6);
 function tramosRodar () {
   const r = [];
   for (const n of NOTAS) {
@@ -815,7 +854,10 @@ function reenganche (n) {
 const calcularTechos = () => NOTAS
   .filter(n => n.silencio && !n.piso && n.dur >= 2 && !n.volado && reenganche(n) &&
     // en una zona de dribleo el silencio se JUEGA (se pica al beat): sin techo
-    !ARPEGIOS.some(z => n.x0 < z.x1 && n.x0 + n.dur > z.x0))
+    !ARPEGIOS.some(z => n.x0 < z.x1 && n.x0 + n.dur > z.x0) &&
+    // ...y sobre un CORTE tampoco: ahi la esfera pica sola, un pulso por
+    // parche, y un techo a 0.19 la mataria en el primer pique
+    !TAMBORES.some(tb => !tb.piso && tb.x > n.x0 && tb.x < n.x0 + n.dur))
   .map(n => {
     const ant = NOTAS[n.i - 1];
     const caida = ant && !ant.silencio ? Math.sqrt(2 * ant.y / G) : 0.4;
@@ -869,6 +911,8 @@ const PESO = { x: 4, s: 3, c: 2, H: 1, h: 0 };
 export let TAMBORES = [];              // los parches del conteo: pique = bombo
 export let TUNELES = [];               // tramos que se atraviesan por adentro
 export let AGUAS = [];                 // tramos donde la red es superficie de agua
+export let TERRENOS = [];              // que hay alla abajo: bosque, ciudad, arena...
+export const terrenoEn = x => (TERRENOS.find(z => x >= z.x0 && x < z.x1) || {}).t || null;
 // EL VIENTO. La primera version era decorado: rayitas y un whoosh, y el
 // jugador con razon dijo que no lo levantaba nada. Ahora el viento es lo unico
 // del mapa que cambia una LEY: dentro de su zona el aire sostiene, y la
@@ -892,6 +936,16 @@ export const gravedadEn = x => {
   return G;
 };
 export const enViento = x => VIENTOS.some(v => x >= v.x0 && x < v.x1);
+// Cuanto se SIENTE el aire aca. Adentro de la zona, entero; afuera se deshace
+// en un par de tiempos. La ley sigue siendo la zona -- esto es lo que se ve.
+export const fuerzaViento = x => {
+  let f = 0;
+  for (const v of VIENTOS) {
+    const d = x < v.x0 ? v.x0 - x : x > v.x1 ? x - v.x1 : 0;
+    f = Math.max(f, Math.max(0, 1 - d / 2.4));
+  }
+  return f;
+};
 export const enAgua = x => AGUAS.some(z => x >= z.x0 && x < z.x1);
 export let PASOS_PISTON = new Set();   // pasos reclamados por caños: llevan crater
 function pistones () {
@@ -1077,6 +1131,11 @@ export function elegirCancion (id) {
   for (const z of ARPEGIOS)
     for (let bx = Math.ceil(z.x0); bx < z.x1 - 0.6; bx++)
       HUECOS.push({ x0: +(bx + 0.3).toFixed(3), x1: +(bx + 0.7).toFixed(3) });
+  TAMBORES = (CANCIONES[CANCION_ID].tambores || []).map((b, i) => {
+    const o = typeof b === 'number' ? { x: b } : b;
+    const enPiso = !!PISO && o.x >= PISO.x0 && o.x <= PISO.x1;
+    return { x: o.x, y: enPiso ? PISO.y : 0, piso: enPiso, lanza: !!o.lanza, i };
+  });
   TECHOS = calcularTechos();
   // Los caños compilan ANTES que los orbes: reclaman el backbeat del compas, y
   // recien despues los orbes se reparten los golpes que quedan. Al reves, los
@@ -1084,7 +1143,7 @@ export function elegirCancion (id) {
   PASOS_BATERIA = new Set(); PASOS_BAJO = new Set(); PASOS_ARP = new Set(); PASOS_PISTON = new Set();
   TUNELES = c.tuneles || [];
   AGUAS = c.aguas || [];
-  TAMBORES = (c.tambores || []).map((b, i) => ({ x: b, y: PISO ? PISO.y : 0, i }));
+  TERRENOS = c.terrenos || [];
   for (const tb of TAMBORES) PASOS_BATERIA.add(tb.x * 4);   // ese bombo es tuyo
   ZONAS_PISTON = c.pistones || [];
   ZONAS_VOZ = c.voces || [];
@@ -1385,6 +1444,18 @@ export function paso (s, dt) {
     // ...y SIN RED, rodar mas alla del respiro escrito tampoco se perdona: el
     // reenganche tiene su ventana, y dejarla pasar es haberse caido
     if (s.sinRed && !mandaRodar(s.x)) { s.viva = false; s.causa = 'red'; return; }
+    for (const tb of TAMBORES) {
+      if (tb.piso || s.tamboresHechos.has(tb.i) || s.x < tb.x) continue;
+      s.tamboresHechos.add(tb.i);
+      s.eventos.push({ tipo: 'tambor', x: s.x, y: 0, i: tb.i, lanza: tb.lanza });
+      s.estado = 'aire'; s.tecla = -1; s.saliendoDe = -1; s.soltoEn = null;
+      const gp = gDespegue(s);
+      // el pique dura UN pulso (vy = g/2), asi que el proximo cae en el
+      // proximo parche. El ultimo de la tanda no pica: LANZA, y te deja en la
+      // linea de vuelo de la tecla que vuelve -- entrar al drop es el premio.
+      s.vy = tb.lanza ? haciaLaProxima(s, gp * 0.5) : gp * 0.5;
+      return;
+    }
   }
 
   if (s.estado === 'aire') {
@@ -1482,7 +1553,7 @@ function rozarPiston (s) {
     s.bloqueoDesde = s.x;
     s.estado = 'aire'; s.tecla = -1; s.saliendoDe = -1; s.soltoEn = null;
     s.vy = haciaLaProxima(s);
-    s.eventos.push({ tipo: 'piston', modo: 'abajo', x: s.x, y: s.y, instr: p.instr, paso: p.paso });
+    s.eventos.push({ tipo: 'piston', modo: 'abajo', x: s.x, y: s.y, instr: p.instr, paso: p.paso, alto: p.y });
     return;
   }
 }
@@ -1505,6 +1576,7 @@ function aplicar (s, xt = s.x) {
   // para consumir el toque -- si quedara en la cola de anticipos, se cobraria
   // al aterrizar como una nota juzgada desde la red, chueca seguro.
   if (s.tecla < 0) {
+    if (parcheAdelante(s)) { s.eventos.push({ tipo: 'aire' }); return true; }
     // ...pero nunca a traves de un techo: ese arco se estrella. Si la proxima
     // tecla queda del otro lado de un silencio con techo, el toque es el
     // saltito de siempre; pasado el techo, el proximo toque si relanza.
@@ -1857,6 +1929,7 @@ function arrancarNavegador () {
   // empezo, la cuenta sale igual venga como venga el reloj, y en reposo vale
   // exactamente cero. Es el mismo trato que ya tienen los destellos y la fugaz.
   let sacudidaT = 0;                  // cuando empezo el temblor de camara
+  let derivaViento = 0;               // lo que el viento lleva corrido al cielo
   const SACUDIDA = 420;               // cuanto dura, en ms
   let ultimoCuadro = 0;               // reloj de PANTALLA: corre aunque el mundo no
   // Cuanto dura la muerte antes de que aparezca el informe. Es el tiempo que
@@ -1949,7 +2022,13 @@ function arrancarNavegador () {
   // el modulo (en el navegador no existe nunca). La distancia entre el mundo y
   // el reloj del audio no la dibuja nada: es exactamente el tipo de error que
   // se cuela durante minutos sin que ninguna prueba lo pueda ver.
-  if (globalThis.__dribleDiag) globalThis.__dribleDiag = () => ({ x: s.x, b: ahora() });
+  // ...y con un tiempo adentro, ademas SALTA hasta ahi: verificar un lugar
+  // preciso del mapa (un corte, un terreno, una caida ligada) valia antes una
+  // caceria de flechas contra el reloj, con la esfera muriendose en el medio.
+  if (globalThis.__dribleDiag) globalThis.__dribleDiag = bx => {
+    if (bx != null && corriendo) { saltarA(bx); ensayo = true; }
+    return { x: s.x, b: ahora() };
+  };
 
   // --- sintesis --------------------------------------------------------------
 
@@ -2351,6 +2430,16 @@ function arrancarNavegador () {
   // El mismo golpe, pero tocado por la esfera: entra por el bus del solista y
   // agacha el arreglo. Es el gesto de un baterista que acentua, no un sample
   // mas fuerte.
+  // EL CAÑO ES UN TAMBOR AFINADO POR SU ALTURA. Doce caños devolvian el mismo
+  // hi-hat abierto --el hat es el golpe libre que mas cae al alcance de un
+  // arco-- y doce hats identicos no son un fill: son un tic repetido, y encima
+  // el hat vive en el registro donde el arreglo ya tiene corcheas, asi que el
+  // acento no se distinguia de la base. El TOM si: tiene cuerpo, se afina, y
+  // afinado por la altura de la cabeza convierte una fila de caños en un
+  // redoble que sube y baja CON EL MAPA. Los golpes pesados del arreglo
+  // --bombo, caja, clap-- se respetan tal cual: esos ya son la cancion.
+  const tomDelCanio = y => (y < 0.30 ? 't' : y < 0.55 ? 'T' : 'u');
+  const golpeDelCanio = (c, y) => (c === 'h' || c === 'H' ? tomDelCanio(y || 0) : c);
   const golpeDeLaEsfera = (c, t) => {
     eTambor(c === 'h' ? 'H' : c, t, solo);
     agachar(t);
@@ -2870,22 +2959,30 @@ function arrancarNavegador () {
         } else if (e.modo === 'encima') {
           // EL PISOTON. El golpe reclamado, tocado por la esfera DENTRO del
           // crater que el arreglo abrio -- sin agache propio: el crater ya es
-          // el agache, doblarlo hundiria la cancion. El hat cerrado se ABRE al
-          // pisarlo: mismo instrumento, gesto de acento, como un baterista que
-          // abre el hi-hat en la sincopa. Y el eco del solista: el fondo jamas
-          // ecoa la bateria, asi que un golpe con eco es TUYO aunque el timbre
-          // sea identico.
-          const instr = e.instr === 'h' ? 'H' : e.instr;
+          // el agache, doblarlo hundiria la cancion. Si lo que reclamo era un
+          // hat, suena el TOM de esa altura: el hat no acentua nada, el tom si.
+          const instr = golpeDelCanio(e.instr, e.y);
           if (instr) {
             eTambor(instr, ac.currentTime, solo);
+            // EL ECO VA A LA GRILLA, no al contacto. Colgado de ac.currentTime
+            // arrastraba tu error: pisar 40 ms tarde ponia la repeticion 40 ms
+            // tarde, y una corchea con puntillo corrida se oye como un tropiezo.
+            // El paso del caño es un dato de la partitura -- desde ahi el eco
+            // cae donde tiene que caer aunque la mano no.
             const g = ac.createGain(); g.gain.value = 0.3; g.connect(solo);
-            eTambor(instr, ac.currentTime + 0.75 * SPB, g);
+            eTambor(instr, Math.max(ac.currentTime + 0.02,
+              t0 + (e.paso / 4 + 0.75) * SPB), g);
+            // el destello del bombo es del BOMBO: un tom no lo enciende
             if ('kKx'.includes(instr)) golpesVista.push(ac.currentTime);
           }
-          // el peso del pisoton: aire metalico y un golpe sordo, foley del
-          // caño, no musica
-          ruido(ac.currentTime, 0.05, 0.14, 'highpass', 2400);
-          golpe(ac.currentTime, 90, 0.1, 0.18, 'sine');
+          // SIN FOLEY ENCIMA. Habia un siseo agudo (ruido pasa-altos a 2.4k) y
+          // un bombazo de 90 Hz pegados al golpe: dos sonidos que no son de la
+          // cancion, cayendo en una semicorchea donde el arreglo no tiene ni
+          // platillo ni bombo. Eso era el "suena raro" -- no el tambor, la lata
+          // que le colgaba al lado. Queda un golpe sordo y corto, madera contra
+          // metal; el peso lo cuentan el hit-stop, el anillo y el hundimiento,
+          // que no desafinan nada.
+          ruido(ac.currentTime, 0.025, 0.05, 'lowpass', 800);
           // el cuerpo entero lo siente: hit-stop, anillo, el mundo pisado
           retencion = 0.09;
           aros.push({ x: e.x, y: e.y, t: performance.now() });
@@ -2896,7 +2993,7 @@ function arrancarNavegador () {
           cabezas.set(e.paso, { t: performance.now(), modo: 'encima' });
         } else {
           // el rescate desde abajo: el vastago te dispara de vuelta
-          if (e.instr) golpeDeLaEsfera(e.instr === 'h' ? 'H' : e.instr, ac.currentTime);
+          if (e.instr) golpeDeLaEsfera(golpeDelCanio(e.instr, e.alto), ac.currentTime);
           ruido(ac.currentTime, 0.16, 0.18, 'bandpass', 700, 1.1);
           eKick(ac.currentTime, true, solo);
           golpe(ac.currentTime, 120, 0.2, 0.18, 'square');
@@ -2966,8 +3063,11 @@ function arrancarNavegador () {
       } else if (e.tipo === 'caida') {
         if (!muerteSonada) { muerteSonada = true; sonarMuerte(); }
       } else if (e.tipo === 'tambor') {
-        // el bombo es tuyo: por el bus del solista, y el arreglo se agacha
-        golpeDeLaEsfera('K', ac.currentTime);
+        // el bombo es tuyo: por el bus del solista, y el arreglo se agacha. El
+        // que LANZA es el golpe entero (bombo+caja+clap): es el que devuelve la
+        // cancion, y tiene que oirse como una puerta que se abre.
+        golpeDeLaEsfera(e.lanza ? 'x' : 'K', ac.currentTime);
+        if (e.lanza) { aros.push({ x: e.x, y: e.y, t: performance.now() }); pump = 1; }
         golpesVista.push(ac.currentTime);
         squash = 1; pisada = 1;
         chispas(e.x, e.y, 6, true, C.esferaRGB);
@@ -4161,6 +4261,12 @@ function arrancarNavegador () {
     const ahoraP = performance.now();
     const dtP = ultimoCuadro ? Math.min(0.05, (ahoraP - ultimoCuadro) / 1000) : 0;
     ultimoCuadro = ahoraP;
+    const vientoAqui = fuerzaViento(s.x);
+    derivaViento += dtP * vientoAqui * 42;
+    if (corriendo && vientoAqui > 0.12 && Math.random() < vientoAqui * 0.7)
+      particulas.push({ x: s.x - 3 + Math.random() * 10, y: -0.05 + Math.random() * 0.1,
+        rgb: '190,228,255', vx: 0.1 + Math.random() * 0.2,
+        vy: 0.5 + Math.random() * 1.1, g: -0.7, vida: 1 });
     const eSac = sacudidaT ? (ahoraP - sacudidaT) / SACUDIDA : 1;
     if (eSac >= 1) sacudidaT = 0;
     const sacud = eSac < 1 ? 1 - eSac : 0;
@@ -4401,7 +4507,7 @@ function arrancarNavegador () {
         if (ci === 0) {
           const anchoC = w + 240;
           for (const nb of NUBES) {
-            let X = (nb.x * esc - s.x * nb.f * esc) % anchoC;
+            let X = (nb.x * esc - s.x * nb.f * esc + derivaViento * (0.4 + nb.f)) % anchoC;
             if (X < -120) X += anchoC;
             const gy = y0 - nb.y * esc, rx = nb.an * esc, ry = nb.al * esc;
             cx.save();
@@ -4444,7 +4550,172 @@ function arrancarNavegador () {
       corre = Math.max(corre, b);
     }
     if (corre < V1) vacios.push([corre, V1]);
-    // EL MAR, primero: es el suelo del mundo en su tramo, y todo lo demas
+    // EL TERRENO DE ALLA ABAJO. Dos planos: uno lejano y palido, uno cercano y
+    // oscuro. Es perspectiva aerea --lo lejos se destiñe-- y con eso alcanza
+    // para leer profundidad sin mover nada, que es lo que corresponde: el
+    // suelo bajo tus pies no hace paralaje, esta ahi abajo y punto.
+    //
+    // Todas las formas cuelgan de INDICES ENTEROS del mundo, nunca de la
+    // camara: asi un arbol es el mismo arbol cuadro a cuadro en vez de un
+    // hormigueo que cambia cada vez que avanzas medio pixel.
+    const azar = i => {
+      const v = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+      return v - Math.floor(v);
+    };
+    const dibujarTerreno = (v0, v1) => {
+      const base = py(0), hondo = h - base;
+      if (hondo < 16) return;
+      // LA SOMBRA DE ARRIBA ES SAGRADA. La quinta parte de la franja pegada a
+      // la linea del piso no se pinta NUNCA: esa oscuridad que se hunde es lo
+      // que significa "aca te caes", y ningun paisaje puede robarle el lugar.
+      // Por eso el terreno se dibuja recortado desde ahi para abajo, y por eso
+      // se dibuja DESPUES del vacio: lo que esta lejos abajo tapa el degradado,
+      // el borde del abismo no.
+      const yTope = base + hondo * 0.18;
+      const yH = base + hondo * 0.52;      // el horizonte de alla abajo
+      for (const z of TERRENOS) {
+        if (z.x1 < v0 || z.x0 > v1) continue;
+        const a = Math.max(z.x0, v0 - 1), b = Math.min(z.x1, v1 + 1);
+        if (b <= a) continue;
+        cx.save();
+        cx.beginPath();
+        // el recorte se apoya en los BORDES DE LA ZONA, no en los de la
+        // pantalla: si no, la tierra se hundiria en el borde de la camara y
+        // el efecto viajaria con vos en vez de quedarse en su lugar
+        const rampa = Math.min(1.8, (z.x1 - z.x0) / 3);
+        cx.moveTo(px(z.x0), h + 2);
+        cx.lineTo(px(z.x0 + rampa), yTope);
+        cx.lineTo(px(z.x1 - rampa), yTope);
+        cx.lineTo(px(z.x1), h + 2);
+        cx.closePath();
+        cx.clip();
+        // el suelo pelado: lo mas oscuro de la escena. Todo lo que tiene
+        // relieve se ve MAS CLARO que el -- de noche, a esta distancia, lo que
+        // se levanta capta algo de cielo y el llano no.
+        const piso = color => {
+          cx.fillStyle = color;
+          cx.fillRect(px(a) - 4, yH, (b - a) * esc + 8, hondo);
+        };
+        // `filo` es el hilo de luz del borde de arriba: sin el, una silueta
+        // oscura sobre un fondo oscuro no es una silueta, es una mancha.
+        const cerro = (paso, alto, color, techo, filo) => {
+          const linea = () => {
+            for (let i = Math.floor(a / paso) - 1; i <= Math.ceil(b / paso) + 1; i++)
+              cx.lineTo(px(i * paso), techo - hondo * alto * Math.pow(azar(i * 3.7), 1.5));
+          };
+          cx.fillStyle = color;
+          cx.beginPath();
+          cx.moveTo(px(a) - 4, h); linea(); cx.lineTo(px(b) + 4, h);
+          cx.closePath(); cx.fill();
+          if (!filo) return;
+          cx.strokeStyle = filo; cx.lineWidth = 1.2;
+          cx.beginPath(); cx.moveTo(px(a) - 4, h); linea(); cx.stroke();
+        };
+        if (z.t === 'bosque') {
+          const pino = (paso, alto, color, techo) => {
+            cx.fillStyle = color;
+            for (let i = Math.floor(a / paso) - 1; i <= Math.ceil(b / paso) + 1; i++) {
+              const X = px(i * paso), hh = hondo * alto * (0.7 + 0.6 * azar(i));
+              cx.beginPath();
+              cx.moveTo(X, techo - hh);
+              cx.lineTo(X - hh * 0.36, techo); cx.lineTo(X + hh * 0.36, techo);
+              cx.closePath(); cx.fill();
+            }
+          };
+          pino(0.26, 0.13, 'rgba(78,120,98,0.55)', yH - hondo * 0.02);
+          piso('rgba(10,21,16,0.96)');
+          pino(0.46, 0.24, 'rgba(36,70,53,0.97)', yH + hondo * 0.16);
+        } else if (z.t === 'ciudad') {
+          // la ciudad de noche: dos filas de torres y las ventanas prendidas.
+          // Las luces son lo unico calido que hay abajo -- y por eso la ciudad
+          // es el unico terreno que se lee como habitado.
+          const torres = (paso, alto, color, pie, luces) => {
+            for (let i = Math.floor(a / paso) - 1; i <= Math.ceil(b / paso) + 1; i++) {
+              const X = px(i * paso), an = paso * esc * 0.62;
+              const hh = hondo * alto * (0.4 + 0.9 * azar(i * 1.7));
+              cx.fillStyle = color;
+              cx.fillRect(X, pie - hh, an, hh + hondo);
+              if (!luces) continue;
+              cx.fillStyle = 'rgba(255,206,130,0.65)';
+              for (let f = 1; f * 8 < hh - 4; f++)
+                for (let cN = 0; cN < 2; cN++)
+                  if (azar(i * 31 + f * 5 + cN * 2) > 0.55)
+                    cx.fillRect(X + 5 + cN * (an - 12), pie - hh + f * 8, 3, 3);
+            }
+          };
+          torres(0.4, 0.22, 'rgba(64,72,104,0.55)', yH - hondo * 0.02, false);
+          piso('rgba(8,10,17,0.96)');
+          torres(0.62, 0.34, 'rgba(29,33,52,0.97)', yH + hondo * 0.14, true);
+        } else if (z.t === 'montania') {
+          cerro(0.58, 0.26, 'rgba(70,78,104,0.55)', yH - hondo * 0.02);
+          piso('rgba(9,11,17,0.96)');
+          cerro(0.82, 0.42, 'rgba(36,42,59,0.97)', yH + hondo * 0.16,
+            'rgba(126,142,182,0.55)');
+          // la nieve: una pizca en las puntas mas altas, y solo ahi
+          cx.fillStyle = 'rgba(226,236,255,0.6)';
+          for (let i = Math.floor(a / 0.82) - 1; i <= Math.ceil(b / 0.82) + 1; i++) {
+            const r = Math.pow(azar(i * 3.7), 1.5);
+            if (r < 0.55) continue;
+            const X = px(i * 0.82), Y = yH + hondo * 0.16 - hondo * 0.42 * r;
+            cx.beginPath();
+            cx.moveTo(X, Y); cx.lineTo(X - 4.5, Y + 6); cx.lineTo(X + 4.5, Y + 6);
+            cx.closePath(); cx.fill();
+          }
+        } else if (z.t === 'desierto') {
+          const lomo = (xw, fr, alto, techo) => techo - hondo * alto *
+            (0.5 + 0.5 * Math.sin(xw * fr) * Math.cos(xw * fr * 0.37 + 1.1));
+          const duna = (fr, alto, color, techo, filo) => {
+            const linea = () => {
+              for (let xw = a - 0.4; xw <= b + 0.4; xw += 0.16)
+                cx.lineTo(px(xw), lomo(xw, fr, alto, techo));
+            };
+            cx.fillStyle = color;
+            cx.beginPath();
+            cx.moveTo(px(a) - 4, h); linea(); cx.lineTo(px(b) + 4, h);
+            cx.closePath(); cx.fill();
+            if (!filo) return;
+            cx.strokeStyle = filo; cx.lineWidth = 1.4;
+            cx.beginPath(); cx.moveTo(px(a) - 4, h); linea(); cx.stroke();
+          };
+          duna(0.5, 0.22, 'rgba(128,102,68,0.5)', yH - hondo * 0.02);
+          piso('rgba(24,18,13,0.96)');
+          duna(0.78, 0.32, 'rgba(68,53,35,0.97)', yH + hondo * 0.18,
+            'rgba(202,164,110,0.5)');
+          // los cactus: parados SOBRE la arena, no colgando del borde
+          cx.strokeStyle = 'rgba(20,15,10,0.98)'; cx.lineWidth = 3;
+          cx.lineCap = 'round';
+          for (let i = Math.floor(a) - 1; i <= Math.ceil(b) + 1; i++) {
+            if (azar(i * 9.1) < 0.55) continue;
+            const xw = i + azar(i) * 0.7, X = px(xw);
+            const Y = lomo(xw, 0.78, 0.32, yH + hondo * 0.18) + 2;
+            const hh = hondo * (0.10 + 0.06 * azar(i * 2.3));
+            cx.beginPath();
+            cx.moveTo(X, Y); cx.lineTo(X, Y - hh);
+            cx.moveTo(X, Y - hh * 0.55); cx.lineTo(X - 7, Y - hh * 0.55);
+            cx.lineTo(X - 7, Y - hh * 0.85);
+            cx.stroke();
+          }
+          cx.lineCap = 'butt';
+        } else {
+          // tierra pelada: lomas bajas y piedras. Es el terreno mas callado, y
+          // por eso el que sirve de descanso entre dos lugares con caracter.
+          cerro(0.8, 0.14, 'rgba(104,88,66,0.5)', yH - hondo * 0.02);
+          piso('rgba(20,16,12,0.96)');
+          cerro(1.1, 0.2, 'rgba(54,44,32,0.97)', yH + hondo * 0.16,
+            'rgba(154,128,92,0.4)');
+          cx.fillStyle = 'rgba(74,62,45,0.9)';
+          for (let i = Math.floor(a / 0.5) - 1; i <= Math.ceil(b / 0.5) + 1; i++) {
+            const r = azar(i * 5.3);
+            if (r < 0.5) continue;
+            cx.beginPath();
+            cx.ellipse(px(i * 0.5), yH + hondo * 0.34, 3 + r * 6, 2.5 + r * 3.5, 0, Math.PI, 0);
+            cx.fill();
+          }
+        }
+        cx.restore();
+      }
+    };
+    // EL MAR: es el suelo del mundo en su tramo, y todo lo demas
     // --la red, el vacio, las teclas-- se dibuja encima.
     const tOla = performance.now() / 1000;
     const ola = (xx, k) => Math.sin(xx * 4.4 + tOla * 1.5 + k) * 3.2 +
@@ -4533,43 +4804,58 @@ function arrancarNavegador () {
     for (const z of SECCIONES) rotulo(z.n.toUpperCase(), px(z.x0) + 8, py(0) + 30, 'left', C.tenue);
     cx.textAlign = 'left';
 
-    // EL CAÑON DE VIENTO SE VE VENIR: una columna de rachas subiendo, del
-    // ancho del hueco que va a llenar. Cada racha es un trazo que nace abajo,
-    // sube acelerando y se desvanece -- aire, no un objeto.
-    for (const v of VIENTOS) {
-      if (v.x1 < s.x - 3 || v.x0 > s.x + 7) continue;
+    // EL AIRE QUE SUBE. Sale del abismo --nace bajo la linea del piso, cruza
+    // la red y se deshace arriba-- y no tiene bordes: se siente entero en el
+    // nucleo y se deshilacha hacia los costados. Lo que era una caja con dos
+    // paredes ahora es una corriente que atraviesa el paisaje.
+    if (VIENTOS.some(v => v.x1 > s.x - 6 && v.x0 < s.x + 10)) {
       const tV = performance.now() / 1000;
-      const a0 = px(v.x0), a1 = px(v.x1);
-      // El resplandor: el aire tiene cuerpo, y NACE ABAJO -- es lo que sube.
-      // Pintado parejo salia un rectangulo gris pegado sobre el paisaje, con
-      // un borde de arriba que no existe: el aire no tiene tapa.
-      const gV = cx.createLinearGradient(0, py(0), 0, py(1.5));
-      gV.addColorStop(0, 'rgba(170,215,255,0.13)');
-      gV.addColorStop(0.55, 'rgba(170,215,255,0.05)');
-      gV.addColorStop(1, 'rgba(170,215,255,0)');
-      cx.fillStyle = gV;
-      cx.fillRect(a0, py(1.5), a1 - a0, py(0) - py(1.5));
-      // las corrientes: rayas que suben en diagonal y se apagan arriba. Cada
-      // una nace en el piso de la zona y muere en el techo -- el aire SUBE, y
-      // eso es exactamente lo que la fisica esta haciendo con la esfera.
-      for (let i = 0; i < 26; i++) {
-        const fase = (tV * (0.5 + (i % 4) * 0.16) + i * 0.137) % 1;
-        const X = a0 + ((i * 0.618) % 1) * (a1 - a0) + fase * 22;
-        const Y0 = py(0) - fase * esc * 1.4;
-        const largo = 12 + fase * 30;
-        cx.strokeStyle = `rgba(190,228,255,${0.34 * Math.sin(fase * Math.PI)})`;
-        cx.lineWidth = 1.6;
-        cx.beginPath(); cx.moveTo(X, Y0); cx.lineTo(X + 5, Y0 - largo); cx.stroke();
+      const xA = s.x - 3.2, xB = s.x + 7.2;
+      cx.save();
+      cx.beginPath(); cx.rect(0, 0, w, py(0) + 12); cx.clip();
+      for (const v of VIENTOS) {
+        if (v.x1 < xA - 2.6 || v.x0 > xB + 2.6) continue;
+        const cxp = px((v.x0 + v.x1) / 2);
+        const rx = ((v.x1 - v.x0) / 2 + 2.4) * esc, ry = 1.9 * esc;
+        // LA PLUMA: sale del piso y se deshace hacia arriba y hacia los lados.
+        for (const [ancho, alto, tope] of [[rx, ry, 0.24], [rx * 0.5, ry * 0.2, 0.42]]) {
+          cx.save();
+          cx.translate(cxp, py(0) + 6);
+          cx.scale(1, alto / ancho);
+          const g = cx.createRadialGradient(0, 0, 0, 0, 0, ancho);
+          g.addColorStop(0, `rgba(180,222,255,${tope})`);
+          g.addColorStop(0.45, `rgba(175,218,255,${tope * 0.35})`);
+          g.addColorStop(1, 'rgba(170,215,255,0)');
+          cx.fillStyle = g;
+          cx.beginPath(); cx.arc(0, 0, ancho, 0, Math.PI * 2); cx.fill();
+          cx.restore();
+        }
       }
-      // las bocas: aca empieza y aca termina el aire que sostiene
-      for (const bx of [v.x0, v.x1]) {
-        const gB = cx.createLinearGradient(0, py(0), 0, py(1.5));
-        gB.addColorStop(0, 'rgba(190,228,255,0.55)');
-        gB.addColorStop(1, 'rgba(190,228,255,0)');
-        cx.strokeStyle = gB;
-        cx.lineWidth = 2; cx.setLineDash([7, 9]);
-        cx.beginPath(); cx.moveTo(px(bx), py(0) + 6); cx.lineTo(px(bx), py(1.5)); cx.stroke();
-        cx.setLineDash([]);
+      cx.restore();
+      // las corrientes: nacen DEBAJO de la red, la cruzan y se apagan arriba.
+      // Cada una se inclina mas cuanto mas sube -- el aire arrastra.
+      for (let i = 0; i < 64; i++) {
+        const fase = (tV * (0.42 + (i % 5) * 0.13) + i * 0.0917) % 1;
+        const xw = xA + ((i * 0.6180339) % 1) * (xB - xA);
+        const f = Math.pow(fuerzaViento(xw), 1.5);
+        if (f <= 0.03) continue;
+        const alto = (0.2 + 0.85 * fase) * esc * (0.4 + 0.6 * f);
+        const Y0 = py(0) + 12 - fase * alto;
+        const largo = (12 + fase * 20) * (0.45 + 0.55 * f);
+        const desv = fase * fase * 9;
+        const aC = 0.62 * f * Math.sin(fase * Math.PI);
+        const X0 = px(xw) + desv;
+        // el degradado a lo largo del trazo: encendido en la cola, apagado en
+        // la punta. Sin eso una raya inclinada se lee como lluvia cayendo.
+        const gC = cx.createLinearGradient(X0, Y0, X0 + 6, Y0 - largo);
+        gC.addColorStop(0, `rgba(215,240,255,${aC})`);
+        gC.addColorStop(1, 'rgba(195,230,255,0)');
+        cx.strokeStyle = gC;
+        cx.lineWidth = 1.4 + 1.1 * f;
+        cx.beginPath();
+        cx.moveTo(X0, Y0);
+        cx.quadraticCurveTo(X0 + 2, Y0 - largo * 0.6, X0 + 6, Y0 - largo);
+        cx.stroke();
       }
     }
 
@@ -4801,6 +5087,12 @@ function arrancarNavegador () {
       if (b < V1 - 0.05) { cx.moveTo(a1, yy - 7); cx.lineTo(a1, yy + 4); }
       cx.stroke();
     }
+    // EL SUELO DEL MUNDO, alla lejos y abajo. Va DESPUES del vacio a
+    // proposito: el degradado del abismo baja 72 px --casi toda la franja-- y
+    // dibujado antes el paisaje quedaba enterrado. Dibujado despues, el
+    // paisaje ocupa el fondo de la franja y la sombra se queda con el borde,
+    // que es lo unico que tenia que decir.
+    dibujarTerreno(V0, V1);
 
     // La linea del AHORA. La esfera esta siempre en el mismo punto de la
     // pantalla, asi que esta linea es el presente: la nota se toca cuando su
@@ -4808,32 +5100,48 @@ function arrancarNavegador () {
     cx.strokeStyle = 'rgba(232,230,224,0.20)'; cx.lineWidth = 1;
     cx.beginPath(); cx.moveTo(px(s.x), 0); cx.lineTo(px(s.x), py(0) + 10); cx.stroke();
 
+    // el parche: un lomo que respira con el pulso hasta que la esfera lo pisa,
+    // y encendido en tu color una vez pisado. El que LANZA lleva ademas su
+    // flecha: no pica en el lugar, te devuelve a la cancion.
+    const dibujarParche = tb => {
+      const hecho = s.tamboresHechos.has(tb.i);
+      const late = corriendo && !hecho ? 0.5 + 0.5 * Math.sin(performance.now() / 240) : 0;
+      const rT = (tb.lanza ? 11 : 9) + late * 2;
+      cx.fillStyle = hecho ? `rgba(${C.esferaRGB},0.85)` : `rgba(${C.esferaRGB},${0.30 + 0.25 * late})`;
+      cx.beginPath();
+      cx.ellipse(px(tb.x), py(tb.y) + 1, rT, 5, 0, Math.PI, 0);
+      cx.fill();
+      cx.strokeStyle = `rgba(${C.esferaRGB},${hecho ? 0.9 : 0.45})`;
+      cx.lineWidth = 1.5;
+      cx.beginPath();
+      cx.ellipse(px(tb.x), py(tb.y) + 1, rT, 3.5, 0, 0, Math.PI * 2);
+      cx.stroke();
+      if (!tb.lanza) return;
+      cx.strokeStyle = `rgba(${C.impulsoRGB},${hecho ? 0.9 : 0.5 + 0.3 * late})`;
+      cx.lineWidth = 2;
+      const yF = py(tb.y) - 9 - late * 3;
+      cx.beginPath();
+      cx.moveTo(px(tb.x) - 6, yF + 6); cx.lineTo(px(tb.x), yF);
+      cx.lineTo(px(tb.x) + 6, yF + 6);
+      cx.stroke();
+    };
     // la plataforma de salida: se empieza arriba, a la altura de la primera nota
     if (PISO && PISO.x1 > s.x - 3 && PISO.x0 < s.x + 7) {
       cx.fillStyle = 'rgba(232,230,224,0.22)';
       cx.fillRect(px(PISO.x0), py(PISO.y), (PISO.x1 - PISO.x0) * esc, 5);
       // los parches del conteo: lomos que respiran con el pulso hasta que la
       // esfera los pisa -- pisados quedan encendidos en tu color
-      for (const tb of TAMBORES) {
-        const hecho = s.tamboresHechos.has(tb.i);
-        const late = corriendo && !hecho ? 0.5 + 0.5 * Math.sin(performance.now() / 240) : 0;
-        const rT = 9 + late * 2;
-        cx.fillStyle = hecho ? `rgba(${C.esferaRGB},0.85)` : `rgba(${C.esferaRGB},${0.30 + 0.25 * late})`;
-        cx.beginPath();
-        cx.ellipse(px(tb.x), py(tb.y) + 1, rT, 5, 0, Math.PI, 0);
-        cx.fill();
-        cx.strokeStyle = `rgba(${C.esferaRGB},${hecho ? 0.9 : 0.45})`;
-        cx.lineWidth = 1.5;
-        cx.beginPath();
-        cx.ellipse(px(tb.x), py(tb.y) + 1, rT, 3.5, 0, 0, Math.PI * 2);
-        cx.stroke();
-      }
+      for (const tb of TAMBORES) if (tb.piso) dibujarParche(tb);
       cx.fillStyle = C.tenue; cx.font = 'bold 10px system-ui'; cx.textAlign = 'right';
       cx.letterSpacing = '1.4px';
       cx.fillText('SALIDA', px(PISO.x1) - 6, py(PISO.y) - 8);
       cx.letterSpacing = '0px';
       cx.textAlign = 'left';
     }
+    // ...y los parches de la RED: el corte y la vuelta final. Viven fuera de
+    // la plataforma de salida, asi que se dibujan aparte.
+    for (const tb of TAMBORES)
+      if (!tb.piso && tb.x > s.x - 3 && tb.x < s.x + 7) dibujarParche(tb);
 
     // EL CAMINO RECORRIDO. Las teclas que sonaste quedan encendidas y unidas
     // por un hilo: atras tuyo va quedando dibujada la cancion que tocaste. Es
@@ -4936,27 +5244,23 @@ function arrancarNavegador () {
         // hacia arriba y la banda clara dice desde donde podes soltar: la
         // rampa se explica sola.
       }
-      if (k.ligada) {                             // EL TOBOGAN: aca se cae tocando
-        // la rampa es la parabola REAL de la caida libre desde el borde: lo
-        // que se dibuja es exactamente por donde va a pasar la esfera
+      if (k.ligada) {                             // AQUI SE CAE, y la caida toca
         const sig = NOTAS[k.i + 1];
-        const T = Math.sqrt(2 * Math.max(0.001, k.y - sig.y) / G);
-        const punto = q => ({ X: px(k.x1 + T * q), Y: py(k.y - G / 2 * (T * q) * (T * q)) });
-        cx.strokeStyle = `rgba(${C.teclaRGB},${sono ? 0.8 : 0.5})`;
-        cx.lineWidth = 2.5;
-        cx.beginPath();
-        for (let q = 0; q <= 1.001; q += 0.125) {
-          const p2 = punto(q);
-          if (q === 0) cx.moveTo(p2.X, p2.Y); else cx.lineTo(p2.X, p2.Y);
+        const gL = gravedadEn(k.x1);
+        const T = Math.sqrt(2 * Math.max(0.001, k.y - sig.y) / gL);
+        const punto = q => ({ X: px(k.x1 + T * q), Y: py(k.y - gL / 2 * (T * q) * (T * q)) });
+        const aL = sono ? 0.75 : 0.45;
+        for (let j = 1; j <= 6; j++) {
+          const q = j / 6, p2 = punto(q);
+          cx.fillStyle = `rgba(${C.teclaRGB},${aL * (0.35 + 0.65 * q)})`;
+          cx.beginPath(); cx.arc(p2.X, p2.Y, 1.4 + 1.6 * q, 0, Math.PI * 2); cx.fill();
         }
-        cx.stroke();
-        // los travesaños: es una rampa con peldaños, no un alambre suelto
-        cx.lineWidth = 1.5;
+        // y la punta mira ABAJO: la caida termina tocando la nota de abajo
+        const fin = punto(1);
+        cx.strokeStyle = `rgba(${C.teclaRGB},${aL})`; cx.lineWidth = 2;
         cx.beginPath();
-        for (let q = 0.22; q < 1; q += 0.26) {
-          const p2 = punto(q);
-          cx.moveTo(p2.X - 5, p2.Y + 5); cx.lineTo(p2.X + 5, p2.Y + 5);
-        }
+        cx.moveTo(fin.X - 5, fin.Y - 5); cx.lineTo(fin.X, fin.Y + 1);
+        cx.lineTo(fin.X + 5, fin.Y - 5);
         cx.stroke();
       }
       if (aqui && !sono) {                        // la ventana abierta, bien visible
@@ -5041,7 +5345,8 @@ function arrancarNavegador () {
       const p = particulas[i];
       p.vida -= dtSeg * 2.3;
       if (p.vida <= 0) { particulas.splice(i, 1); continue; }
-      p.x += p.vx * dtSeg; p.y += p.vy * dtSeg; p.vy -= 3 * dtSeg;
+      // el peso de la particula: las chispas caen, las motas del viento SUBEN
+      p.x += p.vx * dtSeg; p.y += p.vy * dtSeg; p.vy -= (p.g === undefined ? 3 : p.g) * dtSeg;
       cx.fillStyle = `rgba(${p.rgb},${p.vida * 0.8})`;
       cx.beginPath(); cx.arc(px(p.x), py(p.y), 2.2 * p.vida, 0, Math.PI * 2); cx.fill();
     }
