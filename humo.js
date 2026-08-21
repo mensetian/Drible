@@ -49,12 +49,14 @@ class AudioContextFalso {
 // afirmar que una pantalla se dibujo de verdad y no que el cuadro paso de
 // largo sin explotar.
 const textos = [];
+const transformes = [];
 const ctx2d = new Proxy({}, {
   get (t, k) {
     if (k === 'createLinearGradient' || k === 'createRadialGradient')
       return () => ({ addColorStop: () => {} });
     if (k === 'measureText') return () => ({ width: 10 });
     if (k === 'fillText' || k === 'strokeText') return s => { textos.push(String(s)); };
+    if (k === 'setTransform') return (...a) => { transformes.push(a); };
     if (k in t) return t[k];
     return () => {};
   },
@@ -283,12 +285,21 @@ probar('el record se guarda, se lee, y sin red es lo normal', () => {
 probar('morir espera: el informe se queda hasta que decidas', () => {
   // viene de la prueba anterior con la red sacada, asi que no tocar nada mata
   correrCuadros(900);
-  // la muerte RESPIRA 800 ms de reloj de pared antes de mostrar el informe
-  // (el cine de la caida). El respiro corre en tiempo real, asi que la prueba
-  // tambien tiene que dejarlo pasar.
+  // LA MUERTE RESPIRA 1700 ms de reloj de pared antes del informe: es el cine
+  // de la caida, y el menu encima lo taparia. El respiro corre en tiempo real
+  // --no con el reloj de cuadros-- asi que la prueba lo deja pasar de veras.
+  textos.length = 0;
+  correrCuadros(20);
+  exigir(!dijo('OTRA VEZ'), 'el informe piso el cine de la muerte');
   const t1 = performance.now();
-  while (performance.now() - t1 < 900);
+  while (performance.now() - t1 < 1800);
   correrCuadros(30);
+  // ...y la SACUDIDA se apago sola. El mundo esta congelado (el lazo dibuja
+  // con dtSeg 0), asi que restarle el tiempo del mundo la dejaba temblando
+  // para siempre y el temblor se arrastraba hasta el menu.
+  const tr = transformes[transformes.length - 1];
+  exigir(tr && Math.abs(tr[4]) < 0.01 && Math.abs(tr[5]) < 0.01,
+    'la camara sigue temblando con el mundo congelado: ' + JSON.stringify(tr));
   exigir(dijo('OTRA VEZ'), 'la muerte no ofrecio volver a intentar');
   exigir(dijo('◀  Menú'), 'la muerte no ofrecio la salida al menu');
   const veces = textos.filter(t => t.includes('OTRA VEZ')).length;

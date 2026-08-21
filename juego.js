@@ -1814,7 +1814,19 @@ function arrancarNavegador () {
   const teclaHundida = new Map();
   let pump = 0, padLuz = 0, tinte = [70, 90, 150], brilloRacha = 0;
   let fugaz = null, auroraLuz = 0;    // la estrella del crash, y el cielo de NEBULOSA
-  let sacudida = 0;                   // la camara tiembla: muerte y golpes grandes
+  // LA SACUDIDA SE MIDE, NO SE ACUMULA. Restarle el tiempo transcurrido cuadro
+  // a cuadro la ataba al ritmo de dibujo: con el mundo congelado (dtSeg 0) no
+  // bajaba nunca, y con un cuadro largo --una pausa, la pestaña de fondo-- el
+  // tope que evita saltos la dejaba prendida a medio apagar. Guardando CUANDO
+  // empezo, la cuenta sale igual venga como venga el reloj, y en reposo vale
+  // exactamente cero. Es el mismo trato que ya tienen los destellos y la fugaz.
+  let sacudidaT = 0;                  // cuando empezo el temblor de camara
+  const SACUDIDA = 420;               // cuanto dura, en ms
+  let ultimoCuadro = 0;               // reloj de PANTALLA: corre aunque el mundo no
+  // Cuanto dura la muerte antes de que aparezca el informe. Es el tiempo que
+  // el jugador necesita para VER lo que le paso: la esfera cayendo, el estallido
+  // y el mundo vacio donde estaba. El menu encima de eso lo tapa todo.
+  const RESPIRO_MUERTE = 1700;
   const vientosHechos = new Set();    // columnas ya sopladas (se rearman al volver atras)
   // Las tres capas del horizonte: cuanto se mueven (f), cuanto se achatan (k),
   // a que altura arrancan y cada cuantas notas toman un pico. La de mas lejos
@@ -2990,7 +3002,7 @@ function arrancarNavegador () {
   let esperando = false;
   function reanudarMuerte () {
     if (!esperando) return;
-    if (performance.now() - muerteEn < 800) return;   // el respiro: la muerte se ve entera
+    if (performance.now() - muerteEn < RESPIRO_MUERTE) return;   // que la muerte se vea entera
     esperando = false;
     avisoMuerte = null;
     try { ac.resume(); } catch (_) {}
@@ -3040,7 +3052,7 @@ function arrancarNavegador () {
         a: Math.random() * Math.PI * 2, v: 60 + Math.random() * 200
       }))
     };
-    sacudida = 1;                       // el golpe se siente en la camara
+    sacudidaT = performance.now();      // el golpe se siente en la camara
     flashRGB = '255,120,90';
     s = crearSim({ sinRed });
     // el mundo queda armado en la salida, pero quieto: el reloj del audio se
@@ -3329,6 +3341,7 @@ function arrancarNavegador () {
     crashVista.length = 0; riserVista = null;
     leccionViva = null; rachaRota = null; avisoSeccion = null;
     metaEn = 0; muerteVista = null; leccionViva = null; avisoMuerte = null;
+    sacudidaT = 0; flash = 0;     // al menu no se llega temblando
     corriendo = false; finSonado = false; sinRed = false; esperando = false;
     pantalla = 'mapa';        // se vuelve al mapa, que es de donde saliste
     s = crearSim();
@@ -4108,11 +4121,17 @@ function arrancarNavegador () {
     const w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
     if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
     // la sacudida vive en la transformacion: tiembla el mundo entero, no un
-    // dibujo. Decae sola y en reposo es exactamente cero.
-    sacudida = Math.max(0, sacudida - dtSeg * 2.4);
-    const tS = performance.now() / 1000;
-    const sacX = sacudida > 0 ? Math.sin(tS * 87) * 7 * sacudida * sacudida : 0;
-    const sacY = sacudida > 0 ? Math.cos(tS * 71) * 5 * sacudida * sacudida : 0;
+    // dibujo, y se apaga con el reloj de PANTALLA -- por eso sigue muriendose
+    // mientras el informe de muerte tiene el mundo entero congelado.
+    const ahoraP = performance.now();
+    const dtP = ultimoCuadro ? Math.min(0.05, (ahoraP - ultimoCuadro) / 1000) : 0;
+    ultimoCuadro = ahoraP;
+    const eSac = sacudidaT ? (ahoraP - sacudidaT) / SACUDIDA : 1;
+    if (eSac >= 1) sacudidaT = 0;
+    const sacud = eSac < 1 ? 1 - eSac : 0;
+    const tS = ahoraP / 1000;
+    const sacX = sacud > 0 ? Math.sin(tS * 87) * 7 * sacud * sacud : 0;
+    const sacY = sacud > 0 ? Math.cos(tS * 71) * 5 * sacud * sacud : 0;
     cx.setTransform(dpr, 0, 0, dpr, sacX * dpr, sacY * dpr);
     cx.fillStyle = C.fondo; cx.fillRect(0, 0, w, h);
 
@@ -4967,6 +4986,8 @@ function arrancarNavegador () {
     const ang = Math.atan2(-s.vy * (s.estado === 'aire' ? 1 : 0), 1);
     const rx = R * esc * (1 + k + estira), ry = R * esc * (1 - k - estira);
 
+    cx.save();
+    if (esperando && ahoraP - muerteEn < RESPIRO_MUERTE) cx.globalAlpha = 0;
     // LA SOMBRA. Dice a que altura vas y donde vas a caer, que era informacion
     // que solo estaba en la fisica. Ademas ancla la esfera al mundo: sin ella
     // flota, con ella pesa.
@@ -5058,6 +5079,7 @@ function arrancarNavegador () {
       cx.arc(cxb, cyb, rx + 8, -Math.PI / 2, -Math.PI / 2 + fr * Math.PI * 2);
       cx.stroke();
     }
+    cx.restore();                       // ...y aca vuelve a existir la esfera
 
     // EL CINE DE LA MUERTE, en pantalla (la camara ya volvio a la salida):
     // la esfera fantasma sigue cayendo, estirada por la velocidad; la onda
@@ -5098,7 +5120,7 @@ function arrancarNavegador () {
       }
     }
     if (flash > 0) {
-      flash = Math.max(0, flash - dtSeg * 3);
+      flash = Math.max(0, flash - dtP * 3);
       cx.fillStyle = `rgba(${flashRGB},${flash * 0.22})`;
       cx.fillRect(0, 0, w, h);
       if (flash === 0) flashRGB = '232,230,224';
@@ -5132,9 +5154,13 @@ function arrancarNavegador () {
         const dt = esperando ? 0 : (performance.now() - avisoMuerte.t) / 4200;
         if (esperando) avisoMuerte.t = performance.now();
         if (dt >= 1) avisoMuerte = null;
-        else if (performance.now() - muerteEn < 800) {
-          // el cine de la muerte: velo apenas, sin panel -- la caida al frente
-          cx.fillStyle = `rgba(17,18,20,${0.5 * Math.min(1, (performance.now() - muerteEn) / 800)})`;
+        else if (ahoraP - muerteEn < RESPIRO_MUERTE) {
+          // El cine de la muerte: sin panel, y el velo entra DESPUES -- los
+          // primeros 900 ms son la caida al frente, sobre el mundo limpio; el
+          // oscurecimiento recien empieza cuando ya no queda nada que ver, y
+          // es lo que va llevando la escena hacia el informe.
+          const q = Math.max(0, (ahoraP - muerteEn - 900) / (RESPIRO_MUERTE - 900));
+          cx.fillStyle = `rgba(17,18,20,${0.85 * Math.min(1, q)})`;
           cx.fillRect(0, 0, w, h);
         } else {
           const a = avisoMuerte;
