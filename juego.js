@@ -79,11 +79,18 @@ const CANCIONES = {
       'C4:2 C5:2',                 // 19 C   la salida: la escalera otra vez
       'G5:1 D5:1 B4:1 G4:1'        // 20 G   y la cascada final
     ],
+    // `m` es el MATIZ: como se toca esta seccion, no solo que notas lleva.
+    // El jugador no tiene tecla de presion --un boton es un boton-- asi que la
+    // dinamica la trae la partitura, como un arreglador que escribe "dolce" o
+    // "marcato" sobre el pentagrama: suave = ataque lento y oscuro, fuerte =
+    // pua y brillo. La MISMA nota en otra seccion sale distinta.
     secciones: [
-      { x0: 0, n: 'salida' }, { x0: 4, n: 'pulso' }, { x0: 12, n: 'escalera' },
-      { x0: 20, n: 'hi-hat' }, { x0: 28, n: 'bajo' }, { x0: 36, n: 'pad' },
-      { x0: 44, n: 'doble' }, { x0: 52, n: 'break' }, { x0: 60, n: 'aire' },
-      { x0: 68, n: 'todo' }, { x0: 76, n: 'salida' }
+      { x0: 0, n: 'salida', m: 'pleno' }, { x0: 4, n: 'pulso', m: 'suave' },
+      { x0: 12, n: 'escalera', m: 'pleno' }, { x0: 20, n: 'hi-hat', m: 'pleno' },
+      { x0: 28, n: 'bajo', m: 'fuerte' }, { x0: 36, n: 'pad', m: 'suave' },
+      { x0: 44, n: 'doble', m: 'pleno' }, { x0: 52, n: 'break', m: 'fuerte' },
+      { x0: 60, n: 'aire', m: 'suave' }, { x0: 68, n: 'todo', m: 'fuerte' },
+      { x0: 76, n: 'salida', m: 'pleno' }
     ],
     // El arreglo entra por capas, calcado de esfera: pulso, escalera (entra el
     // bajo y el pad), hi-hat, bajo, pad, doble, el break de bombo solo, el
@@ -122,8 +129,8 @@ const CANCIONES = {
       'D5:4',                                             //  4  G
       'E5:2 C5:1 A4:1',                                   //  5  Am  AMANECER II: otra vez,
       'C5:4',                                             //  6  F   la base crece
-      'E5:2 G5:1 E5:1',                                   //  7  C
-      'D5:4',                                             //  8  G
+      'E5:2 G5:1 A5:1',                                   //  7  C   se estira al techo
+      'D5:2 C5:1 B4:1',                                   //  8  G   y baja caminando al motor
       'A4!:1 A4!:1 A4!:1 A4!:1',                          //  9  Am  MOTOR: la esfera
       'F4!:1 F4!:1 A4!:1 F4!:1',                          // 10  F   toca el BAJO --
       'F4!:1 A4!:1 D5!:1 A4!:1',                          // 11  Dm  teclas graves que
@@ -228,13 +235,21 @@ const CANCIONES = {
       'Am', 'F', 'C', 'G', 'Am', 'F', 'C', 'G',   // supernova
       'F', 'G', 'Am', 'Am'                        // aterrizaje
     ],
+    // El matiz por seccion: el arco del viaje, escrito. El amanecer se toca
+    // dolce, los drops con pua, la nebulosa flota (y ademas cambia a cristal),
+    // y el aterrizaje vuelve a lo suave: la vuelta de la victoria no se grita.
     secciones: [
-      { x0: 0, n: 'salida' }, { x0: 4, n: 'amanecer' }, { x0: 20, n: 'amanecer II' },
-      { x0: 36, n: 'motor · el bajo' }, { x0: 52, n: 'despegue · drop 1' },
-      { x0: 84, n: 'vuelo · zigzag con el bajo' }, { x0: 116, n: 'gravedad · PISTONES' },
-      { x0: 132, n: 'despegue II' }, { x0: 164, n: 'nebulosa · el fantasma' },
-      { x0: 196, n: 'empuje final' }, { x0: 212, n: 'supernova · climax' },
-      { x0: 244, n: 'aurora · aterrizaje' }
+      { x0: 0, n: 'salida', m: 'pleno' }, { x0: 4, n: 'amanecer', m: 'suave' },
+      { x0: 20, n: 'amanecer II', m: 'pleno' },
+      { x0: 36, n: 'motor · el bajo', m: 'pleno' },
+      { x0: 52, n: 'despegue · drop 1', m: 'fuerte' },
+      { x0: 84, n: 'vuelo · zigzag con el bajo', m: 'pleno' },
+      { x0: 116, n: 'gravedad · PISTONES', m: 'pleno' },
+      { x0: 132, n: 'despegue II', m: 'fuerte' },
+      { x0: 164, n: 'nebulosa · el fantasma', m: 'suave' },
+      { x0: 196, n: 'empuje final', m: 'fuerte' },
+      { x0: 212, n: 'supernova · climax', m: 'fuerte' },
+      { x0: 244, n: 'aurora · aterrizaje', m: 'suave' }
     ],
     // Los martillos: densos en el build y naturalmente salteados en el coro,
     // donde solo cazan al que se va adelante -- alli el galope es tan denso
@@ -282,7 +297,9 @@ const CANCIONES = {
       if (c <= 7) return { drums: 'hats', bajo: 'pulso', arp: 'soft8', pad: true };            // amanecer II
       if (c === 8) return { drums: 'preFill', bajo: 'pulso', arp: 'soft8', pad: true };
       if (c <= 11) return { drums: 'coro', bajo: 'corchea', pad: true, riser: c === 11 ? 2 : 0 };  // motor
-      if (c === 12) return { drums: 'roll', bajo: 'corchea', pad: true };
+      // el corte: redoble, y el tiempo 4 mudo -- quedan tus teclas de bajo
+      // (E4 G4 B4 E5 trepando) sonando SOLAS contra el vacio, y el crash cae
+      if (c === 12) return { drums: 'rollCorte', bajo: 'corchea', pad: true };
       if (c <= 20) return { drums: (c - 13) % 4 === 3 ? 'fillTom' : 'coro', bajo: 'drive', arp: 'up16', pad: true, crash: c === 13 };  // drop 1
       if (c <= 28) return { drums: c === 28 ? 'fillTom' : 'verso', bajo: 'verso', pad: true };   // vuelo
       if (c <= 30) return { drums: 'coro', bajo: 'corchea', arp: 'up16', pad: true };            // gravedad
@@ -301,7 +318,8 @@ const CANCIONES = {
       if (c <= 48) return { drums: 'hats', bajo: 'pulso', arp: 'soft8', arpGan: 0.8, pad: true };
       // EMPUJE FINAL: el build mas grande -- dos compases de redoble y riser
       if (c <= 50) return { drums: 'coro', bajo: 'climb', arp: 'up16', pad: true, riser: c === 50 ? 3 : 0 };
-      if (c <= 52) return { drums: 'rollBig', bajo: 'climb', arp: 'up16', pad: true };
+      // ...y el corte grande antes de SUPERNOVA: mismo trato, mas caida
+      if (c <= 52) return { drums: c === 52 ? 'rollBigCorte' : 'rollBig', bajo: 'climb', arp: 'up16', pad: true };
       // SUPERNOVA: doble tiempo y melodia doblada
       if (c <= 60) return { drums: 'doble', bajo: 'drive', arp: 'glitter', pad: true, crash: c === 53 };
       // AURORA · aterrizaje: se apaga de a poco y resuelve en La
@@ -331,6 +349,10 @@ const E_BATERIA = {
   rollBig: 'K.ss.ss.ssssssss',
   fillTom: 'k.h.x.h.k.u.T.t.',
   roll: 'k.s.s.s.ssssssss',
+  // los cortes: el mismo redoble, pero el ultimo tiempo es NADA. El silencio
+  // subito antes del crash es lo que hace explotar al compas siguiente.
+  rollCorte: 'k.s.s.s.ssss....',
+  rollBigCorte: 'K.ss.ss.ssss....',
   outro: 'k.......x.......'
 };
 // Bajo y arpegio en numeros (16 pasos): semitonos sobre la raiz / grados de la
@@ -1531,8 +1553,12 @@ function arrancarNavegador () {
     { nom: 'turquesa', rgb: '80,222,228' },
     { nom: 'hueso', rgb: '240,236,226' }
   ];
-  const ESTELAS = ['cometa', 'gotas', 'ninguna'];
-  const MARCAS = ['costura', 'cruz', 'gajos', 'núcleo'];
+  const ESTELAS = ['Cometa', 'Gotas', 'Ninguna'];
+  // Cuatro marcas que se distinguen GIRANDO, que es como se las ve siempre:
+  // cruz y gajos eran las dos "rectas que pasan por el centro" y rotando se
+  // confundian. Ahora cada una tiene otra naturaleza: curva, quebrada,
+  // enrollada, concentrica.
+  const MARCAS = ['Costura', 'Rayo', 'Espiral', 'Núcleo'];
   let mira = { color: 0, estela: 0, marca: 0 };
   try {
     const g = JSON.parse(localStorage.getItem('drible:mira'));
@@ -1545,6 +1571,32 @@ function arrancarNavegador () {
   // la marca sale de TU color, oscurecida: antes era un marron fijo que solo
   // pegaba con el ambar y ensuciaba los otros cuatro
   const rgbMarca = () => C.esferaRGB.split(',').map(v => Math.round(v * 0.33)).join(',');
+  // LA MARCA SE TRAZA EN UN SOLO LUGAR, para el juego y para el preview: si el
+  // menu dibujara la suya, tarde o temprano mentiria. Recibe los dos radios
+  // porque jugando la esfera se aplasta (squash) y la marca se aplasta con ella.
+  function trazarMarca (rx, ry) {
+    cx.beginPath();
+    if (mira.marca === 0) {              // costura: dos gajos curvos, de pelota
+      cx.moveTo(-rx, 0); cx.quadraticCurveTo(0, ry * 0.95, rx, 0);
+      cx.moveTo(-rx, 0); cx.quadraticCurveTo(0, -ry * 0.95, rx, 0);
+    } else if (mira.marca === 1) {       // rayo: el zigzag que parte la esfera
+      cx.moveTo(rx * 0.18, -ry * 0.80);
+      cx.lineTo(-rx * 0.24, -ry * 0.05);
+      cx.lineTo(rx * 0.10, ry * 0.07);
+      cx.lineTo(-rx * 0.18, ry * 0.80);
+    } else if (mira.marca === 2) {       // espiral: dos vueltas hacia afuera
+      const FIN = 4.4 * Math.PI;
+      for (let a = 0; a <= FIN; a += 0.3) {
+        const r = 0.10 + 0.72 * (a / FIN);
+        const x = Math.cos(a) * r * rx, y = Math.sin(a) * r * ry;
+        if (a === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+      }
+    } else {                             // nucleo: el anillo y su semilla
+      cx.moveTo(rx * 0.62, 0); cx.ellipse(0, 0, rx * 0.62, ry * 0.62, 0, 0, Math.PI * 2);
+      cx.moveTo(rx * 0.16, 0); cx.ellipse(0, 0, rx * 0.16, ry * 0.16, 0, 0, Math.PI * 2);
+    }
+    cx.stroke();
+  }
   function aplicarMira () {
     C.esferaRGB = PALETA[mira.color].rgb;
     C.esfera = `rgb(${C.esferaRGB})`;
@@ -1691,6 +1743,7 @@ function arrancarNavegador () {
   // que la esfera --por eso bajan juntas-- y al soltarla vuelve sola.
   const teclaHundida = new Map();
   let pump = 0, padLuz = 0, tinte = [70, 90, 150], brilloRacha = 0;
+  let fugaz = null, auroraLuz = 0;    // la estrella del crash, y el cielo de NEBULOSA
   // Las tres capas del horizonte: cuanto se mueven (f), cuanto se achatan (k),
   // a que altura arrancan y cada cuantas notas toman un pico. La de mas lejos
   // toma una nota de cada seis: de lejos se ve la FORMA de la cancion, no sus
@@ -1743,6 +1796,16 @@ function arrancarNavegador () {
     al: 0.05 + ((i * 3) % 3) * 0.02,
     f: 0.07 + ((i * 11) % 3) * 0.022,
     a: 0.07 + ((i * 13) % 4) * 0.022
+  }));
+  // Las estrellas: chispas fijas repartidas por el razon aureo (sin dos en el
+  // mismo lugar y sin sorteos que la prueba de humo no pueda repetir). Cada
+  // una titila a su ritmo y lleva un parallax minimo.
+  const ESTRELLAS = Array.from({ length: 54 }, (_, i) => ({
+    x: (i * 0.618034) % 1,
+    y: (i * 0.381966) % 1,
+    tw: 0.4 + (i % 5) * 0.25,
+    f: 0.012 + (i % 3) * 0.008,
+    r: 1 + (i % 3) * 0.6
   }));
   const TINTE = {
     Am: [70, 95, 165], F: [160, 110, 70], C: [80, 150, 130],
@@ -1864,6 +1927,7 @@ function arrancarNavegador () {
     // el retardo es MUSICAL: una negra con puntillo del tempo de esta cancion
     if (ecoRet) ecoRet.delayTime.value = 1.5 * SPB;
     ac.resume();
+    bandaVuelve();
     rodadaAbrir();
     t0 = ac.currentTime + 0.12;
     proxBeat = 0;
@@ -1930,6 +1994,21 @@ function arrancarNavegador () {
     rodada.bq.frequency.setTargetAtTime(
       (k ? Math.min(3800, 650 + (k.y - Y_GRAVE) * 5600) : 700) * vv, ac.currentTime, 0.06);
   }
+
+  // EL MATIZ SE TOCA. La queja real era "la nota a veces empieza muy seca":
+  // todas las notas atacaban en 4-5 ms, siempre, en el amanecer igual que en
+  // el drop. Un instrumentista no toca asi -- aprieta distinto segun la parte.
+  // Presion no hay (la fisica de una tecla no la trae), asi que la trae la
+  // PARTITURA: cada seccion declara su matiz y estas cuentas lo convierten en
+  // ataque, volumen, brillo, vibrato y cola. Es la diferencia entre disparar
+  // notas y que la cancion venga interpretada.
+  const MATIZ = {
+    suave:  { ataque: 3.6, gan: 0.85, brillo: 0.70, vib: 1.7, cola: 1.35 },
+    pleno:  { ataque: 1,   gan: 1,    brillo: 1,    vib: 1,   cola: 1 },
+    fuerte: { ataque: 0.55, gan: 1.12, brillo: 1.25, vib: 0.8, cola: 0.9 }
+  };
+  const matiz = () =>
+    MATIZ[(SECCIONES.filter(z => z.x0 <= s.x).pop() || {}).m] || MATIZ.pleno;
 
   function golpe (t, f, dur, gan, tipo = 'sine') {
     const o = ac.createOscillator(), g = ac.createGain();
@@ -2149,12 +2228,17 @@ function arrancarNavegador () {
   // Se guarda para poder soltarla si el jugador corta el riel antes.
   let rielVozE = null;
   function eRielAbrir (f, dur, gan = 0.13, suc = 0) {
-    const t = ac.currentTime;
+    const t = ac.currentTime, mz = matiz();
+    gan *= mz.gan;
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(18000 * Math.pow(0.07, suc), t);
+    // EL SOSTENIDO CANTA LA FUNDAMENTAL. Con el filtro abierto (18k) la
+    // cuadrada sostenida era pura pila de armonicos y el oido se subia al
+    // tercero: la nota larga parecia sonar una octava (y pico) arriba de la
+    // que pisabas. Cerrado sobre f, lo que se sostiene es LA nota.
+    lp.frequency.setValueAtTime(Math.min(f * 4.2, 3600) * (1 - 0.55 * suc) * mz.brillo, t);
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(gan, t + 0.004);
+    g.gain.linearRampToValueAtTime(gan, t + 0.004 * mz.ataque);
     // La nota larga NO SE MUERE SOLA. Caia exponencial hasta cero a lo largo de
     // todo el riel, asi que la mitad final de una blanca sostenida era silencio
     // con la mano puesta: se mantenia apretado y no sonaba nada. Ahora cae al
@@ -2163,25 +2247,28 @@ function arrancarNavegador () {
     g.gain.setValueAtTime(gan * 0.62, t + dur * 0.72);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     lp.connect(voz);
-    // ...y RESPIRA. Un tono cuadrado perfectamente fijo durante dos tiempos es
-    // exactamente el sonido de un test de audio: lo unico que lo separa de un
-    // instrumento sosteniendo una nota es que la afinacion se mueva un poco.
+    // ...y lo que la mantiene VIVA es el VIBRATO, no mas voces. La voz batida
+    // que hubo aca (una segunda cuadrada corrida unos cents) engordaba, si,
+    // pero el batido en una nota larga se oye como algo desafinado flotando
+    // encima -- rarisimo. Un vibrato franco de mano (5 Hz, +-14 cents, que
+    // entra despues del ataque y crece) es como sostiene una nota cualquier
+    // instrumentista, y no ensucia la afinacion media.
     const lfo = ac.createOscillator(), lfoG = ac.createGain();
-    lfo.type = 'sine'; lfo.frequency.value = 4.8;
+    lfo.type = 'sine'; lfo.frequency.value = 5.0;
     lfoG.gain.setValueAtTime(0, t);
-    lfoG.gain.linearRampToValueAtTime(7, t + Math.min(0.45, dur * 0.5));
+    lfoG.gain.setValueAtTime(0, t + 0.12);
+    lfoG.gain.linearRampToValueAtTime(14 * mz.vib, t + Math.min(0.6, dur * 0.5));
     lfo.connect(lfoG); lfo.start(t); lfo.stop(t + dur + 0.15);
     const o = ac.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(f, t);
-    o.detune.value = 60 * suc;
+    o.detune.value = 95 * suc;
     lfoG.connect(o.detune);
     o.connect(g).connect(lp); o.start(t); o.stop(t + dur + 0.05);
-    // una segunda voz corrida un pelo: engorda la nota sin cambiarle el timbre
-    const o2 = ac.createOscillator(), g2 = ac.createGain();
-    o2.type = 'triangle'; o2.frequency.setValueAtTime(f, t);
-    o2.detune.value = -7 + 60 * suc; g2.gain.value = 0.55;
-    lfoG.connect(o2.detune);
-    o2.connect(g2).connect(g); o2.start(t); o2.stop(t + dur + 0.05);
-    rielVozE = { o, g, extra: [o2, lfo] };
+    // el sub, una octava ABAJO y quieto: ancla la fundamental que el filtro
+    // deja pasar -- el peso del sostenido, no otro timbre
+    const oSub = ac.createOscillator(), gSub = ac.createGain();
+    oSub.type = 'sine'; oSub.frequency.setValueAtTime(f / 2, t); gSub.gain.value = 0.35;
+    oSub.connect(gSub).connect(g); oSub.start(t); oSub.stop(t + dur + 0.05);
+    rielVozE = { o, g, extra: [oSub, lfo] };
   }
   function eRielCerrar () {
     if (!rielVozE) return;
@@ -2207,19 +2294,20 @@ function arrancarNavegador () {
     // volumen, es lo que hace que una campana suene a campana-- con cola larga
     // y ataque suave. En NEBULOSA la bateria calla y el pluck seco quedaba
     // desnudo; esto flota, que es lo que la seccion pide.
+    const mz = matiz();
     if (vozEn(s.x) === 'cristal') {
       const g = ac.createGain(), lp = ac.createBiquadFilter();
-      const durC = Math.max(0.7, dur * 1.6);
+      const durC = Math.max(0.7, dur * 1.6) * mz.cola;
       lp.type = 'lowpass'; lp.Q.value = 0.7;
       lp.frequency.setValueAtTime(Math.min(6200, f * 7) * (1 - 0.5 * suc), t);
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(gan * 0.7 * (1 - 0.35 * suc), t + 0.02);
+      g.gain.exponentialRampToValueAtTime(gan * 0.7 * mz.gan * (1 - 0.35 * suc), t + 0.02);
       g.gain.exponentialRampToValueAtTime(0.0001, t + durC);
       g.connect(lp).connect(voz);
       for (const [mul, v, des] of [[1, 1, 0], [2, 0.34, 4], [3.01, 0.16, -6]]) {
         const o = ac.createOscillator(), gv = ac.createGain();
         o.type = 'sine'; o.frequency.value = f * mul; gv.gain.value = v;
-        o.detune.value = des + 55 * suc;
+        o.detune.value = des + 85 * suc;
         o.connect(gv).connect(g); o.start(t); o.stop(t + durC + 0.02);
       }
       return;
@@ -2238,21 +2326,33 @@ function arrancarNavegador () {
       const durE = Math.min(dur, 0.17) * limpio;
       const ge = ac.createGain(), lpe = ac.createBiquadFilter();
       lpe.type = 'lowpass';
-      lpe.frequency.setValueAtTime(18000 * Math.pow(0.07, suc), t);
+      // el matiz mueve el filo entero: en lo suave la cuadrada entra soplada
+      // (14 ms) y mas oscura; en lo fuerte pega en 2 ms con todo el brillo
+      lpe.frequency.setValueAtTime(
+        Math.min(18000, 18000 * Math.pow(0.07, suc) * mz.brillo), t);
       ge.gain.setValueAtTime(0.0001, t);
-      ge.gain.linearRampToValueAtTime(gan * 0.45 * limpio,
-        t + Math.min(0.004 + 0.012 * suc, durE * 0.5));
+      ge.gain.linearRampToValueAtTime(gan * 0.45 * limpio * mz.gan,
+        t + Math.min(Math.min(0.011, 0.004 * mz.ataque) + 0.012 * suc, durE * 0.5));
       ge.gain.exponentialRampToValueAtTime(0.0001, t + durE);
       lpe.connect(voz);
       const o = ac.createOscillator(); o.type = 'square';
-      o.frequency.setValueAtTime(f, t); o.detune.value = 60 * suc;
+      o.frequency.setValueAtTime(f, t); o.detune.value = 95 * suc;
       o.connect(ge).connect(lpe); o.start(t); o.stop(t + durE + 0.02);
       if (suc > 0.25) {                        // el batido y la uña que raspa
-        const g2 = ac.createGain(); g2.gain.value = 0.5 * suc;
+        const g2 = ac.createGain(); g2.gain.value = 0.65 * suc;
         const o2 = ac.createOscillator(); o2.type = 'square';
-        o2.frequency.setValueAtTime(f, t); o2.detune.value = -75 * suc;
+        o2.frequency.setValueAtTime(f, t); o2.detune.value = -120 * suc;
         o2.connect(g2).connect(ge); o2.start(t); o2.stop(t + durE + 0.02);
         ruido(t, 0.025, 0.06 * suc, 'bandpass', 900, 1.2);
+      }
+      // ...y la MUY chueca lleva el choque de segunda menor: la nota de al
+      // lado sonando a la vez, que es lo que de verdad hace apretar los
+      // dientes. Desafinar tenia que doler, no sonar "espacial".
+      if (suc > 0.55) {
+        const g3 = ac.createGain(); g3.gain.value = 0.4 * suc;
+        const o3 = ac.createOscillator(); o3.type = 'square';
+        o3.frequency.setValueAtTime(f, t); o3.detune.value = 100;
+        o3.connect(g3).connect(ge); o3.start(t); o3.stop(t + durE + 0.02);
       }
       // LA NOTA YA NO ES UN BLIP. Esa cuadrada de 160 ms es la voz del estudio
       // calcada, y alla cada nota duraba UNA semicorchea porque el eco del
@@ -2265,16 +2365,20 @@ function arrancarNavegador () {
       // Los ecos y el doblaje de octava se agendan cortos a proposito: esos no
       // llevan cuerpo, o la seccion entera se convierte en barro.
       if (dur <= 0.18) return;
-      const durC = Math.max(0.34, Math.min(dur * 1.9, 1.25 * SPB)) * limpio;
+      const durC = Math.max(0.34, Math.min(dur * 1.9, 1.25 * SPB)) * limpio * mz.cola;
       const gc = ac.createGain(), lpc = ac.createBiquadFilter();
       lpc.type = 'lowpass'; lpc.Q.value = 0.9;
-      lpc.frequency.setValueAtTime(Math.min(5200, f * 6) * (1 - 0.45 * suc), t);
+      lpc.frequency.setValueAtTime(
+        Math.min(6200, Math.min(5200, f * 6) * mz.brillo) * (1 - 0.45 * suc), t);
       lpc.frequency.exponentialRampToValueAtTime(
         Math.max(320, Math.min(1600, f * 2.2)), t + durC * 0.8);
-      // pulsada: pico, y en seguida un escalon donde la nota SE QUEDA sonando
+      // pulsada: pico, y en seguida un escalon donde la nota SE QUEDA sonando.
+      // El pico tarda lo que el matiz manda: 12 ms tocando pleno, 43 en lo
+      // suave -- ahi la nota FLORECE en vez de saltar, que es lo que le
+      // faltaba al amanecer.
       gc.gain.setValueAtTime(0.0001, t);
-      gc.gain.exponentialRampToValueAtTime(gan * 0.5 * limpio, t + 0.012);
-      gc.gain.exponentialRampToValueAtTime(gan * 0.15 * limpio, t + 0.18);
+      gc.gain.exponentialRampToValueAtTime(gan * 0.5 * limpio * mz.gan, t + 0.012 * mz.ataque);
+      gc.gain.exponentialRampToValueAtTime(gan * 0.15 * limpio * mz.gan, t + 0.18 * mz.cola);
       gc.gain.exponentialRampToValueAtTime(0.0001, t + durC);
       gc.connect(lpc).connect(voz);
       // el vibrato entra DESPUES del ataque, como el dedo sobre la cuerda: una
@@ -2283,40 +2387,44 @@ function arrancarNavegador () {
       lfo.type = 'sine'; lfo.frequency.value = 4.6;
       lfoG.gain.setValueAtTime(0, t);
       lfoG.gain.setValueAtTime(0, t + 0.16);
-      lfoG.gain.linearRampToValueAtTime(6, t + Math.max(0.3, durC * 0.7));
+      lfoG.gain.linearRampToValueAtTime(6 * mz.vib, t + Math.max(0.3, durC * 0.7));
       lfo.connect(lfoG); lfo.start(t); lfo.stop(t + durC + 0.05);
       for (const [tipo, mul, v, des] of
         [['triangle', 1, 1, -3], ['sawtooth', 1, 0.20, 6], ['sine', 0.5, 0.40, 0],
          ['sine', 2, 0.09, 4]]) {
         const oc = ac.createOscillator(), gv = ac.createGain();
         oc.type = tipo; oc.frequency.value = f * mul; gv.gain.value = v;
-        oc.detune.value = des + 45 * suc;
+        oc.detune.value = des + 70 * suc;
         lfoG.connect(oc.detune);
         oc.connect(gv).connect(gc); oc.start(t); oc.stop(t + durC + 0.03);
       }
       return;
     }
     const lp = ac.createBiquadFilter(), g = ac.createGain();
-    const ataque = desde ? 0.03 : 0.005;      // seco y al frente: pluck, no pad
+    // pluck, no pad -- el matiz ablanda el pluck pero con techo en 13 ms:
+    // mas alla de eso deja de ser blandura y empieza a ser una nota corrida
+    const ataque = desde ? 0.03 : Math.min(0.013, 0.005 * mz.ataque);
     // EL BRILLO TIENE TECHO ABSOLUTO. Atado solo a la nota (f * 8), cada nota
     // mas aguda salia mas brillante que la anterior, y arriba la melodia se
     // volvia un silbido. Un instrumento de verdad no se pone mas brillante
     // porque toques mas agudo: el cuerpo del instrumento no cambia.
     lp.type = 'lowpass'; lp.Q.value = 2.2 - 1.2 * suc;
-    lp.frequency.setValueAtTime(Math.min(4600 - 3100 * suc, f * 6), t);
+    lp.frequency.setValueAtTime(Math.min(6000, Math.min(4600 - 3100 * suc, f * 6) * mz.brillo), t);
     lp.frequency.exponentialRampToValueAtTime(
       Math.max(220, Math.min(1100 - 620 * suc, f * 1.6)), t + dur * 0.85);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(gan * (1 - 0.3 * suc), t + ataque);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.exponentialRampToValueAtTime(gan * mz.gan * (1 - 0.3 * suc), t + ataque);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur * mz.cola);
     g.connect(lp).connect(voz);
-    // el pico del ataque: sin esto la nota entra sin uña y suena plana
-    if (!desde) ruido(t, 0.02, 0.045 + 0.045 * suc, 'bandpass', 2600 - 1700 * suc, 1.2);
+    // el pico del ataque: sin esto la nota entra sin uña y suena plana -- pero
+    // en lo suave la uña se guarda, que ahi la nota entra soplada
+    if (!desde) ruido(t, 0.02, (0.045 + 0.045 * suc) * Math.min(1, 1 / mz.ataque),
+      'bandpass', 2600 - 1700 * suc, 1.2);
     // Triangulo de cuerpo + un poco de sierra para el filo + sub una octava
     // abajo. La cuadrada sola era la chicharra. Chueca, las voces se van para
     // lados distintos: eso es lo que bate y molesta.
     for (const [tipo, mul, v, des] of
-      [['triangle', 1, 1, -45], ['sawtooth', 1, 0.32, -45], ['sine', 0.5, 0.5, 28]]) {
+      [['triangle', 1, 1, -75], ['sawtooth', 1, 0.32, -75], ['sine', 0.5, 0.5, 45]]) {
       const o = ac.createOscillator(), gv = ac.createGain();
       o.type = tipo; gv.gain.value = v;
       o.detune.value = des * suc;              // las voces se separan de a poco
@@ -2330,30 +2438,36 @@ function arrancarNavegador () {
 
   function rielAbrir (f, suc = 0) {
     rielCerrar();
-    const t = ac.currentTime;
+    const t = ac.currentTime, mz = matiz();
     const cristal = vozEn(s.x) === 'cristal';
     const g = ac.createGain(), lp = ac.createBiquadFilter();
     lp.type = 'lowpass'; lp.Q.value = cristal ? 0.7 : 1.6;
     lp.frequency.value = cristal ? Math.min(6200, f * 7) : Math.min(3400 - 2200 * suc, f * 5);
     g.gain.setValueAtTime(0.0001, t);
     // el cristal entra soplado, no golpeado: 120 ms de ataque
-    g.gain.exponentialRampToValueAtTime((cristal ? 0.17 : 0.2) - 0.05 * suc,
-      t + (cristal ? 0.12 : 0.03));
+    g.gain.exponentialRampToValueAtTime(((cristal ? 0.17 : 0.2) - 0.05 * suc) * mz.gan,
+      t + (cristal ? 0.12 : 0.03 * mz.ataque));
     g.connect(lp).connect(voz);
     if (suc > 0.25) ruido(t, 0.05, 0.09 * suc, 'bandpass', 900, 1.2);
     // Vibrato que entra despues del ataque. Una nota larga sin vibrato es un
     // tono de test: es lo que sonaba plano cuando se sostenia un riel.
     const lfo = ac.createOscillator(), lfoG = ac.createGain();
-    // el cristal no vibra la afinacion: RESPIRA. Un vibrato de 5.2 Hz sobre una
-    // campana suena a sirena; lo que hace vivo a un sonido de vidrio sostenido
-    // es un batido lento y muy poca profundidad.
-    lfo.type = 'sine'; lfo.frequency.value = cristal ? 1.6 : 5.2;
+    // El vibrato del sostenido: franco en la voz normal, mas lento y contenido
+    // en el cristal (una campana con vibrato de violinista suena a sirena),
+    // pero VIBRATO al fin -- el batido casi quieto que hubo aca dejaba la nota
+    // larga sonando a tono de prueba con un parcial arriba.
+    lfo.type = 'sine'; lfo.frequency.value = cristal ? 3.8 : 5.2;
     lfoG.gain.setValueAtTime(0, t);
-    lfoG.gain.linearRampToValueAtTime(cristal ? 2.5 : 7, t + (cristal ? 0.8 : 0.35));
+    lfoG.gain.setValueAtTime(0, t + 0.15);
+    lfoG.gain.linearRampToValueAtTime((cristal ? 5 : 10) * mz.vib, t + (cristal ? 0.8 : 0.5));
     lfo.connect(lfoG); lfo.start(t);
     const osc = [];
+    // En el cristal SOSTENIDO los parciales altos van muy abajo: el 2x a 0.30
+    // era literalmente una octava arriba sonando a la par, y en una nota larga
+    // el oido se engancha a ella y "la nota" parece ser esa. En el pluck corto
+    // ese brillo es el timbre; sostenido, es la afinacion equivocada.
     for (const [tipo, mul, v, des] of (cristal
-      ? [['sine', 1, 1, 0], ['sine', 2, 0.30, 5], ['sine', 3.01, 0.14, -7]]
+      ? [['sine', 1, 1, 0], ['sine', 2, 0.11, 4], ['sine', 3.01, 0.06, -6]]
       : [['triangle', 1, 1, -45], ['sawtooth', 1, 0.3, -45], ['sine', 0.5, 0.5, 28]])) {
       const o = ac.createOscillator(), gv = ac.createGain();
       o.type = tipo; o.frequency.value = f * mul; gv.gain.value = v;
@@ -2454,6 +2568,42 @@ function arrancarNavegador () {
     }
   }
 
+  function sonarMuerte () {
+    const t = ac.currentTime;
+    // la banda se CORTA: todo lo agendado sigue existiendo, pero el bus del
+    // arreglo se hunde en 200 ms. El silencio subito es la mitad del golpe.
+    if (fondo) {
+      const g = fondo.gain;
+      g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
+      g.linearRampToValueAtTime(0.0001, t + 0.2);
+    }
+    // el apagon: la corriente que se va -- dos voces cayendo dos octavas y pico
+    // con el filtro cerrandose encima. El gesto universal de "se termino".
+    for (const [f0, tipo, gv] of [[196, 'sawtooth', 0.3], [98, 'square', 0.2]]) {
+      const o = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter();
+      o.type = tipo; o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(f0 / 5.5, t + 0.8);
+      lp.type = 'lowpass'; lp.Q.value = 3;
+      lp.frequency.setValueAtTime(2200, t);
+      lp.frequency.exponentialRampToValueAtTime(140, t + 0.8);
+      g.gain.setValueAtTime(gv, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+      o.connect(lp).connect(g).connect(master);
+      o.start(t); o.stop(t + 0.95);
+    }
+    // ...y el cuerpo tocando el piso: el boom grave y el polvo que levanta
+    golpe(t + 0.06, 48, 0.55, 0.5);
+    ruido(t + 0.04, 0.35, 0.3, 'lowpass', 750);
+  }
+  // la banda vuelve: el corte de la muerte no puede quedar pegado al proximo
+  // intento -- el primer compas de la corrida nueva sale con el arreglo entero
+  function bandaVuelve () {
+    if (!fondo || !ac) return;
+    const t = ac.currentTime;
+    fondo.gain.cancelScheduledValues(t);
+    fondo.gain.setValueAtTime(1, t);
+  }
+
   function sonarFinal () {
     const t = ac.currentTime + 0.05;
     acordePad(t, ACORDE.Am.acorde.map(f => f * 2), 3, 0.07);
@@ -2532,14 +2682,17 @@ function arrancarNavegador () {
         // chueca lo arrastra chueco: el eco repite lo que sono.
         // el CLIMAX dobla la melodia una octava arriba, como el estudio
         if (enOctava(e.x)) lead(ac.currentTime, e.f * 2, 0.24, (fuerte ? 0.29 : 0.21) * 0.5, 0, e.suc);
+        const tGrid = t0 + NOTAS[e.i].b * SPB;    // donde la partitura puso la nota
         if (!NOTAS[e.i].riel)
-          lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.3, 0, e.suc);
+          lead(Math.max(ac.currentTime + 0.02, tGrid + 0.75 * SPB),
+            e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.3, 0, e.suc);
         // LA CLAVADA SE OYE: el eco realimenta una vez mas, perfectamente
         // limpio, solo cuando tocaste exacto. No entra ningun sonido nuevo al
         // arreglo -- se repite el eco que el estudio ya define. El premio
         // maximo de un juego musical tiene que ser musical.
         if (e.perfecto && !NOTAS[e.i].riel)
-          lead(ac.currentTime + 1.5 * SPB, e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.15, 0, 0);
+          lead(Math.max(ac.currentTime + 0.02, tGrid + 1.5 * SPB),
+            e.f, 0.1, (fuerte ? 0.29 : 0.21) * 0.15, 0, 0);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
         chispas(e.x, e.y, Math.round(7 - 4 * e.suc), true, mezcla(C.teclaRGB, C.suciaRGB, e.suc));
         squash = 1;
@@ -2547,7 +2700,8 @@ function arrancarNavegador () {
       } else if (e.tipo === 'ligada') {
         lead(ac.currentTime, e.f, 0.5, 0.15, e.desde, e.suc);
         if (!NOTAS[e.i].riel)
-          lead(ac.currentTime + 0.75 * SPB, e.f, 0.1, 0.15 * 0.3, 0, e.suc);
+          lead(Math.max(ac.currentTime + 0.02, t0 + (NOTAS[e.i].b + 0.75) * SPB),
+            e.f, 0.1, 0.15 * 0.3, 0, e.suc);
         destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
         chispas(e.x, e.y, 5, false, mezcla(C.teclaRGB, C.suciaRGB, e.suc));
         squash = 0.8;
@@ -2721,6 +2875,7 @@ function arrancarNavegador () {
     esperando = false;
     avisoMuerte = null;
     try { ac.resume(); } catch (_) {}
+    bandaVuelve();
     t0 = ac.currentTime + 1.0;      // el respiro justo antes del compas 1
     proxBeat = 0;
   }
@@ -3036,6 +3191,7 @@ function arrancarNavegador () {
     // el mundo estaba congelado esperando: se descongela y saltarA reescribe t0
     // sobre el reloj ya corriendo
     if (esperando) { esperando = false; try { ac.resume(); } catch (_) {} }
+    bandaVuelve();
     saltarA(z.x0);
     avisoSeccion = { n: z.n, t: performance.now(), aviso: ensayo };
     avisoMuerte = null;
@@ -3076,8 +3232,11 @@ function arrancarNavegador () {
     if (s.meta) { empezar(CANCION_ID); return; }
     s.sostiene = true;
     tocar(s, ahora());
+    // el sonido sale AHORA, no en el proximo cuadro: la bateria va con
+    // precision de sample y la melodia no puede correr un cuadro atras
+    procesar();
   }
-  function subir () { soltar(s); }
+  function subir () { soltar(s); if (corriendo) procesar(); }
 
   // Es un juego de UN boton: cualquier tecla normal vale. Se dejan pasar los
   // atajos con Ctrl/Alt/Meta y las de funcion para no romper recargar ni F12.
@@ -3244,7 +3403,7 @@ function arrancarNavegador () {
       salaMix.gain.setTargetAtTime(vozEn(s.x) === 'cristal' ? 1 : 0.55, ac.currentTime, 0.5);
     }
     procesar();
-    if (!s.viva) { golpe(ac.currentTime, 90, 0.3, 0.4, 'sawtooth'); ruido(ac.currentTime, 0.2, 0.28); morirOReiniciar(); }
+    if (!s.viva) { sonarMuerte(); morirOReiniciar(); }
     if (s.meta && !finSonado) {
       finSonado = true; rielCerrar(); eRielCerrar(); sonarFinal();
       metaEn = performance.now(); flash = 1; flashRGB = '255,215,130';
@@ -3468,52 +3627,51 @@ function arrancarNavegador () {
       pct: r.pct || 0, limpias: r.limpias || 0
     };
   }
-  // la esfera de muestra: rebota sobre su propia red, con la estela elegida.
-  // Es un preview honesto -- lo que se ve acá es lo que se ve jugando.
+  // la esfera de muestra: VIAJA por su tarima y rebota, y la estela se dibuja
+  // desde su recorrido REAL -- antes rebotaba en el lugar y la estela era un
+  // truco de offsets que apenas se veia, o sea que elegir "Cometa" no
+  // mostraba nada. Un preview que no muestra lo que vende no es un preview.
   function esferaMuestra (cxp, cyp, rr) {
     const t = performance.now() / 1000;
-    const salto = Math.abs(Math.sin(t * 2.1));
-    const yy = cyp - salto * rr * 2.2;
+    // el vaiven va RAPIDO a proposito: a media velocidad los fantasmas de la
+    // estela caian uno encima del otro, tapados por el cuerpo, y el preview
+    // volvia a no mostrar nada
+    const pos = tt => ({
+      x: cxp + Math.sin(tt * 1.5) * rr * 2.7,
+      y: cyp - Math.abs(Math.sin(tt * 3.0)) * rr * 2.1
+    });
+    const p = pos(t);
     cx.strokeStyle = C.red; cx.lineWidth = 1;
-    cx.beginPath(); cx.moveTo(cxp - rr * 3.4, cyp + rr); cx.lineTo(cxp + rr * 3.4, cyp + rr); cx.stroke();
+    cx.beginPath(); cx.moveTo(cxp - rr * 3.6, cyp + rr); cx.lineTo(cxp + rr * 3.6, cyp + rr); cx.stroke();
     if (mira.estela !== 2) {
-      for (let i = 1; i <= 6; i++) {
-        const st = Math.abs(Math.sin((t - i * 0.045) * 2.1));
-        const f = 1 - i / 7;
-        cx.fillStyle = `rgba(${C.esferaRGB},${(mira.estela === 1 ? 0.30 : 0.16) * f})`;
+      const gotas = mira.estela === 1;
+      for (let i = 8; i >= 1; i--) {
+        const q = pos(t - i * 0.09), f = 1 - i / 9;
+        // mas brillante que en juego: aca la estela es LA mercaderia
+        cx.fillStyle = `rgba(${C.esferaRGB},${(gotas ? 0.5 : 0.28) * f})`;
         cx.beginPath();
-        cx.arc(cxp - i * (mira.estela === 1 ? 3.5 : 1.6), cyp - st * rr * 2.2,
-          rr * (mira.estela === 1 ? 0.3 : 0.35 + 0.5 * f), 0, Math.PI * 2);
+        cx.arc(q.x, q.y, rr * (gotas ? 0.16 + 0.30 * f : 0.35 + 0.55 * f), 0, Math.PI * 2);
         cx.fill();
       }
     }
-    const halo = cx.createRadialGradient(cxp, yy, 0, cxp, yy, rr * 3);
+    const halo = cx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr * 3);
     halo.addColorStop(0, `rgba(${C.esferaRGB},0.18)`);
     halo.addColorStop(1, `rgba(${C.esferaRGB},0)`);
     cx.fillStyle = halo;
-    cx.beginPath(); cx.arc(cxp, yy, rr * 3, 0, Math.PI * 2); cx.fill();
+    cx.beginPath(); cx.arc(p.x, p.y, rr * 3, 0, Math.PI * 2); cx.fill();
     cx.fillStyle = C.esfera;
-    cx.beginPath(); cx.arc(cxp, yy, rr, 0, Math.PI * 2); cx.fill();
-    // la marca, girando como gira jugando: el preview no sirve si miente
+    cx.beginPath(); cx.arc(p.x, p.y, rr, 0, Math.PI * 2); cx.fill();
+    // la marca gira COMO RUEDA: el angulo es el camino andado sobre el radio,
+    // asi que al frenar en las puntas del vaiven la marca frena con ella
     cx.save();
-    cx.beginPath(); cx.arc(cxp, yy, rr, 0, Math.PI * 2); cx.clip();
-    cx.translate(cxp, yy); cx.rotate(t * 2.4);
+    cx.beginPath(); cx.arc(p.x, p.y, rr, 0, Math.PI * 2); cx.clip();
+    cx.translate(p.x, p.y); cx.rotate((p.x - cxp) / rr + t * 0.8);
     cx.strokeStyle = `rgba(${rgbMarca()},0.6)`;
     cx.lineWidth = 2;
-    cx.beginPath();
-    if (mira.marca === 0) { cx.moveTo(-rr, 0); cx.lineTo(rr, 0); }
-    else if (mira.marca === 1) { cx.moveTo(-rr, 0); cx.lineTo(rr, 0); cx.moveTo(0, -rr); cx.lineTo(0, rr); }
-    else if (mira.marca === 2) {
-      for (let g = 0; g < 3; g++) {
-        const a = g * Math.PI / 3;
-        cx.moveTo(-Math.cos(a) * rr, -Math.sin(a) * rr);
-        cx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
-      }
-    } else { cx.moveTo(rr * 0.55, 0); cx.arc(0, 0, rr * 0.55, 0, Math.PI * 2); }
-    cx.stroke();
+    trazarMarca(rr, rr);
     cx.restore();
     cx.fillStyle = 'rgba(255,255,255,0.35)';
-    cx.beginPath(); cx.arc(cxp + rr * 0.35, yy - rr * 0.35, rr * 0.22, 0, Math.PI * 2); cx.fill();
+    cx.beginPath(); cx.arc(p.x + rr * 0.35, p.y - rr * 0.35, rr * 0.22, 0, Math.PI * 2); cx.fill();
   }
 
   // LA ENTRADA. Una sola pregunta por pantalla: acá, quien sos. El titulo, tu
@@ -3528,18 +3686,24 @@ function arrancarNavegador () {
     // arriba, y en pantalla baja se aprieta el paso, no se superpone.
     const chico = h < 600;
     const yT = h * (chico ? 0.11 : 0.145);
+    // el titulo lleva un halo en TU color, y late despacio: la primera pantalla
+    // ya dice que esto respira con la musica -- y que la esfera sos vos
+    cx.save();
+    cx.shadowColor = `rgba(${C.esferaRGB},0.8)`;
+    cx.shadowBlur = 16 + 7 * Math.sin(performance.now() / 850);
     titulo('DRIBLE', w / 2, yT, Math.min(54, w / 8, h / 8.6), C.peligro, 6);
+    cx.restore();
     ayuda('Un botón. La canción no espera.', w / 2, yT + (chico ? 20 : 24),
       'rgba(232,230,224,0.42)', 12.5);
 
     // la tarima de la esfera: un marco tenue que separa el preview del resto
     const rr = Math.max(10, Math.min(chico ? 15 : 20, h / 27));
     const anP = Math.min(340, w - 24), xP = w / 2 - anP / 2;
-    const tw = Math.min(240, anP - 44), th = rr * (chico ? 4.6 : 5.8);
+    const tw = Math.min(270, anP - 24), th = rr * (chico ? 4.6 : 5.8);
     const ty = yT + (chico ? 34 : 44);
     caja(w / 2 - tw / 2, ty, tw, th, 12);
-    cx.fillStyle = 'rgba(232,230,224,0.03)'; cx.fill();
-    cx.strokeStyle = 'rgba(232,230,224,0.08)'; cx.lineWidth = 1; cx.stroke();
+    cx.fillStyle = `rgba(${C.esferaRGB},0.05)`; cx.fill();
+    cx.strokeStyle = `rgba(${C.esferaRGB},0.30)`; cx.lineWidth = 1; cx.stroke();
     esferaMuestra(w / 2, ty + th * 0.74, rr);
 
     // TU ESFERA. Antes eran tres filas sueltas --cinco fichas de color, tres
@@ -3550,7 +3714,7 @@ function arrancarNavegador () {
     const alP = 26 + fila * 3 + 10;
     const yP = ty + th + (chico ? 14 : 20);
     panel(xP, yP, anP, alP);
-    rotulo('TU ESFERA', xP + 14, yP + 18, 'left');
+    rotulo('TU ESFERA', xP + 14, yP + 18, 'left', `rgba(${C.esferaRGB},0.75)`);
     const xEt = xP + 14, xOp = xP + 64, anOp = anP - 78;
     const cOp = xOp + anOp / 2;
 
@@ -3596,9 +3760,15 @@ function arrancarNavegador () {
     // EL CAMINO ADELANTE, y uno solo. Lo demas de esta pantalla es preferencia:
     // esto es lo unico que hay que tocar para que empiece a sonar algo.
     const yJ = yP + alP + (chico ? 20 : 26);
+    // ...y el unico camino adelante brilla: entre siete controles de
+    // preferencia, el ojo tiene que caer solo en el que arranca la musica
+    cx.save();
+    cx.shadowColor = `rgba(${C.esferaRGB},0.55)`;
+    cx.shadowBlur = 13 + 5 * Math.sin(performance.now() / 700);
     btn('JUGAR', w / 2, yJ, () => { pantalla = 'mapa'; },
       { activo: true, ancho: Math.min(220, w * 0.62), alto: chico ? 36 : 42,
         fuente: `bold ${chico ? 15 : 17}px system-ui` });
+    cx.restore();
     btn('Ajustes', w / 2, yJ + (chico ? 34 : 40), () => { pantalla = 'config'; },
       { rgb: C.impulsoRGB, fuente: '12px system-ui', alto: 26 });
     // el rango mas alto que tenes, que es lo unico que este juego colecciona
@@ -3818,6 +3988,8 @@ function arrancarNavegador () {
       // crash la libera de golpe.
       while (crashVista.length && crashVista[0] <= ahoraAc) {
         crashVista.shift(); flash = Math.max(flash, 0.8); padLuz = 1.6; riserVista = null;
+        // el drop raya el cielo: una estrella fugaz por cada crash
+        fugaz = { t: performance.now(), x: 0.15 + Math.random() * 0.5, y: 0.06 + Math.random() * 0.18 };
       }
       if (riserVista && ac.currentTime >= riserVista.t0)
         riserQ = Math.min(1, (ac.currentTime - riserVista.t0) / (riserVista.t1 - riserVista.t0));
@@ -3864,6 +4036,91 @@ function arrancarNavegador () {
       cx.fillStyle = cielo;
       cx.fillRect(0, y0 - 0.9 * esc, w, 0.9 * esc);
       const claro = tinte.map(v => Math.round(Math.min(255, v * 1.45 + 55))).join(',');
+      const alza = pisada * pisada * 5;      // el cielo no rebota con el pisoton
+      // EL SOL DEL VIAJE. Un fondo se vuelve LUGAR cuando tiene un astro. El
+      // sol sale CON LA CANCION: arranca pegado al horizonte en el amanecer y
+      // termina alto en la aurora, asi el fondo cuenta el progreso sin un solo
+      // numero. Es del color del acorde, late con el bombo, y las sierras lo
+      // tapan por delante -- y que algo lo tape es la prueba de profundidad
+      // mas fuerte que existe.
+      const prog = Math.max(0, Math.min(1, s.x / LARGO));
+      // chico y alto: un astro se ve LEJOS o no es un astro. La primera
+      // version salia enorme y pegada a las teclas, o sea, dentro del juego.
+      const solX = w * 0.68, solR = esc * (0.26 + 0.06 * prog);
+      const solY = y0 - alza - esc * (0.68 + 0.42 * prog);
+      const gl = cx.createRadialGradient(solX, solY, solR * 0.2, solX, solY, solR * (2.3 + 0.5 * pump));
+      gl.addColorStop(0, `rgba(${claro},${0.18 + 0.10 * pump + 0.07 * padLuz})`);
+      gl.addColorStop(1, `rgba(${claro},0)`);
+      cx.fillStyle = gl;
+      cx.fillRect(solX - solR * 3, solY - solR * 3, solR * 6, solR * 6);
+      cx.save();
+      cx.beginPath(); cx.arc(solX, solY, solR, 0, Math.PI * 2); cx.clip();
+      const cuerpoSol = cx.createLinearGradient(0, solY - solR, 0, solY + solR);
+      cuerpoSol.addColorStop(0, `rgba(${claro},0.55)`);
+      cuerpoSol.addColorStop(1, `rgba(${tinte.map(v => Math.round(v)).join(',')},0.34)`);
+      cx.fillStyle = cuerpoSol;
+      cx.fillRect(solX - solR, solY - solR, solR * 2, solR * 2);
+      // las franjas que cruzan su mitad baja y se deslizan: el unico guiño
+      // abiertamente synthwave -- que es el genero de esta cancion
+      cx.fillStyle = 'rgba(17,18,20,0.5)';
+      const corr = (performance.now() / 1000 * solR * 0.10) % (solR * 0.30);
+      for (let i = 0; i < 6; i++) {
+        const yF = solY + i * solR * 0.30 - corr;
+        if (yF < solY - solR * 0.05) continue;
+        cx.fillRect(solX - solR, yF, solR * 2, Math.max(1.5, solR * (0.03 + i * 0.012)));
+      }
+      cx.restore();
+      // LAS ESTRELLAS: la referencia quieta contra la que las sierras se ven
+      // correr. Titilan cada una a su ritmo, y el sol se las come de cerca.
+      const tCielo = performance.now() / 1000;
+      for (const es of ESTRELLAS) {
+        const span = w + 160;
+        let X = (es.x * span - s.x * es.f * esc) % span;
+        if (X < 0) X += span;
+        X -= 80;
+        const Y = y0 - alza - esc * (0.52 + es.y * 0.40);
+        if (Y < 4) continue;
+        const dx = X - solX, dy = Y - solY;
+        if (dx * dx + dy * dy < solR * solR * 3.2) continue;
+        const tit = 0.5 + 0.5 * Math.sin(tCielo * es.tw * 3 + es.x * 40);
+        cx.fillStyle = `rgba(${claro},${(0.10 + 0.26 * tit) * (0.7 + 0.3 * padLuz)})`;
+        cx.fillRect(X, Y, es.r, es.r);
+      }
+      // la fugaz del drop: una raya que cruza y se apaga
+      if (fugaz) {
+        const e = (performance.now() - fugaz.t) / 900;
+        if (e >= 1) fugaz = null;
+        else {
+          const fx = fugaz.x * w + e * w * 0.22, fy = fugaz.y * h + e * h * 0.10;
+          const lg = cx.createLinearGradient(fx - 90, fy - 40, fx, fy);
+          lg.addColorStop(0, 'rgba(255,252,240,0)');
+          lg.addColorStop(1, `rgba(255,252,240,${0.8 * (1 - e)})`);
+          cx.strokeStyle = lg; cx.lineWidth = 1.6;
+          cx.beginPath(); cx.moveTo(fx - 90, fy - 40); cx.lineTo(fx, fy); cx.stroke();
+        }
+      }
+      // LA AURORA DE NEBULOSA. En la seccion del fantasma el cielo se enciende
+      // con cortinas boreales -- verde y violeta, cada una ondulando a su
+      // tiempo. Entra y sale con rampa: es un lugar, no un interruptor.
+      auroraLuz += ((vozEn(s.x) === 'cristal' ? 1 : 0) - auroraLuz) * Math.min(1, dtSeg * 1.2);
+      if (auroraLuz > 0.01) {
+        for (let k = 0; k < 4; k++) {
+          const col = k % 2 ? '150,130,255' : '110,235,190';
+          const base = y0 - alza - esc * (0.52 + k * 0.14);
+          cx.beginPath();
+          for (let X = -20; X <= w + 20; X += 26) {
+            const Y = base + Math.sin(X * 0.006 + tCielo * (0.5 + k * 0.2) + k * 2.1) * esc * 0.06;
+            if (X === -20) cx.moveTo(X, Y); else cx.lineTo(X, Y);
+          }
+          for (let X = w + 20; X >= -20; X -= 26) {
+            cx.lineTo(X, base - esc * (0.24 + 0.06 * k) +
+              Math.sin(X * 0.005 + tCielo * (0.4 + k * 0.25) + k * 1.3) * esc * 0.05);
+          }
+          cx.closePath();
+          cx.fillStyle = `rgba(${col},${auroraLuz * (0.11 + 0.05 * Math.sin(tCielo * 0.7 + k))})`;
+          cx.fill();
+        }
+      }
       for (let ci = 0; ci < CAPAS.length; ci++) {
         const c = CAPAS[ci];
         // la perspectiva aerea: cuanto mas lejos, mas lavada hacia el cielo del
@@ -4474,27 +4731,11 @@ function arrancarNavegador () {
     cx.save();
     cx.beginPath(); cx.ellipse(cxb, cyb, rx, ry, ang, 0, Math.PI * 2); cx.clip();
     cx.translate(cxb, cyb); cx.rotate(giro);
-    // LA MARCA. Es lo unico que deja VER que la esfera gira, y ahora la elegis
-    // vos: costura, cruz, gajos o nucleo.
+    // LA MARCA. Es lo unico que deja VER que la esfera gira, y la elegis vos:
+    // el trazo es EL MISMO que el del preview del menu, por construccion.
     cx.strokeStyle = `rgba(${rgbMarca()},0.6)`;
     cx.lineWidth = 2;
-    cx.beginPath();
-    if (mira.marca === 0) {                       // costura: un solo meridiano
-      cx.moveTo(-rx, 0); cx.lineTo(rx, 0);
-    } else if (mira.marca === 1) {                // cruz: dos, como una pelota de cuero
-      cx.moveTo(-rx, 0); cx.lineTo(rx, 0);
-      cx.moveTo(0, -ry); cx.lineTo(0, ry);
-    } else if (mira.marca === 2) {                // gajos: tres a 60 grados
-      for (let g = 0; g < 3; g++) {
-        const a = g * Math.PI / 3;
-        cx.moveTo(-Math.cos(a) * rx, -Math.sin(a) * ry);
-        cx.lineTo(Math.cos(a) * rx, Math.sin(a) * ry);
-      }
-    } else {                                      // nucleo: un anillo que gira
-      cx.moveTo(rx * 0.55, 0);
-      cx.ellipse(0, 0, rx * 0.55, ry * 0.55, 0, 0, Math.PI * 2);
-    }
-    cx.stroke();
+    trazarMarca(rx, ry);
     cx.fillStyle = 'rgba(255,255,255,0.35)';
     cx.beginPath(); cx.arc(rx * 0.45, -ry * 0.42, Math.max(1.5, rx * 0.17), 0, Math.PI * 2); cx.fill();
     cx.restore();
