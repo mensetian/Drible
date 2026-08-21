@@ -913,6 +913,217 @@ export let TUNELES = [];               // tramos que se atraviesan por adentro
 export let AGUAS = [];                 // tramos donde la red es superficie de agua
 export let TERRENOS = [];              // que hay alla abajo: bosque, ciudad, arena...
 export const terrenoEn = x => (TERRENOS.find(z => x >= z.x0 && x < z.x1) || {}).t || null;
+
+// COMO SE VE CADA LUGAR. `cuerpo` es su color propio --el que tendria pegado
+// en la cara-- y `filo` el hilo de luz del borde de arriba; la distancia se
+// encarga de teñirlos con el cielo. `dibujo` agrega el relieve sobre el suelo
+// que ya se pinto, y se llama una vez por PLANO: el mismo lugar visto tres
+// veces, cada vez mas grande, mas oscuro y mas nitido.
+const TIERRA = {
+  bosque: {
+    cuerpo: [24, 54, 40], filo: [130, 190, 150],
+    dibujo (cx, e) {
+      const paso = 0.15 * e.P.paso;
+      const i0 = Math.floor(e.a / paso) - 2, i1 = Math.ceil(e.b / paso) + 2;
+      for (let i = i0; i <= i1; i++) {
+        // el paso es una guia, no una grilla: cada arbol se corre de su lugar
+        const xw = (i + 0.55 * (e.azar(i * 7 + e.k) - 0.5)) * paso;
+        if (e.azar(i * 13 + e.k * 3) > 0.22 + 0.78 * e.grumo(xw, e.k)) continue;
+        const r = e.azar(i * 3 + e.k);
+        const hh = e.alto * (0.26 + 0.44 * r) * (e.azar(i * 17) > 0.94 ? 1.5 : 1);
+        const an = hh * 0.30;
+        const X = e.px(xw), Y = e.sueloY(xw) + 2;
+        cx.fillStyle = `rgba(${e.col},1)`;
+        // un abeto no es un triangulo: son tres faldas montadas, y esa silueta
+        // escalonada es lo que lo hace leer como arbol y no como cono
+        for (let f = 0; f < 3; f++) {
+          const q = f / 3, hq = hh * (1 - q * 0.62), aq = an * (1 - q * 0.45);
+          const yb = Y - hh * q * 0.52;
+          cx.beginPath();
+          cx.moveTo(X, yb - hq); cx.lineTo(X - aq, yb); cx.lineTo(X + aq, yb);
+          cx.closePath(); cx.fill();
+        }
+        if (e.k < 2 || hh < e.alto * 0.3) continue;
+        // el sol pega desde la derecha: solo el plano cercano se entera
+        cx.strokeStyle = `rgba(${e.filo},0.30)`;
+        cx.lineWidth = 1.1;
+        cx.beginPath(); cx.moveTo(X + 0.5, Y - hh + 2); cx.lineTo(X + an * 0.9, Y);
+        cx.stroke();
+      }
+    }
+  },
+  ciudad: {
+    cuerpo: [30, 34, 54], filo: [120, 140, 190],
+    dibujo (cx, e) {
+      const paso = 0.26 * e.P.paso;
+      const i0 = Math.floor(e.a / paso) - 2, i1 = Math.ceil(e.b / paso) + 2;
+      for (let i = i0; i <= i1; i++) {
+        const xw = (i + 0.3 * (e.azar(i * 5 + e.k) - 0.5)) * paso;
+        // los baldios y las plazas son parte de una ciudad: sin huecos, un
+        // skyline es una cerca
+        if (e.azar(i * 11 + e.k * 7) > 0.3 + 0.7 * e.grumo(xw, e.k + 1)) continue;
+        const r = e.azar(i * 1.7 + e.k);
+        const torre = e.azar(i * 17 + e.k) > 0.9;
+        const hh = e.alto * (0.2 + 0.62 * r) * (torre ? 1.75 : 1);
+        const an = Math.max(3, paso * e.esc * (0.42 + 0.3 * e.azar(i * 2)));
+        const X = e.px(xw), Y = e.sueloY(xw) + 2;
+        cx.fillStyle = `rgba(${e.col},1)`;
+        cx.fillRect(X - an / 2, Y - hh, an, hh + e.hondo);
+        // el canto iluminado: una sola linea, y el bloque deja de ser un
+        // rectangulo plano
+        cx.fillStyle = `rgba(${e.filo},0.22)`;
+        cx.fillRect(X + an / 2 - 1.2, Y - hh, 1.2, hh);
+        if (e.k === 0) continue;
+        // LAS VENTANAS. Lo unico calido que hay abajo, y lo unico que dice que
+        // ahi vive gente. Unas pocas parpadean muy despacio: una ciudad quieta
+        // del todo es una maqueta.
+        const fil = Math.max(1, Math.floor(an / 7)), col0 = X - an / 2 + 3;
+        for (let f = 1; f * 7 < hh - 3; f++)
+          for (let c = 0; c < fil; c++) {
+            const s0 = e.azar(i * 31 + f * 5 + c * 2);
+            if (s0 > 0.62) continue;
+            const parpadeo = s0 < 0.06
+              ? 0.5 + 0.5 * Math.sin(e.tT * 1.7 + i + f) : 1;
+            cx.fillStyle = `rgba(255,206,130,${(0.2 + 0.45 * e.k / 2) * parpadeo})`;
+            cx.fillRect(col0 + c * 7, Y - hh + f * 7, 2.5, 2.5);
+          }
+        // la baliza de la torre alta: roja, lenta, arriba de todo
+        if (!torre || e.k < 2) continue;
+        cx.strokeStyle = `rgba(${e.col},1)`; cx.lineWidth = 1.5;
+        cx.beginPath(); cx.moveTo(X, Y - hh); cx.lineTo(X, Y - hh - 7); cx.stroke();
+        const bal = Math.max(0, Math.sin(e.tT * 2.1 + i));
+        cx.fillStyle = `rgba(255,90,70,${0.25 + 0.75 * bal * bal})`;
+        cx.beginPath(); cx.arc(X, Y - hh - 8, 2, 0, Math.PI * 2); cx.fill();
+      }
+    }
+  },
+  montania: {
+    cuerpo: [46, 54, 74], filo: [150, 170, 215],
+    dibujo (cx, e) {
+      const paso = 0.24 * e.P.paso;
+      const i0 = Math.floor(e.a / paso) - 2, i1 = Math.ceil(e.b / paso) + 2;
+      // la cresta: una sola cadena por plano, con las cumbres a distancias
+      // desparejas. Una sierra de picos equidistantes no existe en la tierra.
+      const cum = [];
+      for (let i = i0; i <= i1; i++) {
+        const xw = (i + 0.6 * (e.azar(i * 3 + e.k) - 0.5)) * paso;
+        const r = 0.45 + 0.55 * e.azar(i * 3.7 + e.k);
+        const macizo = 0.5 + 0.5 * e.grumo(xw, e.k + 2);
+        cum.push({ xw, y: e.sueloY(xw) - e.alto * r * macizo, r: r * macizo });
+      }
+      const cima = Math.min(...cum.map(c => c.y));
+      const gM = cx.createLinearGradient(0, cima, 0, e.pie + e.hondo * 0.1);
+      const cl = e.col.split(',').map(Number);
+      gM.addColorStop(0, `rgba(${cl.map(v => Math.round(Math.min(255, v * 1.5 + 12))).join(',')},1)`);
+      gM.addColorStop(0.55, `rgba(${e.col},1)`);
+      gM.addColorStop(1, `rgba(${cl.map(v => Math.round(v * 0.45)).join(',')},1)`);
+      cx.fillStyle = gM;
+      cx.beginPath();
+      cx.moveTo(e.px(e.a) - 8, e.h + 2);
+      for (const c of cum) cx.lineTo(e.px(c.xw), c.y);
+      cx.lineTo(e.px(e.b) + 8, e.h + 2);
+      cx.closePath(); cx.fill();
+      // la ladera iluminada: la mitad derecha de cada cumbre recibe el sol
+      cx.strokeStyle = `rgba(${e.filo},${e.k === 2 ? 0.4 : 0.22})`;
+      cx.lineWidth = e.k === 2 ? 1.4 : 1;
+      cx.beginPath();
+      for (let j = 0; j < cum.length - 1; j++) {
+        if (cum[j + 1].y < cum[j].y) continue;      // solo la cara que baja a la derecha
+        cx.moveTo(e.px(cum[j].xw), cum[j].y);
+        cx.lineTo(e.px(cum[j + 1].xw), cum[j + 1].y);
+      }
+      cx.stroke();
+      if (e.k === 0) return;
+      // la nieve: solo en las cumbres que de verdad se levantan, y siguiendo
+      // las dos laderas -- una pizca simetrica pegada arriba parece un gorro
+      for (const c of cum) {
+        if (c.r < 0.62) continue;
+        const X = e.px(c.xw), Y = c.y, an = e.alto * 0.09 * c.r;
+        cx.fillStyle = `rgba(228,238,255,${0.35 + 0.3 * e.k / 2})`;
+        cx.beginPath();
+        cx.moveTo(X, Y);
+        cx.lineTo(X - an, Y + an * 1.5);
+        cx.lineTo(X - an * 0.35, Y + an * 0.9);
+        cx.lineTo(X + an * 0.3, Y + an * 1.6);
+        cx.lineTo(X + an, Y + an * 1.3);
+        cx.closePath(); cx.fill();
+      }
+    }
+  },
+  desierto: {
+    cuerpo: [74, 58, 38], filo: [225, 185, 125],
+    dibujo (cx, e) {
+      // las dunas son una sola curva suave por plano: lo que las hace dunas es
+      // la CRESTA iluminada, el filo donde el viento apila la arena
+      const fr = 0.42 + 0.3 * e.k;
+      const lomo = xw => e.sueloY(xw) - e.alto *
+        (0.30 + 0.30 * Math.sin(xw * fr + e.k) * Math.cos(xw * fr * 0.37 + 1.1));
+      const cd = e.col.split(',').map(Number);
+      const gD = cx.createLinearGradient(0, e.pie - e.alto * 0.6, 0, e.pie + e.hondo * 0.1);
+      gD.addColorStop(0, `rgba(${cd.map(v => Math.round(Math.min(255, v * 1.45 + 10))).join(',')},1)`);
+      gD.addColorStop(0.6, `rgba(${e.col},1)`);
+      gD.addColorStop(1, `rgba(${cd.map(v => Math.round(v * 0.5)).join(',')},1)`);
+      cx.fillStyle = gD;
+      cx.beginPath();
+      cx.moveTo(e.px(e.a) - 8, e.h + 2);
+      for (let xw = e.a - 0.5; xw <= e.b + 0.5; xw += 0.14) cx.lineTo(e.px(xw), lomo(xw));
+      cx.lineTo(e.px(e.b) + 8, e.h + 2);
+      cx.closePath(); cx.fill();
+      cx.strokeStyle = `rgba(${e.filo},${0.2 + 0.3 * e.k / 2})`;
+      cx.lineWidth = 1.2 + 0.6 * e.k / 2;
+      cx.beginPath();
+      for (let xw = e.a - 0.5; xw <= e.b + 0.5; xw += 0.14) cx.lineTo(e.px(xw), lomo(xw));
+      cx.stroke();
+      if (e.k === 0) return;
+      // los cactus: agrupados, no repartidos, y de pie sobre la arena
+      cx.strokeStyle = `rgba(${e.col},1)`;
+      cx.lineWidth = 2 + e.k;
+      cx.lineCap = 'round';
+      const paso = 0.5 * e.P.paso;
+      for (let i = Math.floor(e.a / paso) - 2; i <= Math.ceil(e.b / paso) + 2; i++) {
+        const xw = (i + 0.5 * (e.azar(i * 5 + e.k) - 0.5)) * paso;
+        if (e.azar(i * 9.1 + e.k) > 0.12 + 0.5 * e.grumo(xw, e.k + 3)) continue;
+        const X = e.px(xw), Y = lomo(xw) + 1;
+        const hh = e.alto * (0.18 + 0.14 * e.azar(i * 2.3));
+        cx.beginPath();
+        cx.moveTo(X, Y); cx.lineTo(X, Y - hh);
+        if (e.azar(i * 4.4) > 0.4) {
+          cx.moveTo(X, Y - hh * 0.55); cx.lineTo(X - hh * 0.34, Y - hh * 0.55);
+          cx.lineTo(X - hh * 0.34, Y - hh * 0.85);
+        }
+        if (e.azar(i * 6.6) > 0.55) {
+          cx.moveTo(X, Y - hh * 0.42); cx.lineTo(X + hh * 0.3, Y - hh * 0.42);
+          cx.lineTo(X + hh * 0.3, Y - hh * 0.7);
+        }
+        cx.stroke();
+      }
+      cx.lineCap = 'butt';
+    }
+  },
+  tierra: {
+    cuerpo: [58, 48, 36], filo: [190, 160, 115],
+    dibujo (cx, e) {
+      if (e.k === 0) return;
+      cx.fillStyle = `rgba(${e.col},1)`;
+      const paso = 0.4 * e.P.paso;
+      for (let i = Math.floor(e.a / paso) - 2; i <= Math.ceil(e.b / paso) + 2; i++) {
+        const xw = (i + 0.6 * (e.azar(i * 7 + e.k) - 0.5)) * paso;
+        if (e.azar(i * 5.3 + e.k) > 0.3 + 0.6 * e.grumo(xw, e.k)) continue;
+        const r = e.azar(i * 2.1);
+        const X = e.px(xw), Y = e.sueloY(xw) + 2, rr = e.alto * (0.05 + 0.12 * r);
+        cx.beginPath();
+        cx.ellipse(X, Y, rr * 1.6, rr, 0, Math.PI, 0);
+        cx.fill();
+        if (e.k < 2) continue;
+        cx.strokeStyle = `rgba(${e.filo},0.22)`; cx.lineWidth = 1;
+        cx.beginPath();
+        cx.ellipse(X, Y, rr * 1.6, rr, 0, Math.PI * 1.75, Math.PI * 2);
+        cx.stroke();
+      }
+    }
+  }
+};
+
 // EL VIENTO. La primera version era decorado: rayitas y un whoosh, y el
 // jugador con razon dijo que no lo levantaba nada. Ahora el viento es lo unico
 // del mapa que cambia una LEY: dentro de su zona el aire sostiene, y la
@@ -2445,52 +2656,160 @@ function arrancarNavegador () {
     agachar(t);
   };
 
-  // El sostenido, espejo del estudio: alla una nota prolongada es la misma
-  // cuadrada sonando y decayendo a lo largo de toda la nota -- no otra voz.
-  // Se guarda para poder soltarla si el jugador corta el riel antes.
+  // EL FILO: el ataque de la voz del estudio. Una cuadrada corta y brillante
+  // --alla cada nota melodica dura UNA semicorchea y por eso el eco la peina
+  // entera-- y la suciedad la mueve completa: se acorta, pierde brillo, se
+  // desafina, y aparece una segunda voz batiendo contra la primera.
+  function filoEstudio (t, f, gan, suc, mz, dur) {
+    const limpio = 1 - 0.3 * suc;
+    const durE = Math.min(dur, 0.17) * limpio;
+    const ge = ac.createGain(), lpe = ac.createBiquadFilter();
+    lpe.type = 'lowpass';
+    // el matiz mueve el filo entero: en lo suave la cuadrada entra soplada
+    // (14 ms) y mas oscura; en lo fuerte pega en 2 ms con todo el brillo
+    lpe.frequency.setValueAtTime(
+      Math.min(18000, 18000 * Math.pow(0.07, suc) * mz.brillo), t);
+    ge.gain.setValueAtTime(0.0001, t);
+    ge.gain.linearRampToValueAtTime(gan * 0.45 * limpio * mz.gan,
+      t + Math.min(Math.min(0.011, 0.004 * mz.ataque) + 0.012 * suc, durE * 0.5));
+    ge.gain.exponentialRampToValueAtTime(0.0001, t + durE);
+    lpe.connect(voz);
+    const o = ac.createOscillator(); o.type = 'square';
+    o.frequency.setValueAtTime(f, t); o.detune.value = 95 * suc;
+    o.connect(ge).connect(lpe); o.start(t); o.stop(t + durE + 0.02);
+    if (suc > 0.25) {                        // el batido y la uña que raspa
+      const g2 = ac.createGain(); g2.gain.value = 0.65 * suc;
+      const o2 = ac.createOscillator(); o2.type = 'square';
+      o2.frequency.setValueAtTime(f, t); o2.detune.value = -120 * suc;
+      o2.connect(g2).connect(ge); o2.start(t); o2.stop(t + durE + 0.02);
+      ruido(t, 0.025, 0.06 * suc, 'bandpass', 900, 1.2);
+    }
+    // ...y la MUY chueca lleva el choque de segunda menor: la nota de al lado
+    // sonando a la vez, que es lo que de verdad hace apretar los dientes.
+    if (suc > 0.55) {
+      const g3 = ac.createGain(); g3.gain.value = 0.4 * suc;
+      const o3 = ac.createOscillator(); o3.type = 'square';
+      o3.frequency.setValueAtTime(f, t); o3.detune.value = 100;
+      o3.connect(g3).connect(ge); o3.start(t); o3.stop(t + durE + 0.02);
+    }
+  }
+
+  // EL CUERPO: lo que canta debajo del filo. Triangulo de cuerpo, una pizca de
+  // sierra para el filo, sub una octava abajo y un armonico arriba, todo bajo
+  // un filtro que se cierra. `sostener` cambia UNICAMENTE la envolvente: en
+  // vez de apagarse, la nota llega a una meseta y se queda ahi hasta que la
+  // mano suelte. Nada mas cambia -- ese es el punto.
+  function cuerpoEstudio (t, f, gan, suc, mz, dur, sostener) {
+    const limpio = 1 - 0.3 * suc;
+    const durC = sostener
+      ? dur + 0.2
+      : Math.max(0.34, Math.min(dur * 1.9, 1.25 * SPB)) * limpio * mz.cola;
+    const gc = ac.createGain(), lpc = ac.createBiquadFilter();
+    lpc.type = 'lowpass'; lpc.Q.value = 0.9;
+    lpc.frequency.setValueAtTime(
+      Math.min(6200, Math.min(5200, f * 6) * mz.brillo) * (1 - 0.45 * suc), t);
+    // El brillo cae al mismo piso en los dos casos, y en la SOSTENIDA cae en
+    // un tiempo fijo en vez de estirarse con el largo: asi el color a los
+    // 300 ms es el mismo dure lo que dure la nota, que es lo que hace que se
+    // reconozca como el mismo instrumento.
+    lpc.frequency.exponentialRampToValueAtTime(
+      Math.max(320, Math.min(1600, f * 2.2)), t + (sostener ? 0.5 : durC * 0.8));
+    // pulsada: pico, y en seguida un escalon donde la nota SE QUEDA sonando.
+    // El pico tarda lo que el matiz manda: 12 ms tocando pleno, 43 en lo
+    // suave -- ahi la nota FLORECE en vez de saltar.
+    const pico = gan * 0.5 * limpio * mz.gan;
+    const meseta = gan * (sostener ? 0.28 : 0.15) * limpio * mz.gan;
+    gc.gain.setValueAtTime(0.0001, t);
+    gc.gain.exponentialRampToValueAtTime(pico, t + 0.012 * mz.ataque);
+    gc.gain.exponentialRampToValueAtTime(meseta, t + 0.18 * mz.cola);
+    if (sostener) {
+      // la meseta aguanta casi hasta el final y recien ahi afloja: una nota
+      // larga que se muere sola es una mano puesta sin sonido
+      gc.gain.setValueAtTime(meseta, t + Math.max(0.3, dur * 0.75));
+      gc.gain.exponentialRampToValueAtTime(0.0001, t + durC);
+    } else gc.gain.exponentialRampToValueAtTime(0.0001, t + durC);
+    gc.connect(lpc).connect(voz);
+    // el vibrato entra DESPUES del ataque, como el dedo sobre la cuerda: una
+    // cola larga perfectamente quieta vuelve a sonar a maquina. Mismo ritmo
+    // para las dos; en la sostenida crece un poco mas, que es lo que hace una
+    // mano cuando tiene que llenar cuatro tiempos.
+    const lfo = ac.createOscillator(), lfoG = ac.createGain();
+    lfo.type = 'sine'; lfo.frequency.value = 4.6;
+    lfoG.gain.setValueAtTime(0, t);
+    lfoG.gain.setValueAtTime(0, t + 0.16);
+    lfoG.gain.linearRampToValueAtTime((sostener ? 11 : 6) * mz.vib,
+      t + Math.max(0.3, durC * 0.7));
+    lfo.connect(lfoG); lfo.start(t); lfo.stop(t + durC + 0.05);
+    const oscs = [];
+    for (const [tipo, mul, v, des] of
+      [['triangle', 1, 1, -3], ['sawtooth', 1, 0.20, 6], ['sine', 0.5, 0.40, 0],
+       ['sine', 2, 0.09, 4]]) {
+      const oc = ac.createOscillator(), gv = ac.createGain();
+      oc.type = tipo; oc.frequency.value = f * mul; gv.gain.value = v;
+      oc.detune.value = des + 70 * suc;
+      lfoG.connect(oc.detune);
+      oc.connect(gv).connect(gc); oc.start(t); oc.stop(t + durC + 0.03);
+      oscs.push(oc);
+    }
+    return { g: gc, o: oscs[0], extra: [...oscs.slice(1), lfo] };
+  }
+
+  // CRISTAL: donde la cancion lo pide, la esfera cambia de instrumento.
+  // Senoidales puras mas un parcial INARMONICO (3.01x) -- eso, y no el
+  // volumen, es lo que hace que una campana suene a campana-- con cola larga y
+  // ataque suave. En NEBULOSA la bateria calla y el pluck seco quedaba
+  // desnudo; esto flota, que es lo que la seccion pide. Y la nota SOSTENIDA de
+  // esa seccion tambien es cristal: antes seguia siendo la cuadrada, o sea que
+  // el compas 41 --blanca y negra pegadas-- tenia dos instrumentos adentro.
+  function cuerpoCristal (t, f, gan, suc, mz, dur, sostener) {
+    const g = ac.createGain(), lp = ac.createBiquadFilter();
+    const durC = sostener ? dur + 0.25 : Math.max(0.7, dur * 1.6) * mz.cola;
+    lp.type = 'lowpass'; lp.Q.value = 0.7;
+    lp.frequency.setValueAtTime(Math.min(6200, f * 7) * (1 - 0.5 * suc), t);
+    const pico = gan * 0.7 * mz.gan * (1 - 0.35 * suc);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(pico, t + 0.02);
+    if (sostener) {
+      g.gain.exponentialRampToValueAtTime(pico * 0.45, t + 0.5);
+      g.gain.setValueAtTime(pico * 0.45, t + Math.max(0.4, dur * 0.75));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + durC);
+    } else g.gain.exponentialRampToValueAtTime(0.0001, t + durC);
+    g.connect(lp).connect(voz);
+    // el tremolo del cristal: una campana sostenida sin movimiento es un tono
+    // de prueba. Lento y chico -- lo justo para que respire.
+    const lfo = ac.createOscillator(), lfoG = ac.createGain();
+    lfo.type = 'sine'; lfo.frequency.value = 3.4;
+    lfoG.gain.setValueAtTime(0, t);
+    lfoG.gain.setValueAtTime(0, t + 0.2);
+    lfoG.gain.linearRampToValueAtTime(sostener ? 8 : 4, t + Math.max(0.4, durC * 0.6));
+    lfo.connect(lfoG); lfo.start(t); lfo.stop(t + durC + 0.05);
+    const oscs = [];
+    for (const [mul, v, des] of [[1, 1, 0], [2, 0.34, 4], [3.01, 0.16, -6]]) {
+      const o = ac.createOscillator(), gv = ac.createGain();
+      o.type = 'sine'; o.frequency.value = f * mul; gv.gain.value = v;
+      o.detune.value = des + 85 * suc;
+      lfoG.connect(o.detune);
+      o.connect(gv).connect(g); o.start(t); o.stop(t + durC + 0.02);
+      oscs.push(o);
+    }
+    return { g, o: oscs[0], extra: [...oscs.slice(1), lfo] };
+  }
+
+  // EL SOSTENIDO ES LA MISMA VOZ. Mismo filo, mismo cuerpo, misma pila de
+  // osciladores que una negra: lo unico distinto es que el cuerpo, en vez de
+  // apagarse, se queda. Se guarda para poder soltarlo si la mano corta antes.
   let rielVozE = null;
   function eRielAbrir (f, dur, gan = 0.13, suc = 0) {
     const t = ac.currentTime, mz = matiz();
-    gan *= mz.gan;
-    const lp = ac.createBiquadFilter(); lp.type = 'lowpass';
-    // EL SOSTENIDO CANTA LA FUNDAMENTAL. Con el filtro abierto (18k) la
-    // cuadrada sostenida era pura pila de armonicos y el oido se subia al
-    // tercero: la nota larga parecia sonar una octava (y pico) arriba de la
-    // que pisabas. Cerrado sobre f, lo que se sostiene es LA nota.
-    lp.frequency.setValueAtTime(Math.min(f * 4.2, 3600) * (1 - 0.55 * suc) * mz.brillo, t);
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(gan, t + 0.004 * mz.ataque);
-    // La nota larga NO SE MUERE SOLA. Caia exponencial hasta cero a lo largo de
-    // todo el riel, asi que la mitad final de una blanca sostenida era silencio
-    // con la mano puesta: se mantenia apretado y no sonaba nada. Ahora cae al
-    // ataque, SE QUEDA, y recien afloja sobre el final.
-    g.gain.exponentialRampToValueAtTime(gan * 0.62, t + Math.min(0.25, dur * 0.3));
-    g.gain.setValueAtTime(gan * 0.62, t + dur * 0.72);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    lp.connect(voz);
-    // ...y lo que la mantiene VIVA es el VIBRATO, no mas voces. La voz batida
-    // que hubo aca (una segunda cuadrada corrida unos cents) engordaba, si,
-    // pero el batido en una nota larga se oye como algo desafinado flotando
-    // encima -- rarisimo. Un vibrato franco de mano (5 Hz, +-14 cents, que
-    // entra despues del ataque y crece) es como sostiene una nota cualquier
-    // instrumentista, y no ensucia la afinacion media.
-    const lfo = ac.createOscillator(), lfoG = ac.createGain();
-    lfo.type = 'sine'; lfo.frequency.value = 5.0;
-    lfoG.gain.setValueAtTime(0, t);
-    lfoG.gain.setValueAtTime(0, t + 0.12);
-    lfoG.gain.linearRampToValueAtTime(14 * mz.vib, t + Math.min(0.6, dur * 0.5));
-    lfo.connect(lfoG); lfo.start(t); lfo.stop(t + dur + 0.15);
-    const o = ac.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(f, t);
-    o.detune.value = 95 * suc;
-    lfoG.connect(o.detune);
-    o.connect(g).connect(lp); o.start(t); o.stop(t + dur + 0.05);
-    // el sub, una octava ABAJO y quieto: ancla la fundamental que el filtro
-    // deja pasar -- el peso del sostenido, no otro timbre
-    const oSub = ac.createOscillator(), gSub = ac.createGain();
-    oSub.type = 'sine'; oSub.frequency.setValueAtTime(f / 2, t); gSub.gain.value = 0.35;
-    oSub.connect(gSub).connect(g); oSub.start(t); oSub.stop(t + dur + 0.05);
-    rielVozE = { o, g, extra: [oSub, lfo] };
+    // el riel entra con la mitad de ganancia que una nota suelta porque va a
+    // sonar cuatro tiempos: el doble lo devuelve a la escala de la voz
+    const G = gan * 2;
+    if (vozEn(s.x) === 'cristal') {
+      rielVozE = cuerpoCristal(t, f, G, suc, mz, dur, true);
+      return;
+    }
+    filoEstudio(t, f, G, suc, mz, 0.17);
+    rielVozE = cuerpoEstudio(t, f, G, suc, mz, dur, true);
   }
   function eRielCerrar () {
     if (!rielVozE) return;
@@ -2511,115 +2830,17 @@ function arrancarNavegador () {
   // proposito: un instrumento no tiene dos estados, y el escalon --perfecto a
   // los 95 ms, roto a los 97-- era lo que delataba a la maquina.
   function lead (t, f, dur = 0.4, gan = 0.26, desde = 0, suc = 0) {
-    // CRISTAL: donde la cancion lo pide, la esfera cambia de instrumento.
-    // Senoidales puras mas un parcial INARMONICO (3.01x) -- eso, y no el
-    // volumen, es lo que hace que una campana suene a campana-- con cola larga
-    // y ataque suave. En NEBULOSA la bateria calla y el pluck seco quedaba
-    // desnudo; esto flota, que es lo que la seccion pide.
     const mz = matiz();
-    if (vozEn(s.x) === 'cristal') {
-      const g = ac.createGain(), lp = ac.createBiquadFilter();
-      const durC = Math.max(0.7, dur * 1.6) * mz.cola;
-      lp.type = 'lowpass'; lp.Q.value = 0.7;
-      lp.frequency.setValueAtTime(Math.min(6200, f * 7) * (1 - 0.5 * suc), t);
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(gan * 0.7 * mz.gan * (1 - 0.35 * suc), t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + durC);
-      g.connect(lp).connect(voz);
-      for (const [mul, v, des] of [[1, 1, 0], [2, 0.34, 4], [3.01, 0.16, -6]]) {
-        const o = ac.createOscillator(), gv = ac.createGain();
-        o.type = 'sine'; o.frequency.value = f * mul; gv.gain.value = v;
-        o.detune.value = des + 85 * suc;
-        o.connect(gv).connect(g); o.start(t); o.stop(t + durC + 0.02);
-      }
-      return;
-    }
-    // En las canciones portadas del estudio, la nota justa en el pulso es la
-    // voz del estudio calcada: cuadrada limpia, brillante, ataque de 4 ms.
+    if (vozEn(s.x) === 'cristal') { cuerpoCristal(t, f, gan, suc, mz, dur, false); return; }
+    // En las canciones portadas del estudio la voz es filo + cuerpo. El filo
+    // solo alcanza para una semicorchea: mas alla de eso lo que se oia era
+    // STACCATO --la melodia picoteada, cada nota apagandose antes de que el
+    // dedo levante-- asi que debajo canta el cuerpo. Lo que se apaga rapido es
+    // el brillo, no la nota. Los ecos y el doblaje de octava se agendan cortos
+    // a proposito: esos no llevan cuerpo, o la seccion se convierte en barro.
     if (CANCIONES[CANCION_ID].estudio) {
-      // Espejo del estudio: alla casi toda nota melodica dura UNA semicorchea
-      // (los puntos de su notacion son silencios), asi que la nota es un blip
-      // corto de cuadrada -- por eso el eco se recorta nitido detras. Y el
-      // ligado ataca fresco: en el estudio no hay glissando.
-      // La suciedad la mueve entera: se acorta, pierde brillo, se desafina y
-      // aparece una segunda voz batiendo contra la primera. Justo en el pulso
-      // es exactamente la del estudio.
-      const limpio = 1 - 0.3 * suc;
-      const durE = Math.min(dur, 0.17) * limpio;
-      const ge = ac.createGain(), lpe = ac.createBiquadFilter();
-      lpe.type = 'lowpass';
-      // el matiz mueve el filo entero: en lo suave la cuadrada entra soplada
-      // (14 ms) y mas oscura; en lo fuerte pega en 2 ms con todo el brillo
-      lpe.frequency.setValueAtTime(
-        Math.min(18000, 18000 * Math.pow(0.07, suc) * mz.brillo), t);
-      ge.gain.setValueAtTime(0.0001, t);
-      ge.gain.linearRampToValueAtTime(gan * 0.45 * limpio * mz.gan,
-        t + Math.min(Math.min(0.011, 0.004 * mz.ataque) + 0.012 * suc, durE * 0.5));
-      ge.gain.exponentialRampToValueAtTime(0.0001, t + durE);
-      lpe.connect(voz);
-      const o = ac.createOscillator(); o.type = 'square';
-      o.frequency.setValueAtTime(f, t); o.detune.value = 95 * suc;
-      o.connect(ge).connect(lpe); o.start(t); o.stop(t + durE + 0.02);
-      if (suc > 0.25) {                        // el batido y la uña que raspa
-        const g2 = ac.createGain(); g2.gain.value = 0.65 * suc;
-        const o2 = ac.createOscillator(); o2.type = 'square';
-        o2.frequency.setValueAtTime(f, t); o2.detune.value = -120 * suc;
-        o2.connect(g2).connect(ge); o2.start(t); o2.stop(t + durE + 0.02);
-        ruido(t, 0.025, 0.06 * suc, 'bandpass', 900, 1.2);
-      }
-      // ...y la MUY chueca lleva el choque de segunda menor: la nota de al
-      // lado sonando a la vez, que es lo que de verdad hace apretar los
-      // dientes. Desafinar tenia que doler, no sonar "espacial".
-      if (suc > 0.55) {
-        const g3 = ac.createGain(); g3.gain.value = 0.4 * suc;
-        const o3 = ac.createOscillator(); o3.type = 'square';
-        o3.frequency.setValueAtTime(f, t); o3.detune.value = 100;
-        o3.connect(g3).connect(ge); o3.start(t); o3.stop(t + durE + 0.02);
-      }
-      // LA NOTA YA NO ES UN BLIP. Esa cuadrada de 160 ms es la voz del estudio
-      // calcada, y alla cada nota duraba UNA semicorchea porque el eco del
-      // arreglo la peinaba entera. Tocada a mano, una por una, lo que se oia
-      // era STACCATO: la melodia picoteada, cada nota apagandose antes de que
-      // el dedo levante. Asi que la cuadrada pasa a ser lo que siempre fue --el
-      // FILO, el ataque que hace que la voz se reconozca-- y debajo entra un
-      // CUERPO que canta y decae, como cualquier instrumento pulsado de
-      // verdad. Lo que se apaga rapido es el brillo, no la nota.
-      // Los ecos y el doblaje de octava se agendan cortos a proposito: esos no
-      // llevan cuerpo, o la seccion entera se convierte en barro.
-      if (dur <= 0.18) return;
-      const durC = Math.max(0.34, Math.min(dur * 1.9, 1.25 * SPB)) * limpio * mz.cola;
-      const gc = ac.createGain(), lpc = ac.createBiquadFilter();
-      lpc.type = 'lowpass'; lpc.Q.value = 0.9;
-      lpc.frequency.setValueAtTime(
-        Math.min(6200, Math.min(5200, f * 6) * mz.brillo) * (1 - 0.45 * suc), t);
-      lpc.frequency.exponentialRampToValueAtTime(
-        Math.max(320, Math.min(1600, f * 2.2)), t + durC * 0.8);
-      // pulsada: pico, y en seguida un escalon donde la nota SE QUEDA sonando.
-      // El pico tarda lo que el matiz manda: 12 ms tocando pleno, 43 en lo
-      // suave -- ahi la nota FLORECE en vez de saltar, que es lo que le
-      // faltaba al amanecer.
-      gc.gain.setValueAtTime(0.0001, t);
-      gc.gain.exponentialRampToValueAtTime(gan * 0.5 * limpio * mz.gan, t + 0.012 * mz.ataque);
-      gc.gain.exponentialRampToValueAtTime(gan * 0.15 * limpio * mz.gan, t + 0.18 * mz.cola);
-      gc.gain.exponentialRampToValueAtTime(0.0001, t + durC);
-      gc.connect(lpc).connect(voz);
-      // el vibrato entra DESPUES del ataque, como el dedo sobre la cuerda: una
-      // cola larga perfectamente quieta vuelve a sonar a maquina
-      const lfo = ac.createOscillator(), lfoG = ac.createGain();
-      lfo.type = 'sine'; lfo.frequency.value = 4.6;
-      lfoG.gain.setValueAtTime(0, t);
-      lfoG.gain.setValueAtTime(0, t + 0.16);
-      lfoG.gain.linearRampToValueAtTime(6 * mz.vib, t + Math.max(0.3, durC * 0.7));
-      lfo.connect(lfoG); lfo.start(t); lfo.stop(t + durC + 0.05);
-      for (const [tipo, mul, v, des] of
-        [['triangle', 1, 1, -3], ['sawtooth', 1, 0.20, 6], ['sine', 0.5, 0.40, 0],
-         ['sine', 2, 0.09, 4]]) {
-        const oc = ac.createOscillator(), gv = ac.createGain();
-        oc.type = tipo; oc.frequency.value = f * mul; gv.gain.value = v;
-        oc.detune.value = des + 70 * suc;
-        lfoG.connect(oc.detune);
-        oc.connect(gv).connect(gc); oc.start(t); oc.stop(t + durC + 0.03);
-      }
+      filoEstudio(t, f, gan, suc, mz, dur);
+      if (dur > 0.18) cuerpoEstudio(t, f, gan, suc, mz, dur, false);
       return;
     }
     const lp = ac.createBiquadFilter(), g = ac.createGain();
@@ -4565,151 +4786,93 @@ function arrancarNavegador () {
     const dibujarTerreno = (v0, v1) => {
       const base = py(0), hondo = h - base;
       if (hondo < 16) return;
-      // LA SOMBRA DE ARRIBA ES SAGRADA. La quinta parte de la franja pegada a
+      // LA SOMBRA DE ARRIBA ES SAGRADA. La sexta parte de la franja pegada a
       // la linea del piso no se pinta NUNCA: esa oscuridad que se hunde es lo
       // que significa "aca te caes", y ningun paisaje puede robarle el lugar.
-      // Por eso el terreno se dibuja recortado desde ahi para abajo, y por eso
-      // se dibuja DESPUES del vacio: lo que esta lejos abajo tapa el degradado,
-      // el borde del abismo no.
-      const yTope = base + hondo * 0.18;
-      const yH = base + hondo * 0.52;      // el horizonte de alla abajo
+      const yTope = base + hondo * 0.10;
+      const tT = performance.now() / 1000;
+      // AEROPERSPECTIVA. Lo lejano no es "lo mismo pero mas chico": es lo
+      // mismo TEÑIDO DEL COLOR DEL CIELO y sin contraste. Y como el cielo de
+      // este juego cambia con el acorde, la distancia del paisaje cambia con
+      // la armonia sin que nadie la pinte -- que es lo que hace que el suelo
+      // PERTENEZCA a la escena en vez de estar pegado encima de ella.
+      const tenir = (rgb, t, lum) => rgb
+        .map((v, i) => Math.round(Math.min(255, (v * (1 - t) + tinte[i] * t) * lum)))
+        .join(',');
+      const cieloRGB = tinte.map(v => Math.round(v)).join(',');
+      // TRES PLANOS. Con dos, el ojo lee "dos dibujos"; con tres y niebla entre
+      // medio lee PROFUNDIDAD. Cada plano se apoya mas abajo, crece, se acerca
+      // a su color propio y gana contraste.
+      const PLANOS = [
+        { pie: 0.50, tam: 0.56, tin: 0.50, lum: 0.85, paso: 1.00, bruma: 0.14 },
+        { pie: 0.80, tam: 0.74, tin: 0.24, lum: 1.20, paso: 1.5, bruma: 0.08 },
+        { pie: 1.12, tam: 0.96, tin: 0.04, lum: 0.55, paso: 2.2, bruma: 0 }
+      ];
+      // LOS BULTOS NO SE REPARTEN PAREJO. Uno cada N tiempos es papel pintado:
+      // el ojo caza la repeticion en medio segundo y el paisaje se vuelve una
+      // textura. Un campo de densidad lento --dos senos que no riman-- hace
+      // bosquecitos, manzanas con baldios y macizos con faldeos, que es como
+      // se agrupan las cosas en el mundo.
+      const grumo = (xw, k) => 0.5 + 0.5 *
+        Math.sin(xw * 0.43 + k * 2.1) * Math.cos(xw * 0.169 + k * 1.3);
       for (const z of TERRENOS) {
         if (z.x1 < v0 || z.x0 > v1) continue;
         const a = Math.max(z.x0, v0 - 1), b = Math.min(z.x1, v1 + 1);
         if (b <= a) continue;
+        const local = TIERRA[z.t] || TIERRA.tierra;
         cx.save();
         cx.beginPath();
         // el recorte se apoya en los BORDES DE LA ZONA, no en los de la
-        // pantalla: si no, la tierra se hundiria en el borde de la camara y
-        // el efecto viajaria con vos en vez de quedarse en su lugar
-        const rampa = Math.min(1.8, (z.x1 - z.x0) / 3);
+        // pantalla: la tierra emerge y se vuelve a hundir donde el lugar
+        // empieza y termina, no donde termina la camara
+        const rampa = Math.min(2.2, (z.x1 - z.x0) / 3);
         cx.moveTo(px(z.x0), h + 2);
         cx.lineTo(px(z.x0 + rampa), yTope);
         cx.lineTo(px(z.x1 - rampa), yTope);
         cx.lineTo(px(z.x1), h + 2);
         cx.closePath();
         cx.clip();
-        // el suelo pelado: lo mas oscuro de la escena. Todo lo que tiene
-        // relieve se ve MAS CLARO que el -- de noche, a esta distancia, lo que
-        // se levanta capta algo de cielo y el llano no.
-        const piso = color => {
-          cx.fillStyle = color;
-          cx.fillRect(px(a) - 4, yH, (b - a) * esc + 8, hondo);
-        };
-        // `filo` es el hilo de luz del borde de arriba: sin el, una silueta
-        // oscura sobre un fondo oscuro no es una silueta, es una mancha.
-        const cerro = (paso, alto, color, techo, filo) => {
-          const linea = () => {
-            for (let i = Math.floor(a / paso) - 1; i <= Math.ceil(b / paso) + 1; i++)
-              cx.lineTo(px(i * paso), techo - hondo * alto * Math.pow(azar(i * 3.7), 1.5));
-          };
-          cx.fillStyle = color;
+        for (let k = 0; k < PLANOS.length; k++) {
+          const P = PLANOS[k];
+          const pie = base + hondo * P.pie;
+          const alto = hondo * P.tam;
+          const col = tenir(local.cuerpo, P.tin, P.lum);
+          const filo = tenir(local.filo, P.tin * 0.5, Math.min(1, P.lum * 1.8));
+          const sueloY = xw => pie - hondo * 0.045 * P.tam /
+            0.3 * (Math.sin(xw * 0.7 + k * 3) + 0.6 * Math.sin(xw * 1.9 - k));
+          // EL SUELO DEL PLANO. Sin el, los bultos flotan en fila: hace falta
+          // una tierra continua sobre la que pararse, y que ondule.
+          cx.fillStyle = `rgba(${col},1)`;
           cx.beginPath();
-          cx.moveTo(px(a) - 4, h); linea(); cx.lineTo(px(b) + 4, h);
+          cx.moveTo(px(a) - 8, h + 2);
+          for (let xw = a - 0.5; xw <= b + 0.5; xw += 0.2) cx.lineTo(px(xw), sueloY(xw));
+          cx.lineTo(px(b) + 8, h + 2);
           cx.closePath(); cx.fill();
-          if (!filo) return;
-          cx.strokeStyle = filo; cx.lineWidth = 1.2;
-          cx.beginPath(); cx.moveTo(px(a) - 4, h); linea(); cx.stroke();
-        };
-        if (z.t === 'bosque') {
-          const pino = (paso, alto, color, techo) => {
-            cx.fillStyle = color;
-            for (let i = Math.floor(a / paso) - 1; i <= Math.ceil(b / paso) + 1; i++) {
-              const X = px(i * paso), hh = hondo * alto * (0.7 + 0.6 * azar(i));
-              cx.beginPath();
-              cx.moveTo(X, techo - hh);
-              cx.lineTo(X - hh * 0.36, techo); cx.lineTo(X + hh * 0.36, techo);
-              cx.closePath(); cx.fill();
-            }
-          };
-          pino(0.26, 0.13, 'rgba(78,120,98,0.55)', yH - hondo * 0.02);
-          piso('rgba(10,21,16,0.96)');
-          pino(0.46, 0.24, 'rgba(36,70,53,0.97)', yH + hondo * 0.16);
-        } else if (z.t === 'ciudad') {
-          // la ciudad de noche: dos filas de torres y las ventanas prendidas.
-          // Las luces son lo unico calido que hay abajo -- y por eso la ciudad
-          // es el unico terreno que se lee como habitado.
-          const torres = (paso, alto, color, pie, luces) => {
-            for (let i = Math.floor(a / paso) - 1; i <= Math.ceil(b / paso) + 1; i++) {
-              const X = px(i * paso), an = paso * esc * 0.62;
-              const hh = hondo * alto * (0.4 + 0.9 * azar(i * 1.7));
-              cx.fillStyle = color;
-              cx.fillRect(X, pie - hh, an, hh + hondo);
-              if (!luces) continue;
-              cx.fillStyle = 'rgba(255,206,130,0.65)';
-              for (let f = 1; f * 8 < hh - 4; f++)
-                for (let cN = 0; cN < 2; cN++)
-                  if (azar(i * 31 + f * 5 + cN * 2) > 0.55)
-                    cx.fillRect(X + 5 + cN * (an - 12), pie - hh + f * 8, 3, 3);
-            }
-          };
-          torres(0.4, 0.22, 'rgba(64,72,104,0.55)', yH - hondo * 0.02, false);
-          piso('rgba(8,10,17,0.96)');
-          torres(0.62, 0.34, 'rgba(29,33,52,0.97)', yH + hondo * 0.14, true);
-        } else if (z.t === 'montania') {
-          cerro(0.58, 0.26, 'rgba(70,78,104,0.55)', yH - hondo * 0.02);
-          piso('rgba(9,11,17,0.96)');
-          cerro(0.82, 0.42, 'rgba(36,42,59,0.97)', yH + hondo * 0.16,
-            'rgba(126,142,182,0.55)');
-          // la nieve: una pizca en las puntas mas altas, y solo ahi
-          cx.fillStyle = 'rgba(226,236,255,0.6)';
-          for (let i = Math.floor(a / 0.82) - 1; i <= Math.ceil(b / 0.82) + 1; i++) {
-            const r = Math.pow(azar(i * 3.7), 1.5);
-            if (r < 0.55) continue;
-            const X = px(i * 0.82), Y = yH + hondo * 0.16 - hondo * 0.42 * r;
-            cx.beginPath();
-            cx.moveTo(X, Y); cx.lineTo(X - 4.5, Y + 6); cx.lineTo(X + 4.5, Y + 6);
-            cx.closePath(); cx.fill();
-          }
-        } else if (z.t === 'desierto') {
-          const lomo = (xw, fr, alto, techo) => techo - hondo * alto *
-            (0.5 + 0.5 * Math.sin(xw * fr) * Math.cos(xw * fr * 0.37 + 1.1));
-          const duna = (fr, alto, color, techo, filo) => {
-            const linea = () => {
-              for (let xw = a - 0.4; xw <= b + 0.4; xw += 0.16)
-                cx.lineTo(px(xw), lomo(xw, fr, alto, techo));
-            };
-            cx.fillStyle = color;
-            cx.beginPath();
-            cx.moveTo(px(a) - 4, h); linea(); cx.lineTo(px(b) + 4, h);
-            cx.closePath(); cx.fill();
-            if (!filo) return;
-            cx.strokeStyle = filo; cx.lineWidth = 1.4;
-            cx.beginPath(); cx.moveTo(px(a) - 4, h); linea(); cx.stroke();
-          };
-          duna(0.5, 0.22, 'rgba(128,102,68,0.5)', yH - hondo * 0.02);
-          piso('rgba(24,18,13,0.96)');
-          duna(0.78, 0.32, 'rgba(68,53,35,0.97)', yH + hondo * 0.18,
-            'rgba(202,164,110,0.5)');
-          // los cactus: parados SOBRE la arena, no colgando del borde
-          cx.strokeStyle = 'rgba(20,15,10,0.98)'; cx.lineWidth = 3;
-          cx.lineCap = 'round';
-          for (let i = Math.floor(a) - 1; i <= Math.ceil(b) + 1; i++) {
-            if (azar(i * 9.1) < 0.55) continue;
-            const xw = i + azar(i) * 0.7, X = px(xw);
-            const Y = lomo(xw, 0.78, 0.32, yH + hondo * 0.18) + 2;
-            const hh = hondo * (0.10 + 0.06 * azar(i * 2.3));
-            cx.beginPath();
-            cx.moveTo(X, Y); cx.lineTo(X, Y - hh);
-            cx.moveTo(X, Y - hh * 0.55); cx.lineTo(X - 7, Y - hh * 0.55);
-            cx.lineTo(X - 7, Y - hh * 0.85);
-            cx.stroke();
-          }
-          cx.lineCap = 'butt';
-        } else {
-          // tierra pelada: lomas bajas y piedras. Es el terreno mas callado, y
-          // por eso el que sirve de descanso entre dos lugares con caracter.
-          cerro(0.8, 0.14, 'rgba(104,88,66,0.5)', yH - hondo * 0.02);
-          piso('rgba(20,16,12,0.96)');
-          cerro(1.1, 0.2, 'rgba(54,44,32,0.97)', yH + hondo * 0.16,
-            'rgba(154,128,92,0.4)');
-          cx.fillStyle = 'rgba(74,62,45,0.9)';
-          for (let i = Math.floor(a / 0.5) - 1; i <= Math.ceil(b / 0.5) + 1; i++) {
-            const r = azar(i * 5.3);
-            if (r < 0.5) continue;
-            cx.beginPath();
-            cx.ellipse(px(i * 0.5), yH + hondo * 0.34, 3 + r * 6, 2.5 + r * 3.5, 0, Math.PI, 0);
-            cx.fill();
+          local.dibujo(cx, { a, b, k, P, pie, alto, col, filo, sueloY,
+            px, py, esc, h, hondo, tT, azar, grumo });
+          if (!P.bruma) continue;
+          // LA NIEBLA ENTRE PLANOS. Es el truco entero: una veladura del color
+          // del cielo por delante de lo ya dibujado, y el plano siguiente se ve
+          // mas nitido POR CONTRASTE, sin tocarle un solo color.
+          const nb = cx.createLinearGradient(0, pie + hondo * 0.05, 0, pie - alto);
+          nb.addColorStop(0, `rgba(${cieloRGB},${P.bruma * 1.3})`);
+          nb.addColorStop(1, `rgba(${cieloRGB},0)`);
+          cx.fillStyle = nb;
+          cx.fillRect(px(a) - 8, pie - alto, (b - a) * esc + 16, alto + hondo * 0.05);
+          // ...y jirones que se arrastran: una niebla perfectamente quieta es
+          // un filtro encima del dibujo, no aire
+          for (let j = 0; j < 5; j++) {
+            const xw = a - 1 + ((j * 0.618 + tT * 0.01 * (1 + k)) % 1) * (b - a + 2);
+            const rx = esc * (0.7 + 0.5 * azar(j * 7 + k)), ry = hondo * 0.055;
+            cx.save();
+            cx.translate(px(xw), pie - hondo * 0.04 * azar(j + k * 3));
+            cx.scale(1, ry / rx);
+            const gj = cx.createRadialGradient(0, 0, 0, 0, 0, rx);
+            gj.addColorStop(0, `rgba(${cieloRGB},${0.10 + 0.05 * k})`);
+            gj.addColorStop(1, `rgba(${cieloRGB},0)`);
+            cx.fillStyle = gj;
+            cx.beginPath(); cx.arc(0, 0, rx, 0, Math.PI * 2); cx.fill();
+            cx.restore();
           }
         }
         cx.restore();
@@ -5060,7 +5223,8 @@ function arrancarNavegador () {
     for (const [a, b] of vacios) {
       const a0 = px(a), a1 = px(b), yy = py(0);
       if (a1 - a0 < 2) continue;
-      const hondo = b - a > 6 ? 72 : 46;
+      const franja = h - yy;
+      const hondo = Math.min(b - a > 6 ? 72 : 46, franja * (b - a > 6 ? 0.34 : 0.24));
       const gr = cx.createLinearGradient(0, yy, 0, yy + hondo);
       gr.addColorStop(0, 'rgba(0,0,0,0.72)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
       cx.fillStyle = gr; cx.fillRect(a0, yy, a1 - a0, hondo);
