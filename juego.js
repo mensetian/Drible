@@ -271,6 +271,19 @@ const CANCIONES = {
     voces: [{ x0: 164, x1: 196, tipo: 'cristal' }],
     // SUPERNOVA dobla la melodia una octava arriba, como el estudio.
     octavas: [{ x0: 212, x1: 244 }],
+    // LOS TAMBORES DEL CONTEO. La banda da el primer bombo y los otros tres
+    // los da TU esfera: tres parches sobre la plataforma de salida que la
+    // hacen picar sola, un pique por pulso, y cada pique ES el bombo del
+    // conteo (el paso queda reclamado: el arreglo ahi calla). El ultimo pique
+    // te deposita exactamente sobre la primera nota. Es la tesis del juego
+    // dicha en la puerta: la esfera driblea, y driblar es tocar.
+    tambores: [1, 2, 3],
+    // EL TUNEL. Los dos compases del redoble de GRAVEDAD se atraviesan por
+    // adentro: la banda se AHOGA (pasabajos sobre el fondo), tu bajo sigue
+    // nitido -- tu instrumento viaja con vos -- y el riser trepa limpio por
+    // encima. Salir del tunel es el crash de DESPEGUE II: el reventon de
+    // volver a oirlo todo. Cero fisica: es un lugar que se ESCUCHA.
+    tuneles: [{ x0: 124, x1: 132 }],
     // MOTOR arranca con cuatro La seguidos: mismo tono, misma altura, una
     // meseta plana de cuatro compases. Pero un BUILD no es plano -- levanta.
     // Como la altura de una tecla de bajo la decide el mapa (el sonido lo da su
@@ -836,6 +849,8 @@ export const ROCE = 0.13;          // debajo de esto vas rasante: te agarra el v
 // para el, y lleva el eco del solista. El caño no suena mas fuerte: suena
 // SOLO, que es distinto.
 const PESO = { x: 4, s: 3, c: 2, H: 1, h: 0 };
+export let TAMBORES = [];              // los parches del conteo: pique = bombo
+export let TUNELES = [];               // tramos que se atraviesan por adentro
 export let PASOS_PISTON = new Set();   // pasos reclamados por caños: llevan crater
 function pistones () {
   const r = [];
@@ -1022,6 +1037,9 @@ export function elegirCancion (id) {
   // recien despues los orbes se reparten los golpes que quedan. Al reves, los
   // 178 orbes se llevaban los golpes buenos y al caño le tocaba un hat.
   PASOS_BATERIA = new Set(); PASOS_BAJO = new Set(); PASOS_ARP = new Set(); PASOS_PISTON = new Set();
+  TUNELES = c.tuneles || [];
+  TAMBORES = (c.tambores || []).map((b, i) => ({ x: b, y: PISO ? PISO.y : 0, i }));
+  for (const tb of TAMBORES) PASOS_BATERIA.add(tb.x * 4);   // ese bombo es tuyo
   ZONAS_PISTON = c.pistones || [];
   ZONAS_VOZ = c.voces || [];
   PISTONES = pistones();
@@ -1055,6 +1073,7 @@ export function crearSim (opts = {}) {
     saliendoDe: -1,         // tecla recien lanzada: no se puede volver a posar en ella
     ligadaDe: -1,           // te dejaste caer desde esta: la caida cobra la nota
     anticipos: [],          // toques que todavia no encontraron tecla
+    tamboresHechos: new Set(),   // parches del conteo ya rebotados
     apretadoEn: -Infinity,  // donde empezo el apriete: distingue toque de sostenido
     falsoEn: -Infinity,     // el ultimo toque en falso: los seguidos agravan el castigo
     castigoNivel: 0,
@@ -1239,6 +1258,9 @@ function posarse (s, yAntes) {
     // caiste ligado desde la nota anterior: la caida misma la toca, y sigue
     if (mejor.porCaida && s.ligadaDe === mejor.i - 1) {
       s.ligadaDe = -1;
+      // los toques que apuntaban a esta nota ya los pago la caida: si quedan
+      // en la cola, se cobran contra la nota EQUIVOCADA dos compases despues
+      s.anticipos.length = 0;
       // la ligadura la toca la caida, no la mano: sale afinada por geometria
       if (!s.tocadas.has(mejor.i)) anotar(s, mejor, s.x - mejor.xm, 'ligada', { desde: mejor.desde });
       lanzar(s, mejor);
@@ -1264,6 +1286,20 @@ export function paso (s, dt) {
   if (s.estado === 'apoyada' && s.tecla >= 0) {
     const k = NOTAS[s.tecla];
     s.y = k.y + subidaRiel(k, s.x);      // el final del riel levanta
+    // el parche del conteo: pisarlo pica solo. El pique dura UN pulso exacto
+    // (vy = G/2), asi que cada aterrizaje cae en el proximo parche -- la
+    // esfera driblea el conteo con el cuerpo, sin boton.
+    if (k.piso) {
+      for (const tb of TAMBORES) {
+        if (!s.tamboresHechos.has(tb.i) && s.x >= tb.x) {
+          s.tamboresHechos.add(tb.i);
+          s.eventos.push({ tipo: 'tambor', x: s.x, y: s.y, i: tb.i });
+          s.estado = 'aire'; s.vy = G * 0.5;
+          s.tecla = -1; s.saliendoDe = -1; s.soltoEn = null;
+          return;
+        }
+      }
+    }
     // agarrar el riel tarde tambien desafina: la nota larga entra corrida
     if (k.riel && s.sostiene && s.x >= k.xm && !s.tocadas.has(k.i))
       anotar(s, k, s.x - k.xm, 'riel', { hasta: k.x1 });
@@ -1500,6 +1536,13 @@ export function tocar (s, b) {
   // la plataforma de salida no es una nota: tocar ahi no suena ni cuenta
   const bajo = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
   if (bajo && bajo.piso) { s.eventos.push({ tipo: 'aire' }); return; }
+  // Cayendo LIGADO el toque sobra: la caida misma va a pagar la nota. El
+  // instinto de tocarla es lo mas natural del mundo y no puede castigarse --
+  // ni con sordera ni con un anticipo fantasma. Se perdona, y se dice.
+  if (s.estado === 'aire' && s.ligadaDe >= 0) {
+    s.eventos.push({ tipo: 'ligadaSola', x: s.x, y: s.y });
+    return;
+  }
   if (aplicar(s)) return;
   // Martillar no es adelantarse. Un toque en falso pegado al anterior corta la
   // racha y deja el boton sordo. Sin esto se termina el nivel a puro spam: la
@@ -1651,6 +1694,7 @@ function arrancarNavegador () {
   let craterBus = null;               // el pozo que el arreglo abre para el caño
   let ecoRet = null, ecoLP = null, ecoFB = null, ecoMix = null;   // el eco de NEBULOSA
   let sala = null, salaMix = null;    // el aire: la cola que deja el mundo atras
+  let tunelLP = null;                 // el tunel: el fondo se ahoga adentro
   let lados = null;                   // donde cae cada cosa del arreglo, a lo ancho
   // El solista entra: el arreglo se agacha un instante para dejarlo pasar.
   // EL CRATER. En el paso de semicorchea que un caño reclamo, el arreglo
@@ -1863,7 +1907,12 @@ function arrancarNavegador () {
       fondo.gain.value = 1;
       craterBus = ac.createGain();
       craterBus.gain.value = 1;
-      fondo.connect(craterBus).connect(master);
+      // el tunel vive en serie con el fondo: un pasabajos que casi siempre
+      // esta abierto de par en par y solo se cierra adentro. La voz del
+      // jugador NO pasa por aca: tu instrumento viaja con vos.
+      tunelLP = ac.createBiquadFilter();
+      tunelLP.type = 'lowpass'; tunelLP.frequency.value = 18000;
+      fondo.connect(tunelLP).connect(craterBus).connect(master);
       // EL ECO. La melodia va seca y al frente en toda la cancion --el apreton
       // tiene que ser la nota-- salvo donde la partitura lo pide. En NEBULOSA
       // lo pide: es la seccion que no empuja, y con la voz seca sonaba a un
@@ -2820,6 +2869,15 @@ function arrancarNavegador () {
           aprendidas.add('sordo');
           leccionViva = { txt: 'Martillaste — el botón quedó sordo un instante', t: performance.now() };
         }
+      } else if (e.tipo === 'tambor') {
+        // el bombo es tuyo: por el bus del solista, y el arreglo se agacha
+        golpeDeLaEsfera('K', ac.currentTime);
+        golpesVista.push(ac.currentTime);
+        squash = 1; pisada = 1;
+        chispas(e.x, e.y, 6, true, C.esferaRGB);
+        destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
+      } else if (e.tipo === 'ligadaSola') {
+        leccionViva = { txt: 'Esa nota cae sola — no hace falta tocarla', t: performance.now() };
       } else if (e.tipo === 'sordo') {
         // el toque comido se VE comerse: sin esto la sordera parece bug de input
         ruido(ac.currentTime, 0.015, 0.02);
@@ -3401,6 +3459,12 @@ function arrancarNavegador () {
     // y ahi la cola ES la musica-- y en el resto se queda a media puerta
     if (salaMix) {
       salaMix.gain.setTargetAtTime(vozEn(s.x) === 'cristal' ? 1 : 0.55, ac.currentTime, 0.5);
+    }
+    // el tunel: entrar ahoga de a poco (la boca se traga el sonido), salir
+    // abre DE GOLPE -- el reventon de volver a oirlo todo, clavado al crash
+    if (tunelLP) {
+      const dentro = TUNELES.some(z => s.x >= z.x0 && s.x < z.x1);
+      tunelLP.frequency.setTargetAtTime(dentro ? 460 : 18000, ac.currentTime, dentro ? 0.3 : 0.05);
     }
     procesar();
     if (!s.viva) { sonarMuerte(); morirOReiniciar(); }
@@ -4248,6 +4312,52 @@ function arrancarNavegador () {
     for (const z of SECCIONES) rotulo(z.n.toUpperCase(), px(z.x0) + 8, py(0) + 30, 'left', C.tenue);
     cx.textAlign = 'left';
 
+    // EL TUNEL SE VE: la penumbra adentro, el lomo, las costillas y las dos
+    // bocas. Cero fisica -- es un lugar, y se nota entrando (el sonido se
+    // ahoga) y saliendo (el crash y la luz vuelven juntos).
+    for (const tz of TUNELES) {
+      if (tz.x1 < s.x - 3 || tz.x0 > s.x + 7) continue;
+      const a0 = Math.max(-40, px(tz.x0)), a1 = Math.min(w + 40, px(tz.x1));
+      const techoY = py(0.72), pisoY = py(0) + 6;
+      // la penumbra: adentro el mundo se oscurece, igual que el sonido
+      const pen = cx.createLinearGradient(0, techoY, 0, pisoY);
+      pen.addColorStop(0, 'rgba(8,8,12,0.68)');
+      pen.addColorStop(1, 'rgba(8,8,12,0.12)');
+      cx.fillStyle = pen;
+      cx.fillRect(a0, techoY, a1 - a0, pisoY - techoY);
+      // el lomo: una losa con filo de luz -- esto pasa POR ARRIBA tuyo
+      cx.fillStyle = 'rgba(8,8,12,0.85)';
+      cx.fillRect(a0, techoY - 9, a1 - a0, 9);
+      cx.fillStyle = 'rgba(232,230,224,0.30)';
+      cx.fillRect(a0, techoY - 1.5, a1 - a0, 1.5);
+      // las costillas: el interior tiene su ritmo, una por pulso
+      cx.strokeStyle = 'rgba(232,230,224,0.16)'; cx.lineWidth = 2.5;
+      cx.beginPath();
+      for (let bx = Math.ceil(tz.x0); bx < tz.x1; bx++) {
+        cx.moveTo(px(bx), techoY); cx.lineTo(px(bx), techoY + 26);
+      }
+      cx.stroke();
+      // las bocas: aros dobles que dicen "por aca se entra, por aca se sale"
+      for (const bx of [tz.x0, tz.x1]) {
+        for (const [rw, aA] of [[10, 0.75], [16, 0.30]]) {
+          cx.strokeStyle = `rgba(${C.teclaRGB},${aA})`; cx.lineWidth = 3;
+          cx.beginPath();
+          cx.ellipse(px(bx), (techoY + pisoY) / 2, rw, (pisoY - techoY) / 2 + (rw - 10), 0, 0, Math.PI * 2);
+          cx.stroke();
+        }
+      }
+      // ...y si estas ADENTRO, la pantalla entera se cierra en viñeta: el
+      // mundo de afuera queda lejos, que es exactamente lo que dice el filtro
+      if (s.x >= tz.x0 && s.x < tz.x1) {
+        const borde = Math.min(1, Math.min(s.x - tz.x0, tz.x1 - s.x) / 1.2);
+        const vin = cx.createRadialGradient(px(s.x), py(s.y), esc * 0.6, px(s.x), py(s.y), Math.max(w, h) * 0.85);
+        vin.addColorStop(0, 'rgba(8,8,12,0)');
+        vin.addColorStop(1, `rgba(8,8,12,${0.55 * borde})`);
+        cx.fillStyle = vin;
+        cx.fillRect(0, 0, w, h);
+      }
+    }
+
     // techos del silencio
     cx.fillStyle = 'rgba(232,230,224,0.10)';
     cx.strokeStyle = C.peligro; cx.lineWidth = 3;
@@ -4441,6 +4551,22 @@ function arrancarNavegador () {
     if (PISO && PISO.x1 > s.x - 3 && PISO.x0 < s.x + 7) {
       cx.fillStyle = 'rgba(232,230,224,0.22)';
       cx.fillRect(px(PISO.x0), py(PISO.y), (PISO.x1 - PISO.x0) * esc, 5);
+      // los parches del conteo: lomos que respiran con el pulso hasta que la
+      // esfera los pisa -- pisados quedan encendidos en tu color
+      for (const tb of TAMBORES) {
+        const hecho = s.tamboresHechos.has(tb.i);
+        const late = corriendo && !hecho ? 0.5 + 0.5 * Math.sin(performance.now() / 240) : 0;
+        const rT = 9 + late * 2;
+        cx.fillStyle = hecho ? `rgba(${C.esferaRGB},0.85)` : `rgba(${C.esferaRGB},${0.30 + 0.25 * late})`;
+        cx.beginPath();
+        cx.ellipse(px(tb.x), py(tb.y) + 1, rT, 5, 0, Math.PI, 0);
+        cx.fill();
+        cx.strokeStyle = `rgba(${C.esferaRGB},${hecho ? 0.9 : 0.45})`;
+        cx.lineWidth = 1.5;
+        cx.beginPath();
+        cx.ellipse(px(tb.x), py(tb.y) + 1, rT, 3.5, 0, 0, Math.PI * 2);
+        cx.stroke();
+      }
       cx.fillStyle = C.tenue; cx.font = 'bold 10px system-ui'; cx.textAlign = 'right';
       cx.letterSpacing = '1.4px';
       cx.fillText('SALIDA', px(PISO.x1) - 6, py(PISO.y) - 8);
@@ -4505,12 +4631,20 @@ function arrancarNavegador () {
         const grueso = k.bajo ? alto + 3 : alto;
         cx.fillStyle = 'rgba(0,0,0,0.35)';
         caja(ax, ay + 2, an, grueso, grueso / 2); cx.fill();
-        cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
-        caja(ax, ay, an, grueso, grueso / 2); cx.fill();
-        // el filo: una linea mas clara sobre el lomo. Es lo que convierte una
-        // barra plana en algo con volumen, y cuesta una llamada.
-        cx.fillStyle = limpia ? 'rgba(255,252,240,0.55)' : 'rgba(255,255,255,0.22)';
-        cx.fillRect(ax + 1.5, ay + 0.5, Math.max(1, an - 3), 1.5);
+        if (k.porCaida && !sono) {
+          caja(ax, ay, an, grueso, grueso / 2);
+          cx.fillStyle = `rgba(${C.teclaRGB},0.10)`; cx.fill();
+          cx.setLineDash([3, 3]);
+          cx.strokeStyle = `rgba(${C.teclaRGB},0.8)`; cx.lineWidth = 1.5;
+          cx.stroke(); cx.setLineDash([]);
+        } else {
+          cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
+          caja(ax, ay, an, grueso, grueso / 2); cx.fill();
+          // el filo: una linea mas clara sobre el lomo. Es lo que convierte una
+          // barra plana en algo con volumen, y cuesta una llamada.
+          cx.fillStyle = limpia ? 'rgba(255,252,240,0.55)' : 'rgba(255,255,255,0.22)';
+          cx.fillRect(ax + 1.5, ay + 0.5, Math.max(1, an - 3), 1.5);
+        }
         if (k.bajo) {                    // la patita del bajo
           cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
           cx.fillRect(ax + an / 2 - 1.5, ay + grueso, 3, 5);
