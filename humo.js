@@ -41,6 +41,8 @@ class AudioContextFalso {
   createBufferSource () { return nodoAudio(); }
   createDelay () { return nodoAudio(); }
   createBuffer () { return nodoAudio(); }
+  createConvolver () { return nodoAudio(); }
+  createStereoPanner () { return nodoAudio(); }
 }
 
 // Se anota TODO lo que el juego escribe en pantalla: es la unica forma de
@@ -131,20 +133,20 @@ console.log('\n=== HUMO: la capa de navegador ===');
 probar('la entrada se dibuja, y lleva al mapa y a configuracion', () => {
   correrCuadros(3);
   exigir(dijo('DRIBLE'), 'la entrada no escribio su titulo');
-  exigir(dijo('EMPEZAR'), 'la entrada no ofrece empezar');
-  exigir(dijo('estela'), 'la entrada no deja elegir la estela');
+  exigir(dijo('JUGAR'), 'la entrada no ofrece empezar');
+  exigir(dijo('ESTELA'), 'la entrada no deja elegir la estela');
   tocar1();                       // el boton, desde la entrada, es EMPEZAR
   textos.length = 0; correrCuadros(3);
-  exigir(dijo('elegi el nivel'), 'EMPEZAR no llevo al mapa de niveles');
+  exigir(dijo('ELEGÍ TU CANCIÓN'), 'JUGAR no llevo al mapa de niveles');
   disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
   textos.length = 0; correrCuadros(3);
   exigir(dijo('DRIBLE'), 'ESC en el mapa no vuelve a la entrada');
   // configuracion: la red es una opcion que hay que ir a buscar, y esta ahi
   disparar('keydown', { key: 'f', code: 'KeyF', preventDefault () {}, repeat: false });
   textos.length = 0; correrCuadros(3);
-  exigir(dijo('configuracion'), 'la tecla F no abrio configuracion');
-  exigir(dijo('MODO FACIL — con red'), 'la tecla F no puso la red');
-  exigir(dijo('calibrar'), 'configuracion no ofrece calibrar');
+  exigir(dijo('AJUSTES'), 'la tecla F no abrio los ajustes');
+  exigir(dijo('RED DE SEGURIDAD — PUESTA'), 'la tecla F no puso la red');
+  exigir(dijo('CALIBRAR EL SONIDO'), 'los ajustes no ofrecen calibrar');
 });
 
 // La calibracion es la pantalla que decide si el juego se siente roto en un
@@ -153,11 +155,11 @@ probar('calibrar: suena, se tocan los golpes, y guarda un numero', () => {
   disparar('keydown', { key: 'c', code: 'KeyC', preventDefault () {}, repeat: false });
   correrCuadros(6, 120);
   for (let i = 0; i < 14; i++) { tocar1(); correrCuadros(5, 120); }
-  exigir(dijo('toca con lo que ESCUCHAS'), 'no se abrio la pantalla de calibrar');
+  exigir(dijo('CALIBRAR EL SONIDO'), 'no se abrio la pantalla de calibrar');
   correrCuadros(40, 200);            // hasta pasado el final de la cuenta
   exigir(textos.some(t => / ms$/.test(t)), 'la calibracion no dio un resultado en ms');
   correrCuadros(30, 200);            // y vuelve sola a configuracion, de donde salio
-  exigir(dijo('configuracion'), 'no volvio a configuracion despues de calibrar');
+  exigir(dijo('AJUSTES'), 'no volvio a los ajustes despues de calibrar');
 });
 
 // Llegar a la meta: se salta a la ultima seccion y se deja rodar por la red
@@ -171,7 +173,7 @@ probar('esfera: llegar a la meta dibuja el rango y el informe por seccion', () =
     correrCuadros(3);
   }
   correrCuadros(700);
-  exigir(dijo('toca — otra vez'), 'no se dibujo la pantalla de meta');
+  exigir(dijo('Tocá para jugar otra vez'), 'no se dibujo la pantalla de meta');
   exigir(dijo('LLEGASTE') || dijo('AFINADO') || dijo('MUSICO') || dijo('VIRTUOSO') || dijo('AURORA') || dijo('SUPERNOVA'),
     'la meta no mostro ningun rango');
   // el toque en la meta es OTRA VEZ: reinicia la misma cancion de cero. Se
@@ -179,17 +181,17 @@ probar('esfera: llegar a la meta dibuja el rango y el informe por seccion', () =
   // deja el humo en el estado que los tests siguientes esperan.
   tocar1();
   correrCuadros(5);
-  exigir(!dijo('elegi el nivel'), 'el toque en la meta tiro al menu: debe reintentar');
+  exigir(!dijo('ELEGÍ TU CANCIÓN'), 'el toque en la meta tiro al menu: debe reintentar');
   textos.length = 0;
   for (let i = 0; i < 16; i++) {
     disparar('keydown', { key: 'ArrowRight', preventDefault () {}, repeat: false });
     correrCuadros(3);
   }
   correrCuadros(700);
-  exigir(dijo('toca — otra vez'), 'el reintento no llego a una meta nueva');
+  exigir(dijo('Tocá para jugar otra vez'), 'el reintento no llego a una meta nueva');
   disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
   correrCuadros(5);
-  exigir(dijo('elegi el nivel'), 'ESC en la meta no vuelve al menu');
+  exigir(dijo('ELEGÍ TU CANCIÓN'), 'ESC en la meta no vuelve al menu');
 });
 
 for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'viaje']]) {
@@ -227,8 +229,8 @@ for (const [tecla, nivel] of [['1', 'esfera'], ['2', 'viaje']]) {
   // de la cancion desaparece del cartel, algo se rompio sin tirar excepcion
   probar(`${nivel}: el HUD sigue en pie, y la corrida queda marcada ENSAYO`, () => {
     correrCuadros(5);
-    exigir(dijo('saltar de seccion'), 'se perdio el atajo de revision');
-    exigir(dijo('intento'), 'se perdio el cartel de la cancion');
+    exigir(dijo('Saltar de sección'), 'se perdio el atajo de revision');
+    exigir(dijo('Intento'), 'se perdio el cartel de la cancion');
     // saltar de seccion no puede puntuar: si no se avisa, un record sacado
     // saltando al 90% pasa por bueno
     exigir(dijo('ENSAYO'), 'saltar de seccion no marco la corrida como ensayo');
@@ -244,12 +246,12 @@ probar('el record se guarda, se lee, y sin red es lo normal', () => {
   // mitad de cancion -- para cambiar de nivel habia que dejarse matar.)
   disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
   correrCuadros(4);
-  exigir(dijo('volver al menu'), 'la pausa no ofrece salida al menu');
+  exigir(dijo('Volver al menú'), 'la pausa no ofrece salida al menu');
   disparar('keydown', { key: 'm', code: 'KeyM', preventDefault () {}, repeat: false });
   correrCuadros(4);
   textos.length = 0;
   correrCuadros(4);
-  exigir(dijo('elegi el nivel'), 'M en pausa no volvio al menu');
+  exigir(dijo('ELEGÍ TU CANCIÓN'), 'M en pausa no volvio al menu');
   // un record viejo, del formato anterior {pct, limpias}: tiene que sobrevivir
   localStorage.setItem('drible:record:esfera', JSON.stringify({ pct: 100, limpias: 40 }));
   textos.length = 0;
@@ -260,7 +262,7 @@ probar('el record se guarda, se lee, y sin red es lo normal', () => {
   correrCuadros(4);
   textos.length = 0;
   correrCuadros(4);
-  exigir(dijo('MODO FACIL — apagado'), 'la tecla F no saco la red');
+  exigir(dijo('RED DE SEGURIDAD — SIN RED'), 'la tecla F no saco la red');
   disparar('keydown', { key: '1', code: 'Digit1', preventDefault () {}, repeat: false });
   correrCuadros(20);
   textos.length = 0;
@@ -282,7 +284,7 @@ probar('morir espera: el informe se queda hasta que decidas', () => {
   // viene de la prueba anterior con la red sacada, asi que no tocar nada mata
   correrCuadros(900);
   exigir(dijo('OTRA VEZ'), 'la muerte no ofrecio volver a intentar');
-  exigir(dijo('◀ menu'), 'la muerte no ofrecio la salida al menu');
+  exigir(dijo('◀  Menú'), 'la muerte no ofrecio la salida al menu');
   const veces = textos.filter(t => t.includes('OTRA VEZ')).length;
   textos.length = 0;
   correrCuadros(400);                 // y no se va solo: sigue ahi
@@ -292,7 +294,7 @@ probar('morir espera: el informe se queda hasta que decidas', () => {
   disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
   textos.length = 0;
   correrCuadros(5);
-  exigir(dijo('elegi el nivel'), 'ESC tras morir no vuelve al menu');
+  exigir(dijo('ELEGÍ TU CANCIÓN'), 'ESC tras morir no vuelve al menu');
 });
 
 // EL MUNDO CONTRA EL RELOJ DEL AUDIO. La musica se agenda contra ac.currentTime

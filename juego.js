@@ -1531,8 +1531,8 @@ function arrancarNavegador () {
     { nom: 'turquesa', rgb: '80,222,228' },
     { nom: 'hueso', rgb: '240,236,226' }
   ];
-  const ESTELAS = ['cometa', 'gotas', 'sin estela'];
-  const MARCAS = ['costura', 'cruz', 'gajos', 'nucleo'];
+  const ESTELAS = ['cometa', 'gotas', 'ninguna'];
+  const MARCAS = ['costura', 'cruz', 'gajos', 'núcleo'];
   let mira = { color: 0, estela: 0, marca: 0 };
   try {
     const g = JSON.parse(localStorage.getItem('drible:mira'));
@@ -1598,6 +1598,8 @@ function arrancarNavegador () {
   let solo = null, fondo = null;      // el que toca la esfera, y el arreglo
   let craterBus = null;               // el pozo que el arreglo abre para el caño
   let ecoRet = null, ecoLP = null, ecoFB = null, ecoMix = null;   // el eco de NEBULOSA
+  let sala = null, salaMix = null;    // el aire: la cola que deja el mundo atras
+  let lados = null;                   // donde cae cada cosa del arreglo, a lo ancho
   // El solista entra: el arreglo se agacha un instante para dejarlo pasar.
   // EL CRATER. En el paso de semicorchea que un caño reclamo, el arreglo
   // entero se ABRE --se hunde a la mitad por un tercio de segundo-- pase lo
@@ -1709,12 +1711,39 @@ function arrancarNavegador () {
   // propio --cada capa toma sus alturas de otra parte de la partitura, dando la
   // vuelta al final para no quedarse sin notas-- las siluetas dejan de rimar y
   // recien ahi la diferencia de velocidad se ve.
+  // ...y hay una cuenta mas, que era LA que faltaba. La silueta de una capa se
+  // dibuja tomando una nota cada `salto`, asi que el ancho en pantalla de cada
+  // loma es salto x separacion x f. Con la de mas lejos a f = 0.015 y salto 8,
+  // sus lomas median unos 25 px: no eran montañas, era TEXTURA -- una sierrita
+  // de dientes menudos que se corre 4 px por tiempo. El ojo no puede seguir un
+  // diente entre miles de dientes iguales, asi que la lee como una superficie
+  // quieta, por mas que se este moviendo. Ahora el salto sube con la lejania
+  // (14 / 7 / 4 / 2) para que las CUATRO capas tengan lomas del mismo tamaño en
+  // pantalla --unos 140 px, algo que se puede seguir con la vista-- y las
+  // velocidades suben con el: 0.045 / 0.10 / 0.20 / 0.38. Mismo tamaño aparente
+  // y velocidades que se multiplican por dos entre vecinas es exactamente lo
+  // que se ve por la ventanilla: el cerro de atras casi quieto, la loma de
+  // adelante pasando de largo.
   const CAPAS = [
-    { f: 0.015, k: 0.70, base: 0.46, a: 0.15, salto: 8, l: 1, giro: 0 },
-    { f: 0.05, k: 0.58, base: 0.30, a: 0.18, salto: 5, l: 0.62, giro: 37 },
-    { f: 0.11, k: 0.42, base: 0.16, a: 0.22, salto: 3, l: 0.28, giro: 91 },
-    { f: 0.20, k: 0.26, base: 0.04, a: 0.28, salto: 2, l: 0, giro: 149 }
+    { f: 0.045, k: 0.86, base: 0.50, a: 0.14, salto: 14, l: 1, giro: 0 },
+    { f: 0.10, k: 0.62, base: 0.32, a: 0.18, salto: 7, l: 0.62, giro: 37 },
+    { f: 0.20, k: 0.46, base: 0.15, a: 0.22, salto: 4, l: 0.28, giro: 91 },
+    { f: 0.38, k: 0.34, base: 0.02, a: 0.28, salto: 2, l: 0, giro: 149 }
   ];
+  // LAS NUBES. Todas las capas dibujan la misma partitura y van todas para el
+  // mismo lado; en un cielo vacio no hay un objeto SUELTO al que agarrarse, y
+  // sin un objeto suelto el desplazamiento se lee como que el mundo respira,
+  // no como que uno avanza. Estos bancos de neblina no tienen nada que ver con
+  // la cancion --son lo unico del fondo que no es el mapa-- y cada uno va a lo
+  // suyo. Se repiten cada tanto: el cielo no se termina nunca.
+  const NUBES = Array.from({ length: 7 }, (_, i) => ({
+    x: i * 4.4 + (i % 3) * 1.7,
+    y: 0.34 + ((i * 7) % 5) * 0.05,
+    an: 1.4 + ((i * 5) % 4) * 0.6,
+    al: 0.05 + ((i * 3) % 3) * 0.02,
+    f: 0.07 + ((i * 11) % 3) * 0.022,
+    a: 0.07 + ((i * 13) % 4) * 0.022
+  }));
   const TINTE = {
     Am: [70, 95, 165], F: [160, 110, 70], C: [80, 150, 130],
     G: [120, 95, 175], Dm: [130, 65, 120], E: [175, 80, 65]
@@ -1788,6 +1817,49 @@ function arrancarNavegador () {
       solo.connect(ecoRet);
       ecoRet.connect(ecoLP).connect(ecoFB).connect(ecoRet);
       ecoLP.connect(ecoMix).connect(master);
+      // LA SALA. Todo esto sonaba GRABADO EN EL VACIO: cada golpe empezaba y
+      // terminaba exactamente donde lo decia su envolvente, y eso no le pasa a
+      // ningun instrumento del mundo. Lo que hace que un sonido parezca real
+      // no es el sonido: es el aire que queda vibrando despues de que dejo de
+      // sonar. Aca hay una sala de verdad -- una respuesta al impulso
+      // sintetizada, con sus primeras reflexiones y su caida exponencial.
+      // Va por ENVIO y no en serie: el ataque sigue seco y al frente (el
+      // apreton tiene que ser la nota), y lo que llena es la cola. Entra por
+      // un predelay de 26 ms, que es lo que evita que la sala se coma el
+      // ataque, y el envio va filtrado: sin cortar los graves el bombo y el
+      // bajo embarran la cola entera y todo suena a sotano.
+      sala = ac.createConvolver();
+      sala.normalize = false;
+      sala.buffer = irSala(2.4);
+      const preD = ac.createDelay(0.5); preD.delayTime.value = 0.026;
+      const salaHP = ac.createBiquadFilter();
+      salaHP.type = 'highpass'; salaHP.frequency.value = 340;
+      const salaLP = ac.createBiquadFilter();
+      salaLP.type = 'lowpass'; salaLP.frequency.value = 7200;
+      salaMix = ac.createGain(); salaMix.gain.value = 0.55;
+      const salaEnv = ac.createGain(); salaEnv.gain.value = 0.32;
+      master.connect(salaEnv).connect(preD);
+      // ...y la melodia va MAS adentro de la sala que el resto. El arreglo se
+      // sostiene solo: el que necesita cola es el que toca una nota por vez.
+      const envVoz = ac.createGain(); envVoz.gain.value = 0.5;
+      voz.connect(envVoz); solo.connect(envVoz); envVoz.connect(preD);
+      preD.connect(salaHP).connect(salaLP).connect(sala).connect(salaMix).connect(comp);
+      // EL ANCHO. Todo salia del mismo punto --mono, apilado-- y eso es la
+      // otra mitad de "plano": no existe el disco donde el hi-hat, el arpegio
+      // y el bombo esten los tres en el mismo lugar. Cada cosa del ARREGLO
+      // tiene su sitio a los lados; lo que toca la esfera se queda en el
+      // centro, que es donde esta el que juega.
+      busE();
+      if (ac.createStereoPanner) {
+        const lado = (p, dest) => {
+          const nd = ac.createStereoPanner(); nd.pan.value = p; nd.connect(dest); return nd;
+        };
+        lados = {
+          hat: lado(0.30, fondo), clap: lado(-0.26, fondo), tom: lado(0.20, fondo),
+          arpI: lado(-0.38, duckE), arpD: lado(0.34, duckE),
+          padI: lado(-0.55, duckE), padD: lado(0.55, duckE)
+        };
+      }
     }
     // el retardo es MUSICAL: una negra con puntillo del tempo de esta cancion
     if (ecoRet) ecoRet.delayTime.value = 1.5 * SPB;
@@ -1796,6 +1868,37 @@ function arrancarNavegador () {
     t0 = ac.currentTime + 0.12;
     proxBeat = 0;
     finSonado = false;
+  }
+
+  // La respuesta al impulso de la sala, sintetizada: ruido que cae
+  // exponencialmente con un puñado de reflexiones tempranas encima --las
+  // tempranas son las que dicen el TAMAÑO del lugar; la cola, cuanto vibra--.
+  // Los dos canales se generan por separado, y esa decorrelacion ES el
+  // estereo: la cola se abre a los lados sola, sin panear nada.
+  function irSala (dur) {
+    const largo = Math.max(1, ac.sampleRate * dur | 0);
+    const buf = ac.createBuffer(2, largo, ac.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c);
+      let energia = 0;
+      for (let i = 0; i < d.length; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3.4);
+        energia += d[i] * d[i];
+      }
+      for (const [ms, g] of [[11, 0.5], [19, 0.42], [29, 0.34], [43, 0.26], [61, 0.2]]) {
+        const k = (ms + c * 3) * ac.sampleRate / 1000 | 0;
+        if (k < d.length) { energia += g * g; d[k] += (c ? -1 : 1) * g; }
+      }
+      // LA COLA HAY QUE MEDIRLA. Convolucionar contra cien mil muestras de
+      // ruido MULTIPLICA: la energia de la respuesta se suma entera, y sin
+      // dividir por ella la sala sale unas sesenta veces mas fuerte que lo
+      // seco -- o sea, un rugido tapando la cancion. Dividida por su propia
+      // energia, la sala devuelve mas o menos lo que le entra, y recien ahi
+      // los envios significan lo que dicen: 0.3 es 30% de sala.
+      const k = Math.sqrt(energia);
+      if (k > 0) for (let i = 0; i < d.length; i++) d[i] /= k;
+    }
+    return buf;
   }
 
   // La rodadura: mientras la esfera apoya, roza. Es lo que separa "se desliza
@@ -1866,12 +1969,16 @@ function arrancarNavegador () {
     ruido(t, 0.15, gan, 'bandpass', 1900, 0.8);
     golpe(t, 185, 0.07, 0.11, 'triangle');
   };
+  // El clap y el hat de ESFERA tambien tienen su lugar a los lados y su
+  // dinamica, igual que los del arreglo del estudio: no hay razon para que la
+  // cancion del nivel 1 suene mas plana que la del 2.
   const clap = t => {
     for (const [d, g] of [[0, 0.15], [0.014, 0.12], [0.032, 0.16]])
-      ruido(t + d, 0.07, g, 'bandpass', 1500, 0.9);
+      ruido(t + d, 0.07, g, 'bandpass', 1500, 0.9, lados ? lados.clap : null);
   };
   const hat = (t, abierto) =>
-    ruido(t, abierto ? 0.15 : 0.045, abierto ? 0.13 : 0.10, 'highpass', 8200);
+    ruido(t, abierto ? 0.15 : 0.045, (abierto ? 0.13 : 0.10) * (0.8 + Math.random() * 0.4),
+      'highpass', 8200, 1, lados ? lados.hat : null);
 
   // El bajo es el peso de la cancion: sierra por un pasabajos con resonancia
   // que se cierra. Era un triangulo pelado y por eso no empujaba nada.
@@ -1944,15 +2051,25 @@ function arrancarNavegador () {
     ruido(t, 0.16, 0.024 * EG, 'bandpass', 900, 1, d || fondo);
     eBeep(t, 195, 0.05, 'triangle', 0.032 * EG, 0, false, d || fondo);
   };
+  // El hi-hat no golpea dos veces igual: un baterista no puede, y ese 20% de
+  // diferencia entre golpe y golpe es la mitad de lo que se oye como groove.
+  // Con todos los golpes clavados al mismo volumen suena a metronomo.
   const eHat = (t, abierto, d) =>
-    ruido(t, abierto ? 0.09 : 0.028, (abierto ? 0.02 : 0.017) * EG, 'highpass', 7200, 1, d || fondo);
+    ruido(t, abierto ? 0.09 : 0.028,
+      (abierto ? 0.02 : 0.017) * EG * (0.8 + Math.random() * 0.4),
+      'highpass', 7200, 1, d || (lados ? lados.hat : fondo));
   const eClap = (t, d) => {
-    ruido(t, 0.03, 0.045 * EG, 'bandpass', 1500, 1, d || fondo);
-    ruido(t + 0.012, 0.03, 0.04 * EG, 'bandpass', 1500, 1, d || fondo);
-    ruido(t + 0.026, 0.13, 0.05 * EG, 'bandpass', 1200, 1, d || fondo);
+    const D = d || (lados ? lados.clap : fondo);
+    ruido(t, 0.03, 0.045 * EG, 'bandpass', 1500, 1, D);
+    ruido(t + 0.012, 0.03, 0.04 * EG, 'bandpass', 1500, 1, D);
+    ruido(t + 0.026, 0.13, 0.05 * EG, 'bandpass', 1200, 1, D);
   };
   const eCrash = t => ruido(t, 0.55, 0.045 * EG, 'highpass', 4200, 1, fondo);
-  const eTom = (t, f, d) => { eBeep(t, f, 0.2, 'sine', 0.095 * EG, f * 0.45, false, d || fondo); ruido(t, 0.02, 0.012 * EG, 'lowpass', 1800, 1, d || fondo); };
+  const eTom = (t, f, d) => {
+    const D = d || (lados ? lados.tom : fondo);
+    eBeep(t, f, 0.2, 'sine', 0.095 * EG, f * 0.45, false, D);
+    ruido(t, 0.02, 0.012 * EG, 'lowpass', 1800, 1, D);
+  };
   function eBajo (t, f, gan, d) {
     const filtro = ac.createBiquadFilter(); filtro.type = 'lowpass';
     // El bajo del arreglo es oscuro a proposito (retumba y no estorba). El del
@@ -1969,17 +2086,37 @@ function arrancarNavegador () {
     const o2 = ac.createOscillator(); o2.type = 'sine'; o2.frequency.setValueAtTime(f / 2, t);
     o2.connect(gs).connect(filtro); o2.start(t); o2.stop(t + 0.35);
   }
-  const eArp = (t, f, gan, d) => eBeep(t, f, d ? 0.11 : 0.07, 'square', gan, 0, true, d);
+  // El arpegio REBOTA de un lado al otro. Es una figura repetida y rapida: en
+  // el centro se apelmaza contra todo lo demas hasta volverse un zumbido, y
+  // abierta a los lados se convierte en el movimiento del fondo.
+  let arpLado = 0;
+  const eArp = (t, f, gan, d) => eBeep(t, f, d ? 0.11 : 0.07, 'square', gan, 0, true,
+    d || (lados ? (++arpLado & 1 ? lados.arpI : lados.arpD) : null));
+  // EL PAD ES LO ANCHO. Sus dos voces desafinadas ya estaban, pero las dos
+  // salian del mismo punto: dos sierras a 3 cents una de otra, en mono, es un
+  // batido, no una cuerda. Cada mitad va a un lado --y ahi recien el acorde
+  // ABRAZA en vez de zumbar-- y cada una lleva una deriva lenta y propia, que
+  // es lo que hace que un pad respire en lugar de quedarse clavado.
   function ePad (t, freqs, gan, durCompas) {
-    const filtro = ac.createBiquadFilter(); filtro.type = 'lowpass'; filtro.frequency.setValueAtTime(750, t);
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(gan, t + 0.35);
-    g.gain.setValueAtTime(gan, t + durCompas * 0.55);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + durCompas * 0.95);
-    filtro.connect(g).connect(busE());
-    for (const fr of freqs) for (const dt of [1 - 0.0035, 1 + 0.0035]) {
-      const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(fr * dt, t);
-      o.connect(filtro); o.start(t); o.stop(t + durCompas);
+    for (const [k, dt] of [[0, 1 - 0.004], [1, 1 + 0.004]]) {
+      const filtro = ac.createBiquadFilter();
+      filtro.type = 'lowpass'; filtro.frequency.setValueAtTime(720 + k * 90, t);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(gan, t + 0.35);
+      g.gain.setValueAtTime(gan, t + durCompas * 0.55);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + durCompas * 0.95);
+      filtro.connect(g).connect(lados ? (k ? lados.padD : lados.padI) : busE());
+      // la deriva: medio ciclo por compas, en contrafase entre los dos lados
+      const lfo = ac.createOscillator(), lfoG = ac.createGain();
+      lfo.type = 'sine'; lfo.frequency.value = 0.13 + k * 0.05;
+      lfoG.gain.value = k ? 5 : -5;
+      lfo.connect(lfoG); lfo.start(t); lfo.stop(t + durCompas);
+      for (const fr of freqs) {
+        const o = ac.createOscillator();
+        o.type = 'sawtooth'; o.frequency.setValueAtTime(fr * dt, t);
+        lfoG.connect(o.detune);
+        o.connect(filtro); o.start(t); o.stop(t + durCompas);
+      }
     }
   }
   function eRiser (t, dur) {
@@ -2018,12 +2155,33 @@ function arrancarNavegador () {
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(gan, t + 0.004);
+    // La nota larga NO SE MUERE SOLA. Caia exponencial hasta cero a lo largo de
+    // todo el riel, asi que la mitad final de una blanca sostenida era silencio
+    // con la mano puesta: se mantenia apretado y no sonaba nada. Ahora cae al
+    // ataque, SE QUEDA, y recien afloja sobre el final.
+    g.gain.exponentialRampToValueAtTime(gan * 0.62, t + Math.min(0.25, dur * 0.3));
+    g.gain.setValueAtTime(gan * 0.62, t + dur * 0.72);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     lp.connect(voz);
+    // ...y RESPIRA. Un tono cuadrado perfectamente fijo durante dos tiempos es
+    // exactamente el sonido de un test de audio: lo unico que lo separa de un
+    // instrumento sosteniendo una nota es que la afinacion se mueva un poco.
+    const lfo = ac.createOscillator(), lfoG = ac.createGain();
+    lfo.type = 'sine'; lfo.frequency.value = 4.8;
+    lfoG.gain.setValueAtTime(0, t);
+    lfoG.gain.linearRampToValueAtTime(7, t + Math.min(0.45, dur * 0.5));
+    lfo.connect(lfoG); lfo.start(t); lfo.stop(t + dur + 0.15);
     const o = ac.createOscillator(); o.type = 'square'; o.frequency.setValueAtTime(f, t);
     o.detune.value = 60 * suc;
+    lfoG.connect(o.detune);
     o.connect(g).connect(lp); o.start(t); o.stop(t + dur + 0.05);
-    rielVozE = { o, g };
+    // una segunda voz corrida un pelo: engorda la nota sin cambiarle el timbre
+    const o2 = ac.createOscillator(), g2 = ac.createGain();
+    o2.type = 'triangle'; o2.frequency.setValueAtTime(f, t);
+    o2.detune.value = -7 + 60 * suc; g2.gain.value = 0.55;
+    lfoG.connect(o2.detune);
+    o2.connect(g2).connect(g); o2.start(t); o2.stop(t + dur + 0.05);
+    rielVozE = { o, g, extra: [o2, lfo] };
   }
   function eRielCerrar () {
     if (!rielVozE) return;
@@ -2032,6 +2190,7 @@ function arrancarNavegador () {
     rielVozE.g.gain.setValueAtTime(Math.max(0.0001, rielVozE.g.gain.value), t);
     rielVozE.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
     rielVozE.o.stop(t + 0.1);
+    for (const ox of rielVozE.extra || []) ox.stop(t + 0.12);
     rielVozE = null;
   }
 
@@ -2075,12 +2234,13 @@ function arrancarNavegador () {
       // La suciedad la mueve entera: se acorta, pierde brillo, se desafina y
       // aparece una segunda voz batiendo contra la primera. Justo en el pulso
       // es exactamente la del estudio.
-      const durE = Math.min(dur, 0.16) * (1 - 0.3 * suc);
+      const limpio = 1 - 0.3 * suc;
+      const durE = Math.min(dur, 0.17) * limpio;
       const ge = ac.createGain(), lpe = ac.createBiquadFilter();
       lpe.type = 'lowpass';
       lpe.frequency.setValueAtTime(18000 * Math.pow(0.07, suc), t);
       ge.gain.setValueAtTime(0.0001, t);
-      ge.gain.linearRampToValueAtTime(gan * 0.45 * (1 - 0.3 * suc),
+      ge.gain.linearRampToValueAtTime(gan * 0.45 * limpio,
         t + Math.min(0.004 + 0.012 * suc, durE * 0.5));
       ge.gain.exponentialRampToValueAtTime(0.0001, t + durE);
       lpe.connect(voz);
@@ -2093,6 +2253,46 @@ function arrancarNavegador () {
         o2.frequency.setValueAtTime(f, t); o2.detune.value = -75 * suc;
         o2.connect(g2).connect(ge); o2.start(t); o2.stop(t + durE + 0.02);
         ruido(t, 0.025, 0.06 * suc, 'bandpass', 900, 1.2);
+      }
+      // LA NOTA YA NO ES UN BLIP. Esa cuadrada de 160 ms es la voz del estudio
+      // calcada, y alla cada nota duraba UNA semicorchea porque el eco del
+      // arreglo la peinaba entera. Tocada a mano, una por una, lo que se oia
+      // era STACCATO: la melodia picoteada, cada nota apagandose antes de que
+      // el dedo levante. Asi que la cuadrada pasa a ser lo que siempre fue --el
+      // FILO, el ataque que hace que la voz se reconozca-- y debajo entra un
+      // CUERPO que canta y decae, como cualquier instrumento pulsado de
+      // verdad. Lo que se apaga rapido es el brillo, no la nota.
+      // Los ecos y el doblaje de octava se agendan cortos a proposito: esos no
+      // llevan cuerpo, o la seccion entera se convierte en barro.
+      if (dur <= 0.18) return;
+      const durC = Math.max(0.34, Math.min(dur * 1.9, 1.25 * SPB)) * limpio;
+      const gc = ac.createGain(), lpc = ac.createBiquadFilter();
+      lpc.type = 'lowpass'; lpc.Q.value = 0.9;
+      lpc.frequency.setValueAtTime(Math.min(5200, f * 6) * (1 - 0.45 * suc), t);
+      lpc.frequency.exponentialRampToValueAtTime(
+        Math.max(320, Math.min(1600, f * 2.2)), t + durC * 0.8);
+      // pulsada: pico, y en seguida un escalon donde la nota SE QUEDA sonando
+      gc.gain.setValueAtTime(0.0001, t);
+      gc.gain.exponentialRampToValueAtTime(gan * 0.5 * limpio, t + 0.012);
+      gc.gain.exponentialRampToValueAtTime(gan * 0.15 * limpio, t + 0.18);
+      gc.gain.exponentialRampToValueAtTime(0.0001, t + durC);
+      gc.connect(lpc).connect(voz);
+      // el vibrato entra DESPUES del ataque, como el dedo sobre la cuerda: una
+      // cola larga perfectamente quieta vuelve a sonar a maquina
+      const lfo = ac.createOscillator(), lfoG = ac.createGain();
+      lfo.type = 'sine'; lfo.frequency.value = 4.6;
+      lfoG.gain.setValueAtTime(0, t);
+      lfoG.gain.setValueAtTime(0, t + 0.16);
+      lfoG.gain.linearRampToValueAtTime(6, t + Math.max(0.3, durC * 0.7));
+      lfo.connect(lfoG); lfo.start(t); lfo.stop(t + durC + 0.05);
+      for (const [tipo, mul, v, des] of
+        [['triangle', 1, 1, -3], ['sawtooth', 1, 0.20, 6], ['sine', 0.5, 0.40, 0],
+         ['sine', 2, 0.09, 4]]) {
+        const oc = ac.createOscillator(), gv = ac.createGain();
+        oc.type = tipo; oc.frequency.value = f * mul; gv.gain.value = v;
+        oc.detune.value = des + 45 * suc;
+        lfoG.connect(oc.detune);
+        oc.connect(gv).connect(gc); oc.start(t); oc.stop(t + durC + 0.03);
       }
       return;
     }
@@ -2464,7 +2664,7 @@ function arrancarNavegador () {
         // se comio tus toques porque si
         if (!aprendidas.has('sordo')) {
           aprendidas.add('sordo');
-          leccionViva = { txt: 'martillaste — el boton quedo sordo un instante', t: performance.now() };
+          leccionViva = { txt: 'Martillaste — el botón quedó sordo un instante', t: performance.now() };
         }
       } else if (e.tipo === 'sordo') {
         // el toque comido se VE comerse: sin esto la sordera parece bug de input
@@ -2487,7 +2687,7 @@ function arrancarNavegador () {
         // toque de distancia de la cancion. Dos veces y basta -- al que no
         // reacciona no lo convence la tercera, y el cartel pasa a ser ruido.
         if (!aprendidas.has('red') && ++vecesRed <= 2)
-          leccionViva = { txt: 'TOCA: volves a la cancion', t: performance.now() };
+          leccionViva = { txt: 'TOCÁ para volver a la canción', t: performance.now() };
       } else if (e.tipo === 'aire' || e.tipo === 'saltoRed') {
         ruido(ac.currentTime, 0.04, 0.03, 'highpass', 3000);
         if (e.tipo === 'saltoRed') { aprendidas.add('red'); leccionViva = null; }
@@ -2499,15 +2699,15 @@ function arrancarNavegador () {
   // Morir sin saber por que es lo mas frustrante que puede pasar: el juego lo
   // sabe (s.causa) y hasta ahora se lo guardaba.
   const PORQUE = {
-    techo: 'te aplasto el techo — bajo el techo NO se toca',
-    hueco: 'soltaste el riel sobre el vacio — ahi hay que mantener',
-    dribleo: 'la red se corta entre piques — hay que PICAR al beat',
+    techo: 'Te aplastó el techo — bajo el techo NO se toca',
+    hueco: 'Soltaste el riel sobre el vacío — ahí hay que mantener',
+    dribleo: 'La red se corta entre piques — hay que PICAR al beat',
     // dice lo que paso, no lo que se supone que lo causo: fallar una nota no
     // siempre tira a la red -- lo que mata, aca, es tocarla
     // sin nombre de modo: el que cayo no necesita saber como se llama esto,
     // necesita saber que caer termina la corrida. Y si le sobra, la red se
     // pone en configuracion -- eso ya se dijo en el mapa, antes de tocar.
-    red: 'tocaste el piso — caer es el final'
+    red: 'Tocaste el piso — caer termina la corrida'
   };
   let avisoMuerte = null;
   // LA MUERTE ESPERA. El informe por seccion se dibujaba sobre el compas 1 de
@@ -2654,24 +2854,21 @@ function arrancarNavegador () {
   }
   function dibujarCalib (w, h) {
     cx.textAlign = 'center';
-    cx.fillStyle = C.peligro; cx.font = '17px system-ui';
-    cx.fillText('CALIBRAR — toca con lo que ESCUCHAS', w / 2, h * 0.2);
-    cx.fillStyle = C.tenue; cx.font = '13px system-ui';
-    cx.fillText('no mires la pantalla: seguí el golpe con el oído', w / 2, h * 0.2 + 24);
+    titulo('CALIBRAR EL SONIDO', w / 2, h * 0.2, 18, C.peligro, 2.6);
+    ayuda('No mires la pantalla: seguí el golpe con el oído.', w / 2, h * 0.2 + 24, C.tenue, 13);
     if (calib.listo) {
       cx.fillStyle = C.impulso; cx.font = 'bold 40px system-ui';
       cx.fillText(`${calib.listo.ms} ms`, w / 2, h * 0.47);
-      cx.fillStyle = calib.listo.guardado ? C.esfera : C.sucia; cx.font = '14px system-ui';
-      cx.fillText(calib.listo.guardado
-        ? `guardado — ${calib.listo.n} toques medidos`
-        : `muy pocos toques — sigue valiendo ${calib.listo.ms} ms`, w / 2, h * 0.47 + 26);
+      ayuda(calib.listo.guardado
+        ? `Guardado — ${calib.listo.n} toques medidos.`
+        : `Muy pocos toques — sigue valiendo ${calib.listo.ms} ms.`,
+      w / 2, h * 0.47 + 26, calib.listo.guardado ? C.esfera : C.sucia, 14);
       return;
     }
     const falta = Math.max(0, calib.desde - ac.currentTime);
     cx.fillStyle = C.esfera; cx.font = 'bold 30px system-ui';
     cx.fillText(falta > 0 ? '…' : `${calib.devs.length}`, w / 2, h * 0.47);
-    cx.fillStyle = C.tenue; cx.font = '12px system-ui';
-    cx.fillText(falta > 0 ? 'preparate' : 'toques', w / 2, h * 0.47 + 22);
+    rotulo(falta > 0 ? 'PREPARATE' : 'TOQUES', w / 2, h * 0.47 + 22);
     // las marcas: donde cayo cada toque respecto del golpe
     const mw = 200, my = h * 0.62;
     cx.fillStyle = C.tenue; cx.fillRect(w / 2 - mw / 2, my, mw, 2);
@@ -2681,9 +2878,8 @@ function arrancarNavegador () {
       cx.fillStyle = `rgba(${C.esferaRGB},0.75)`;
       cx.fillRect(w / 2 + v * mw / 2 - 1, my - 6, 2, 14);
     }
-    cx.fillStyle = C.tenue; cx.font = '10px system-ui';
-    cx.fillText('antes', w / 2 - mw / 2 - 22, my + 5);
-    cx.fillText('tarde', w / 2 + mw / 2 + 22, my + 5);
+    rotulo('ANTES', w / 2 - mw / 2 - 24, my + 4);
+    rotulo('TARDE', w / 2 + mw / 2 + 24, my + 4);
   }
 
   // Saltar a una seccion: para revisar un tramo sin tocar la cancion entera.
@@ -2699,29 +2895,29 @@ function arrancarNavegador () {
     const primera = f => NOTAS.find(n => !n.silencio && f(n));
     const L = [];
     const nota = primera(n => !n.riel && !n.piso && !n.porCaida && !n.bajo);
-    if (nota) L.push({ id: 'tocar', x: nota.xm, y: nota.y, txt: 'TOCA al pisarla',
+    if (nota) L.push({ id: 'tocar', x: nota.xm, y: nota.y, txt: 'TOCÁ al pisarla',
       ok: st => st.limpias.has(nota.i) });
     const riel = primera(n => n.riel);
-    if (riel) L.push({ id: 'riel', x: riel.xm, y: riel.y, txt: 'MANTENE apretado',
+    if (riel) L.push({ id: 'riel', x: riel.xm, y: riel.y, txt: 'MANTENÉ apretado',
       ok: st => st.limpias.has(riel.i) });
     const lig = primera(n => n.porCaida);
     if (lig && NOTAS[lig.i - 1]) L.push({ id: 'ligada', x: NOTAS[lig.i - 1].xm,
-      y: NOTAS[lig.i - 1].y, txt: 'esta no se toca: dejate caer',
+      y: NOTAS[lig.i - 1].y, txt: 'Esta no se toca: dejate caer',
       ok: st => st.tocadas.has(lig.i) });
     const grave = primera(n => n.bajo);
-    if (grave) L.push({ id: 'bajo', x: grave.xm, y: grave.y, txt: 'abajo toca el BAJO',
+    if (grave) L.push({ id: 'bajo', x: grave.xm, y: grave.y, txt: 'Abajo tocás el BAJO',
       ok: st => st.limpias.has(grave.i) });
     if (ORBES.length) L.push({ id: 'orbe', x: ORBES[0].x, y: ORBES[0].y,
-      txt: 'atravesalo: es una nota', ok: st => st.orbesTocados.has(ORBES[0].i) });
+      txt: 'Atravesalo: es una nota', ok: st => st.orbesTocados.has(ORBES[0].i) });
     if (TECHOS.length) L.push({ id: 'techo', x: TECHOS[0].x0, y: TECHOS[0].y,
-      txt: 'bajo el techo NO se toca', ok: st => st.viva });
+      txt: 'Bajo el techo NO se toca', ok: st => st.viva });
     // se aprende PISANDO uno, no pasando de largo: s.pistones tambien marca
     // los que expiraron sin que nadie los tocara, asi que mirar ese Set le
     // retiraba el cartel justo al que los estaba fallando todos
     if (PISTONES.length) L.push({ id: 'piston', x: PISTONES[0].x, y: PISTONES[0].y,
       txt: 'CAELE ENCIMA: suena y te empuja', ok: st => st.pistonazos > 0 });
     if (HUECOS.length) L.push({ id: 'abismo', x: HUECOS[0].x0, y: 0,
-      txt: 'sobre el vacio NO sueltes', ok: st => st.viva });
+      txt: 'Sobre el vacío NO sueltes', ok: st => st.viva });
     lecciones = L.filter(l => !aprendidas.has(l.id)).sort((a, b) => a.x - b.x);
   }
   function dibujarLecciones (px, py) {
@@ -2786,15 +2982,12 @@ function arrancarNavegador () {
     if (!pausado) return;
     cx.fillStyle = 'rgba(10,10,14,0.55)'; cx.fillRect(0, 0, w, h);
     cx.textAlign = 'center';
-    cx.fillStyle = C.peligro; cx.font = 'bold 30px system-ui';
-    cx.fillText('PAUSA', w / 2, h * 0.44);
-    cx.fillStyle = C.tenue; cx.font = '13px system-ui';
-    cx.fillText('toca para seguir · ESC', w / 2, h * 0.44 + 26);
+    titulo('PAUSA', w / 2, h * 0.44, 30, C.peligro, 5);
+    ayuda('Tocá para seguir  ·  ESC', w / 2, h * 0.44 + 28, C.tenue, 13);
     // ...y la salida. No habia NINGUNA forma de volver al menu sin terminar la
     // cancion o morirse: para cambiar de nivel a mitad de camino habia que
     // dejarse matar, que es una forma rara de pedirle algo a un juego.
-    cx.fillStyle = `rgba(${C.esferaRGB},0.7)`;
-    cx.fillText('M — volver al menu', w / 2, h * 0.66);
+    ayuda('M  —  Volver al menú', w / 2, h * 0.66, `rgba(${C.esferaRGB},0.75)`, 13);
     cx.textAlign = 'left';
   }
 
@@ -3045,6 +3238,11 @@ function arrancarNavegador () {
       const quiere = vozEn(s.x) === 'cristal' ? 0.5 : 0;
       ecoMix.gain.setTargetAtTime(quiere, ac.currentTime, 0.35);
     }
+    // la sala tampoco es fija: en NEBULOSA se abre --es la seccion que flota,
+    // y ahi la cola ES la musica-- y en el resto se queda a media puerta
+    if (salaMix) {
+      salaMix.gain.setTargetAtTime(vozEn(s.x) === 'cristal' ? 1 : 0.55, ac.currentTime, 0.5);
+    }
     procesar();
     if (!s.viva) { golpe(ac.currentTime, 90, 0.3, 0.4, 'sawtooth'); ruido(ac.currentTime, 0.2, 0.28); morirOReiniciar(); }
     if (s.meta && !finSonado) {
@@ -3141,14 +3339,15 @@ function arrancarNavegador () {
       cx.fillRect(x - bw * 0.3, base - alto * p, bw * 0.6, alto * p);
       cx.fillStyle = C.tenue; cx.font = t.aqui ? 'bold 10px system-ui' : '10px system-ui';
       if (!t.lejos) cx.fillText(`${Math.round(p * 100)}%`, x, base - alto - 5);
-      cx.fillText(t.n.length > 12 ? t.n.slice(0, 11) + '…' : t.n, x, base + 13);
+      const nm = t.n.toUpperCase();
+      rotulo(nm.length > 12 ? nm.slice(0, 11) + '…' : nm, x, base + 13, 'center',
+        t.aqui ? C.esfera : C.tenue);
       if (t.aqui && xHasta < Infinity) {           // aca te quedaste
         // en el color de la esfera: la esfera sos vos, y este es el tramo
         // donde te quedaste. C.peligro es casi blanco y no marcaba nada.
         cx.strokeStyle = C.esfera; cx.lineWidth = 2;
         cx.strokeRect(x - bw * 0.3 - 3, base - alto - 3, bw * 0.6 + 6, alto + 6);
-        cx.fillStyle = C.esfera; cx.font = 'bold 10px system-ui';
-        cx.fillText('aca', x, base + 26);
+        rotulo('AQUÍ', x, base + 26, 'center', C.esfera);
       }
       cx.restore();
     });
@@ -3187,6 +3386,49 @@ function arrancarNavegador () {
   // sierra de teclas azules. Un velo casi opaco lo deja de fondo, no de frente.
   const velo = (w, h, a = 0.88) => { cx.fillStyle = `rgba(17,18,20,${a})`; cx.fillRect(0, 0, w, h); };
 
+  // LA VOZ DEL JUEGO, en cuatro ladrillos. Antes cada cartel elegia su tamaño,
+  // su color y su capitalizacion en el lugar donde se dibujaba, y por eso el
+  // menu tenia titulos en minuscula al lado de botones en mayuscula: no habia
+  // una voz, habia veinte decisiones sueltas tomadas en veinte momentos
+  // distintos. Ahora hay cuatro formas y cada texto elige una:
+  //   titulo  — de que pantalla se trata: mayusculas, espaciadas, grandes
+  //   rotulo  — de que grupo se trata: mayusculas chiquitas y apagadas
+  //   ayuda   — que significa lo de arriba: frase normal, con mayuscula inicial
+  //   btn     — que podes hacer: la accion, y nada mas
+  // `letterSpacing` no existe en todos los navegadores; donde no existe, la
+  // asignacion no hace nada y el titulo sale igual, apretado pero entero.
+  function titulo (txt, cxp, y, tam, color = C.peligro, sep = 3) {
+    cx.textAlign = 'center';
+    cx.fillStyle = color;
+    cx.font = `bold ${tam}px system-ui`;
+    cx.letterSpacing = `${sep}px`;
+    cx.fillText(txt, cxp + sep / 2, y);      // el espaciado corre el centro
+    cx.letterSpacing = '0px';
+  }
+  function rotulo (txt, x, y, alin = 'center', color = 'rgba(232,230,224,0.42)') {
+    cx.textAlign = alin;
+    cx.fillStyle = color;
+    cx.font = 'bold 10px system-ui';
+    cx.letterSpacing = '1.4px';
+    cx.fillText(txt, x, y);
+    cx.letterSpacing = '0px';
+    cx.textAlign = 'center';
+  }
+  function ayuda (txt, cxp, y, color = 'rgba(232,230,224,0.36)', tam = 11.5) {
+    cx.textAlign = 'center';
+    cx.fillStyle = color;
+    cx.font = `${tam}px system-ui`;
+    cx.fillText(txt, cxp, y);
+  }
+  // Un PANEL: lo que va junto, se ve junto. Tres filas de controles sueltas una
+  // abajo de la otra son tres problemas; adentro de un marco y con un rotulo
+  // arriba son una sola cosa, y se entiende sin leerla entera.
+  function panel (x, y, an, al) {
+    caja(x, y, an, al, 12);
+    cx.fillStyle = 'rgba(232,230,224,0.035)'; cx.fill();
+    cx.strokeStyle = 'rgba(232,230,224,0.10)'; cx.lineWidth = 1; cx.stroke();
+  }
+
   // UN BOTON SE DIBUJA Y SE REGISTRA EN EL MISMO LUGAR, con la misma cuenta:
   // asi no existe el caso de tocar una cosa y que pase otra. Y responde al
   // puntero -- se aclara al pasar por encima. En una pantalla tactil eso no se
@@ -3195,7 +3437,7 @@ function arrancarNavegador () {
     const rgb = o.rgb || C.esferaRGB;
     cx.font = o.fuente || (o.activo ? 'bold 13px system-ui' : '13px system-ui');
     cx.textAlign = 'center';
-    const anc = Math.max(o.ancho || 0, cx.measureText(txt).width + 36);
+    const anc = Math.max(o.ancho || 0, cx.measureText(txt).width + (o.margen ?? 36));
     const alt = o.alto || 32;
     const x0 = cxp - anc / 2, y0 = cyp - alt / 2;
     const r = { x0, y0, x1: x0 + anc, y1: y0 + alt, ac };
@@ -3217,11 +3459,11 @@ function arrancarNavegador () {
   // red, que es lo normal, y por eso su ausencia dice algo.
   function marcaNivel (id) {
     const r = leerRecord(id);
-    if (!r) return { hay: false, txt: 'sin tocar', rango: null, sr: '', pct: 0, limpias: 0 };
+    if (!r) return { hay: false, txt: 'Sin tocar', rango: null, sr: '', pct: 0, limpias: 0 };
     return {
       hay: true,
       rango: r.rango || null,
-      txt: `♪ ${r.limpias || 0}/${contarNotas(id)}`,
+      txt: `♪ ${r.limpias || 0} de ${contarNotas(id)} limpias`,
       sr: r.sinRedPct >= 100 ? '✦' : '',
       pct: r.pct || 0, limpias: r.limpias || 0
     };
@@ -3275,7 +3517,8 @@ function arrancarNavegador () {
   }
 
   // LA ENTRADA. Una sola pregunta por pantalla: acá, quien sos. El titulo, tu
-  // esfera moviendose de verdad, sus dos opciones, y un solo camino adelante.
+  // esfera moviendose de verdad, sus tres opciones agrupadas y rotuladas, y un
+  // solo camino adelante.
   function dibujarInicio (w, h) {
     velo(w, h);
     // LA ENTRADA SE APILA CON UN CURSOR, no con fracciones de alto sueltas. Con
@@ -3283,95 +3526,150 @@ function arrancarNavegador () {
     // pantalla se hacia baja: cada renglon se colocaba solo y ninguno sabia
     // donde habia terminado el anterior. Aca cada cosa se apoya sobre la de
     // arriba, y en pantalla baja se aprieta el paso, no se superpone.
-    const chico = h < 580;
-    cx.fillStyle = C.peligro;
-    cx.font = `bold ${Math.min(52, w / 8.5, h / 9)}px system-ui`;
-    cx.fillText('DRIBLE', w / 2, h * (chico ? 0.13 : 0.17));
-    cx.fillStyle = 'rgba(232,230,224,0.35)'; cx.font = '12px system-ui';
-    cx.fillText('un boton.  la cancion no espera.', w / 2, h * (chico ? 0.13 : 0.17) + 22);
+    const chico = h < 600;
+    const yT = h * (chico ? 0.11 : 0.145);
+    titulo('DRIBLE', w / 2, yT, Math.min(54, w / 8, h / 8.6), C.peligro, 6);
+    ayuda('Un botón. La canción no espera.', w / 2, yT + (chico ? 20 : 24),
+      'rgba(232,230,224,0.42)', 12.5);
 
     // la tarima de la esfera: un marco tenue que separa el preview del resto
-    const rr = Math.max(10, Math.min(chico ? 15 : 20, h / 26));
-    const tw = Math.min(260, w * 0.7), th = rr * (chico ? 5 : 6.4);
-    const ty = h * (chico ? 0.22 : 0.28);
+    const rr = Math.max(10, Math.min(chico ? 15 : 20, h / 27));
+    const anP = Math.min(340, w - 24), xP = w / 2 - anP / 2;
+    const tw = Math.min(240, anP - 44), th = rr * (chico ? 4.6 : 5.8);
+    const ty = yT + (chico ? 34 : 44);
     caja(w / 2 - tw / 2, ty, tw, th, 12);
     cx.fillStyle = 'rgba(232,230,224,0.03)'; cx.fill();
     cx.strokeStyle = 'rgba(232,230,224,0.08)'; cx.lineWidth = 1; cx.stroke();
-    esferaMuestra(w / 2, ty + th * 0.72, rr);
+    esferaMuestra(w / 2, ty + th * 0.74, rr);
+
+    // TU ESFERA. Antes eran tres filas sueltas --cinco fichas de color, tres
+    // botones, cuatro botones-- una abajo de la otra y sin decir que era cada
+    // una: se averiguaba probando. Ahora las tres viven en un panel, cada una
+    // con su rotulo a la izquierda, y se lee de arriba abajo sin tocar nada.
+    const fila = chico ? 30 : 36;
+    const alP = 26 + fila * 3 + 10;
+    const yP = ty + th + (chico ? 14 : 20);
+    panel(xP, yP, anP, alP);
+    rotulo('TU ESFERA', xP + 14, yP + 18, 'left');
+    const xEt = xP + 14, xOp = xP + 64, anOp = anP - 78;
+    const cOp = xOp + anOp / 2;
 
     // el color: cinco fichas, y la tuya con el aro puesto
-    const yCol = ty + th + (chico ? 20 : 26), sep = Math.min(42, w / 9);
-    PALETA.forEach((p, i) => {
-      const xx = w / 2 + (i - (PALETA.length - 1) / 2) * sep;
-      const r = { x0: xx - sep / 2, y0: yCol - 16, x1: xx + sep / 2, y1: yCol + 16,
+    const yCol = yP + 26 + fila / 2;
+    rotulo('COLOR', xEt, yCol + 3.5, 'left', 'rgba(232,230,224,0.30)');
+    const sep = Math.min(40, anOp / PALETA.length);
+    PALETA.forEach((pl, i) => {
+      const xx = cOp + (i - (PALETA.length - 1) / 2) * sep;
+      const r = { x0: xx - sep / 2, y0: yCol - 15, x1: xx + sep / 2, y1: yCol + 15,
         ac: () => { mira.color = i; aplicarMira(); } };
       const sobre = raton.x >= r.x0 && raton.x <= r.x1 && raton.y >= r.y0 && raton.y <= r.y1;
-      cx.fillStyle = `rgb(${p.rgb})`;
+      cx.fillStyle = `rgb(${pl.rgb})`;
       cx.beginPath(); cx.arc(xx, yCol, i === mira.color ? 9 : sobre ? 8.5 : 7, 0, Math.PI * 2); cx.fill();
       if (i === mira.color) {
         cx.strokeStyle = 'rgba(232,230,224,0.9)'; cx.lineWidth = 1.5;
-        cx.beginPath(); cx.arc(xx, yCol, 14, 0, Math.PI * 2); cx.stroke();
+        cx.beginPath(); cx.arc(xx, yCol, 13.5, 0, Math.PI * 2); cx.stroke();
       }
       botones.push(r);
     });
     // la estela: las tres a la vista, no una que cicla. Ciclar esconde las
     // opciones y obliga a tocar tres veces para volver a donde estabas.
-    const yEs = yCol + (chico ? 42 : 52), anE = Math.min(96, (w - 24) / 3);
+    const yEs = yCol + fila;
+    rotulo('ESTELA', xEt, yEs + 3.5, 'left', 'rgba(232,230,224,0.30)');
+    const anE = (anOp - 12) / 3;
     ESTELAS.forEach((nom, i) => {
-      btn(nom, w / 2 + (i - 1) * (anE + 6), yEs,
+      btn(nom, cOp + (i - 1) * (anE + 6), yEs,
         () => { mira.estela = i; aplicarMira(); },
-        { activo: i === mira.estela, ancho: anE, alto: 26, fuente: '11px system-ui' });
+        { activo: i === mira.estela, ancho: anE, alto: 26, margen: 10, fuente: '11px system-ui' });
     });
-    // sin rotulo: los botones ya dicen "cometa", "gotas", "sin estela". Una
-    // etiqueta encima de opciones que se nombran solas es ruido, y en pantalla
-    // baja se metia entre las fichas de color.
     // LA MARCA DE ADENTRO: la linea que la esfera lleva en el cuerpo. Es lo
     // unico que deja ver que gira, asi que no puede ser un detalle fijo -- es la
     // parte de la esfera que mas se mira mientras se juega.
-    const yMa = yEs + (chico ? 38 : 46), anM = Math.min(74, (w - 24) / 4);
+    const yMa = yEs + fila;
+    rotulo('MARCA', xEt, yMa + 3.5, 'left', 'rgba(232,230,224,0.30)');
+    const anM = (anOp - 15) / 4;
     MARCAS.forEach((nom, i) => {
-      btn(nom, w / 2 + (i - (MARCAS.length - 1) / 2) * (anM + 5), yMa,
+      btn(nom, cOp + (i - (MARCAS.length - 1) / 2) * (anM + 5), yMa,
         () => { mira.marca = i; aplicarMira(); },
-        { activo: i === mira.marca, ancho: anM, alto: 24, fuente: '10.5px system-ui' });
+        { activo: i === mira.marca, ancho: anM, alto: 24, margen: 8, fuente: '10.5px system-ui' });
     });
 
-
-    const yEmp = yMa + (chico ? 42 : 50);
-    btn('EMPEZAR', w / 2, yEmp, () => { pantalla = 'mapa'; },
-      { activo: true, ancho: Math.min(210, w * 0.6), alto: chico ? 34 : 40,
-        fuente: `bold ${chico ? 14 : 16}px system-ui` });
-    btn('configuracion', w / 2, yEmp + (chico ? 36 : 44), () => { pantalla = 'config'; },
+    // EL CAMINO ADELANTE, y uno solo. Lo demas de esta pantalla es preferencia:
+    // esto es lo unico que hay que tocar para que empiece a sonar algo.
+    const yJ = yP + alP + (chico ? 20 : 26);
+    btn('JUGAR', w / 2, yJ, () => { pantalla = 'mapa'; },
+      { activo: true, ancho: Math.min(220, w * 0.62), alto: chico ? 36 : 42,
+        fuente: `bold ${chico ? 15 : 17}px system-ui` });
+    btn('Ajustes', w / 2, yJ + (chico ? 34 : 40), () => { pantalla = 'config'; },
       { rgb: C.impulsoRGB, fuente: '12px system-ui', alto: 26 });
     // el rango mas alto que tenes, que es lo unico que este juego colecciona
     const alto = NIVELES.map(leerRecord).filter(r => r && r.rango)
       .sort((a, b) => RANGOS.indexOf(b.rango) - RANGOS.indexOf(a.rango))[0];
-    cx.fillStyle = alto ? `rgba(${C.esferaRGB},0.55)` : C.tenue;
-    cx.font = alto ? 'bold 12px system-ui' : '12px system-ui';
-    cx.fillText(alto ? `☆ ${alto.rango}` : 'ESPACIO, o toca EMPEZAR', w / 2, h - 16);
+    if (alto) rotulo(`MEJOR RANGO · ${alto.rango}`, w / 2, h - 16, 'center', `rgba(${C.esferaRGB},0.65)`);
+    else ayuda('ESPACIO para empezar', w / 2, h - 16, C.tenue);
   }
 
-  // EL MAPA. Tres paradas de un camino, cada una una tarjeta que dice todo lo
-  // que hay que saber de un vistazo: cuanto de esa cancion tenes hecho, con que
-  // rango, y si la terminaste sin red.
+  // EL MAPA. Cada cancion es una tarjeta que dice todo lo que hay que saber de
+  // un vistazo: de que va, cuanto dura, cuanto tenes hecho, con que rango y si
+  // la terminaste sin red. Y abajo, una sola vez, las cuatro reglas del juego.
   function dibujarNiveles (w, h) {
     velo(w, h);
-    cx.fillStyle = C.peligro; cx.font = 'bold 17px system-ui';
-    cx.fillText('elegi el nivel', w / 2, h * 0.12);
+    const chico = h < 600;
+    const yT = h * (chico ? 0.09 : 0.11);
+    titulo('ELEGÍ TU CANCIÓN', w / 2, yT, chico ? 16 : 19, C.peligro, 2.6);
+    ayuda('El mapa ES la partitura: cada tecla que pisás es una nota.',
+      w / 2, yT + 20, 'rgba(232,230,224,0.34)');
     // color y subtitulo POR ID, no por posicion: cuando se saco AURORA 2.0 del
     // medio, un arreglo indexado le hubiera puesto al viaje el color y el
     // subtitulo del nivel que ya no existe
     const COL = { esfera: C.teclaRGB, viaje: C.impulsoRGB };
     const SUB = {
-      esfera: 'negras y blancas · 100 BPM',
-      viaje: 'la cancion entera del estudio · 64 compases'
+      esfera: 'Negras y blancas. El pulso, sin sorpresas.',
+      viaje: 'La canción entera, con una mecánica por sección.'
     };
     // En un telefono las tarjetas se apilan: tres en fila sobre 420 px daban
     // 140 px por tarjeta y los nombres se montaban unos sobre otros.
     const vert = w < 640;
-    const anT = vert ? Math.min(360, w - 28) : Math.min(250, (w - 56) / NIVELES.length);
-    const alT = vert ? Math.min(78, (h * 0.5) / 3) : 142;
-    const sepT = vert ? alT + 10 : anT + 14;
-    const y0T = vert ? h * 0.22 : h * 0.24;
+    const anT = vert ? Math.min(380, w - 28) : Math.min(260, (w - 56) / NIVELES.length);
+    const alT = vert ? Math.min(96, (h * 0.52) / 3) : 152;
+    const sepT = vert ? alT + 12 : anT + 14;
+    // LO QUE HAY, PRIMERO; DONDE VA, DESPUES. Con las tarjetas colgadas del
+    // titulo y las reglas del pie, en una pantalla alta quedaba todo arriba,
+    // todo abajo, y medio metro de negro en el medio -- que no se lee como
+    // "sobra lugar" sino como "falta algo". Aca se mide el bloque entero
+    // --tarjetas, la zanahoria si la hay, y las reglas-- y se planta centrado
+    // en el espacio libre. Por eso la zanahoria se calcula antes de dibujar
+    // nada: su renglon cambia el alto del bloque.
+    const REGLAS = [
+      'TOCÁ cada tecla justo al pisarla — es el único botón',
+      'A TIEMPO suena afinada; corrida, se ensucia',
+      'NO MARTILLES: el botón se queda sordo un instante',
+      modoFacil ? 'SI CAÉS a la red, tocá para volver arriba'
+        : 'SI CAÉS, se termina la corrida'
+    ];
+    const alR = 24 + REGLAS.length * 16 + 8;
+    // la zanahoria concreta: que le falta a tu mejor cancion para el proximo
+    // rango. Un objetivo visible y contado es lo que trae de vuelta.
+    const paso = NIVELES.map(id => ({ id, r: leerRecord(id) }))
+      .filter(q => q.r && q.r.rango && q.r.rango !== 'SUPERNOVA')
+      .sort((a2, b2) => RANGOS.indexOf(b2.r.rango) - RANGOS.indexOf(a2.r.rango))[0];
+    let zanahoria = null;
+    if (paso) {
+      const total = contarNotas(paso.id);
+      const sig = RANGOS[RANGOS.indexOf(paso.r.rango) + 1];
+      // SUPERNOVA es el unico que se mide en clavadas; el resto, en limpias
+      const faltan = sig === 'SUPERNOVA'
+        ? Math.ceil(total * UMBRAL.SUPERNOVA) - (paso.r.perf || 0)
+        : Math.ceil(total * UMBRAL[sig]) - paso.r.limpias;
+      if (faltan > 0) {
+        const que = sig === 'SUPERNOVA' ? (faltan === 1 ? 'clavada' : 'clavadas')
+          : (faltan === 1 ? 'limpia' : 'limpias');
+        zanahoria = `A ${faltan} ${que} de ${sig} en ${nombreCancion(paso.id)}`;
+      }
+    }
+    const alCartas = vert ? (NIVELES.length - 1) * sepT + alT : alT;
+    const alBloque = alCartas + 30 + (zanahoria ? 26 : 0) + alR;
+    const topo = yT + (chico ? 30 : 40), pie = h - 52;
+    const y0T = topo + Math.max(0, (pie - topo - alBloque) / 2);
     NIVELES.forEach((id, i) => {
       const m = marcaNivel(id);
       const cxT = vert ? w / 2 : w / 2 + (i - (NIVELES.length - 1) / 2) * sepT;
@@ -3385,100 +3683,103 @@ function arrancarNavegador () {
       cx.strokeStyle = sobre ? `rgb(${COL[id]})` : `rgba(${COL[id]},${m.rango ? 0.55 : 0.25})`;
       cx.lineWidth = sobre ? 2 : 1; cx.stroke();
       // el numero, en su medallon
-      const nx = vert ? x0 + 30 : cxT, ny = vert ? cyT : yy0 + 34;
+      const nx = vert ? x0 + 32 : cxT, ny = vert ? cyT : yy0 + 36;
       cx.strokeStyle = `rgba(${COL[id]},0.5)`; cx.lineWidth = 1.5;
       cx.beginPath(); cx.arc(nx, ny, 17, 0, Math.PI * 2); cx.stroke();
       cx.fillStyle = `rgb(${COL[id]})`; cx.font = 'bold 18px system-ui';
+      cx.textAlign = 'center';
       cx.fillText(String(i + 1), nx, ny + 6);
-      // el nombre y el subtitulo
+      // el nombre, de que va, y cuanto dura: el dato duro que decide si tenes
+      // tiempo para esta ahora -- que es la pregunta real frente a un menu
       cx.textAlign = vert ? 'left' : 'center';
-      const tx = vert ? x0 + 58 : cxT;
-      const ty = vert ? cyT - 12 : yy0 + 68;
-      cx.fillStyle = C.peligro; cx.font = 'bold 13px system-ui';
+      const tx = vert ? x0 + 62 : cxT;
+      const ty = vert ? cyT - 20 : yy0 + 72;
+      cx.fillStyle = C.peligro; cx.font = 'bold 13.5px system-ui';
       cx.fillText(nombreCancion(id), tx, ty);
-      cx.fillStyle = 'rgba(232,230,224,0.30)'; cx.font = '10.5px system-ui';
+      cx.fillStyle = 'rgba(232,230,224,0.34)'; cx.font = '10.5px system-ui';
       cx.fillText(SUB[id], tx, ty + 14);
+      rotulo(`${contarNotas(id)} NOTAS · ${CANCIONES[id].bpm} BPM`, tx, ty + 28,
+        vert ? 'left' : 'center', `rgba(${COL[id]},0.55)`);
       // LO TUYO: rango, limpias, y la barrita de cuanto de la cancion llegaste
+      cx.textAlign = vert ? 'left' : 'center';
       cx.fillStyle = m.hay ? `rgba(${COL[id]},0.9)` : C.tenue;
-      cx.font = m.hay ? 'bold 11px system-ui' : '11px system-ui';
+      cx.font = m.hay ? 'bold 11.5px system-ui' : '11.5px system-ui';
       // un record sin rango es de antes de que existieran los rangos: igual
-      // tiene notas limpias, y esconderlas seria decirle 'sin tocar' al que ya
+      // tiene notas limpias, y esconderlas seria decirle 'Sin tocar' al que ya
       // toco
-      cx.fillText(m.rango ? `☆ ${m.rango} ${m.sr}` : m.hay ? m.txt : 'sin tocar', tx, ty + 30);
+      cx.fillText(m.rango ? `☆ ${m.rango} ${m.sr}` : m.hay ? m.txt : 'Sin tocar', tx, ty + 46);
       if (m.rango) {
-        cx.fillStyle = 'rgba(232,230,224,0.35)'; cx.font = '10.5px system-ui';
-        cx.fillText(m.txt, tx, ty + 44);
+        cx.fillStyle = 'rgba(232,230,224,0.38)'; cx.font = '10.5px system-ui';
+        cx.fillText(m.txt, tx, ty + 60);
       }
-      const bw = vert ? anT - 70 : anT - 36;
-      const bx = vert ? x0 + 58 : cxT - bw / 2;
-      const by = vert ? yy0 + alT - 12 : yy0 + alT - 14;
+      const bw = vert ? anT - 76 : anT - 36;
+      const bx = vert ? x0 + 62 : cxT - bw / 2;
+      const by = vert ? yy0 + alT - 11 : yy0 + alT - 15;
       cx.fillStyle = 'rgba(232,230,224,0.10)'; cx.fillRect(bx, by, bw, 3);
       cx.fillStyle = `rgb(${COL[id]})`; cx.fillRect(bx, by, bw * Math.min(1, m.pct / 100), 3);
       cx.textAlign = 'center';
       botones.push(r);
     });
-    const finT = vert ? y0T + (NIVELES.length - 1) * sepT + alT : y0T + alT;
-    // la zanahoria concreta: que le falta a tu mejor cancion para el proximo
-    // rango. Un objetivo visible y contado es lo que trae de vuelta.
-    const paso = NIVELES.map(id => ({ id, r: leerRecord(id) }))
-      .filter(q => q.r && q.r.rango && q.r.rango !== 'SUPERNOVA')
-      .sort((a, b) => RANGOS.indexOf(b.r.rango) - RANGOS.indexOf(a.r.rango))[0];
-    let yy = finT + 26;
-    if (paso) {
-      const total = contarNotas(paso.id);
-      const sig = RANGOS[RANGOS.indexOf(paso.r.rango) + 1];
-      // SUPERNOVA es el unico que se mide en clavadas; el resto, en limpias
-      const faltan = sig === 'SUPERNOVA'
-        ? Math.ceil(total * UMBRAL.SUPERNOVA) - (paso.r.perf || 0)
-        : Math.ceil(total * UMBRAL[sig]) - paso.r.limpias;
-      if (faltan > 0) {
-        const que = sig === 'SUPERNOVA' ? (faltan === 1 ? 'clavada' : 'clavadas')
-          : (faltan === 1 ? 'limpia' : 'limpias');
-        cx.fillStyle = C.impulso; cx.font = 'bold 12px system-ui';
-        cx.fillText(`${nombreCancion(paso.id)}: a ${faltan} ${que} de ${sig}`, w / 2, yy);
-        yy += 24;
-      }
+    let yy = y0T + alCartas + 30;
+    if (zanahoria) {
+      cx.fillStyle = C.impulso; cx.font = 'bold 12px system-ui';
+      cx.textAlign = 'center';
+      cx.fillText(zanahoria, w / 2, yy);
+      yy += 26;
     }
-    // Un puñado de reglas, y acá: es la ultima pantalla antes de tocar. Todo lo
+    // LAS CUATRO REGLAS, y acá: es la ultima pantalla antes de tocar. Todo lo
     // demas lo enseña el mapa cuando pasa -- un muro de once renglones no lo
-    // lee nadie.
-    const REGLAS = [
-      'un boton: TOCA cada tecla justo al pisarla',
-      'a tiempo suena afinada; corrida se ensucia',
-      'martillar no sirve: el boton se queda sordo',
-      modoFacil ? 'si caes a la red, TOCA para volver arriba' : 'caer es el final'
-    ];
+    // lee nadie. Cada una arranca por el verbo, en mayusculas, para que se
+    // puedan barrer con la vista sin leer la frase entera.
     const yVolver = h - 26;
-    const yReglas = Math.min(yy, yVolver - 24 - REGLAS.length * 17);
-    cx.fillStyle = 'rgba(232,230,224,0.28)'; cx.font = '11.5px system-ui';
-    REGLAS.forEach((t, i) => cx.fillText(t, w / 2, yReglas + i * 17));
-    btn('◀ volver', w / 2, yVolver, () => { pantalla = 'inicio'; },
+    const yR = Math.min(yy + 16, yVolver - 24 - alR);
+    const anR = Math.min(440, w - 28);
+    panel(w / 2 - anR / 2, yR - 16, anR, alR);
+    rotulo('CÓMO SE JUEGA', w / 2 - anR / 2 + 14, yR + 1, 'left');
+    cx.fillStyle = 'rgba(232,230,224,0.44)'; cx.font = '11.5px system-ui';
+    cx.textAlign = 'center';
+    REGLAS.forEach((t, i) => cx.fillText(t, w / 2, yR + 22 + i * 16));
+    btn('◀  Volver', w / 2, yVolver, () => { pantalla = 'inicio'; },
       { rgb: '232,230,224', fuente: '12px system-ui', alto: 26 });
   }
 
+  // LOS AJUSTES, en tres grupos: como se porta el juego, como se porta la
+  // maquina, y que teclas hay. Antes eran dos botones sueltos y cuatro
+  // renglones flotando entre ellos, sin decir cual explicaba a cual.
   function dibujarConfig (w, h) {
     velo(w, h);
-    cx.fillStyle = C.peligro; cx.font = 'bold 17px system-ui';
-    cx.fillText('configuracion', w / 2, h * 0.14);
-    const anB = Math.min(320, w * 0.82);
-    btn(modoFacil ? 'MODO FACIL — con red' : 'MODO FACIL — apagado', w / 2, h * 0.32,
-      () => { modoFacil = !modoFacil; guardarFacil(); },
-      { activo: modoFacil, ancho: anB, alto: 36 });
-    cx.fillStyle = 'rgba(232,230,224,0.32)'; cx.font = '11.5px system-ui';
-    cx.fillText(modoFacil ? 'caes a la red y volves arriba: se pierden notas, no la corrida'
-      : 'caer es el final, salvo donde la cancion manda rodar', w / 2, h * 0.32 + 34);
-    cx.fillStyle = C.tenue;
-    cx.fillText('la red es para aprender la cancion. despues estorba.  ·  tecla F', w / 2, h * 0.32 + 50);
+    const chico = h < 600;
+    titulo('AJUSTES', w / 2, h * (chico ? 0.11 : 0.13), chico ? 17 : 19, C.peligro, 2.6);
+    // los rotulos arrancan donde arranca el boton que explican: un rotulo
+    // corrido treinta pixeles del control que nombra no agrupa nada
+    const anB = Math.min(330, w * 0.84);
+    const xB = w / 2 - anB / 2;
+
+    let y = h * (chico ? 0.24 : 0.26);
+    rotulo('DIFICULTAD', xB, y, 'left');
+    btn(modoFacil ? 'RED DE SEGURIDAD — PUESTA' : 'RED DE SEGURIDAD — SIN RED',
+      w / 2, y + 30, () => { modoFacil = !modoFacil; guardarFacil(); },
+      { activo: modoFacil, ancho: anB, alto: 36, fuente: 'bold 13px system-ui' });
+    ayuda(modoFacil ? 'Caés a la red y volvés arriba: se pierden notas, no la corrida.'
+      : 'Caer termina la corrida, salvo donde la canción manda rodar.', w / 2, y + 62);
+    ayuda('La red sirve para aprender la canción. Después estorba.  ·  Tecla F',
+      w / 2, y + 79, C.tenue, 11);
+
     // En un telefono el sonido sale tarde y el juego se siente roto sin que sea
     // culpa tuya. Este boton es la diferencia entre "no me sale" y "no estaba
     // calibrado", y por eso es un boton y no una tecla: en el telefono no hay C.
-    btn(desfase ? `calibrar el sonido · ${Math.round(desfase * 1000)} ms` : 'calibrar el sonido',
-      w / 2, h * 0.56, () => calibrar(), { rgb: C.impulsoRGB, ancho: anB, alto: 36 });
-    cx.fillStyle = 'rgba(232,230,224,0.32)'; cx.font = '11.5px system-ui';
-    cx.fillText('si tu pantalla o tus auriculares llegan tarde  ·  tecla C', w / 2, h * 0.56 + 34);
-    cx.fillStyle = C.tenue; cx.font = '11.5px system-ui';
-    cx.fillText('en el juego:  ESC pausa  ·  ◀ ▶ saltan de seccion', w / 2, h * 0.76);
-    btn('◀ volver', w / 2, h - 26, () => { pantalla = 'inicio'; },
+    y = h * (chico ? 0.52 : 0.53);
+    rotulo('SONIDO', xB, y, 'left');
+    btn(desfase ? `CALIBRAR EL SONIDO — ${Math.round(desfase * 1000)} ms` : 'CALIBRAR EL SONIDO',
+      w / 2, y + 30, () => calibrar(),
+      { rgb: C.impulsoRGB, ancho: anB, alto: 36, fuente: 'bold 13px system-ui' });
+    ayuda('Si tu pantalla o tus auriculares llegan tarde.  ·  Tecla C', w / 2, y + 62);
+
+    y = h * (chico ? 0.78 : 0.79);
+    rotulo('EN EL JUEGO', xB, y, 'left');
+    ayuda('ESC pausa  ·  ◀ ▶ saltan de sección  ·  M vuelve al menú',
+      w / 2, y + 20, C.tenue);
+    btn('◀  Volver', w / 2, h - 26, () => { pantalla = 'inicio'; },
       { rgb: '232,230,224', fuente: '12px system-ui', alto: 26 });
   }
 
@@ -3562,32 +3863,89 @@ function arrancarNavegador () {
       cielo.addColorStop(1, `rgba(${tinte.join(',')},${0.10 + 0.10 * padLuz})`);
       cx.fillStyle = cielo;
       cx.fillRect(0, y0 - 0.9 * esc, w, 0.9 * esc);
-      for (const c of CAPAS) {
+      const claro = tinte.map(v => Math.round(Math.min(255, v * 1.45 + 55))).join(',');
+      for (let ci = 0; ci < CAPAS.length; ci++) {
+        const c = CAPAS[ci];
         // la perspectiva aerea: cuanto mas lejos, mas lavada hacia el cielo del
         // tinte del acorde. Es lo que separa una sierra de un recorte de papel.
         const rgbP = tinte.map(v => Math.round(v * (0.42 + 0.5 * c.l))).join(',');
-        cx.fillStyle = `rgba(${rgbP},${c.a * (0.55 + 0.45 * padLuz)})`;
-        cx.beginPath();
-        cx.moveTo(-40, y0 + 40);
-        let hubo = false;
+        // la camara vertical no las sacude igual: el pisoton hunde el frente
+        // entero y al horizonte casi no lo toca
+        const hundir = pisada * pisada * 5 * c.l;
+        // Los puntos PRIMERO y el trazo despues: para redondear una cresta hay
+        // que conocer al vecino, y ademas hace falta uno de cada lado FUERA de
+        // la pantalla. Sin eso la silueta arrancaba en el primer pico visible y
+        // el borde izquierdo era un tajo diagonal que aparecia y desaparecia
+        // solo -- justo el tipo de movimiento que delata que esto es un dibujo.
+        const pts = [];
+        let previo = null;
         for (let i = 0; i < NOTAS.length; i += c.salto) {
-          const n = NOTAS[i];
-          if (n.silencio) continue;
-          // la camara vertical tampoco las sacude igual: el pisoton hunde el
-          // frente entero y al horizonte casi no lo toca
-          const X = ((n.xm - s.x) * c.f + 1.9) * esc;
-          if (X < -60) continue;
-          if (X > w + 60) break;
+          const nn = NOTAS[i];
+          if (nn.silencio) continue;
+          const X = ((nn.xm - s.x) * c.f + 1.9) * esc;
           // la ALTURA viene de otro tramo de la cancion: misma partitura, otro
           // pasaje, asi que las cuatro siluetas no riman entre si
           const nh = NOTAS[(i + c.giro) % NOTAS.length];
-          cx.lineTo(X, y0 - pisada * pisada * 5 * c.l - (c.base + (nh.silencio ? 0.1 : nh.y) * c.k) * esc);
-          hubo = true;
+          const Y = y0 - hundir - (c.base + (nh.silencio ? 0.1 : nh.y) * c.k) * esc;
+          if (X < -90) { previo = [X, Y]; continue; }
+          if (!pts.length && previo) pts.push(previo);
+          pts.push([X, Y]);
+          if (X > w + 90) break;
         }
-        if (!hubo) continue;
-        cx.lineTo(w + 40, y0 + 40);
+        if (pts.length < 2) continue;
+        const ult = pts[pts.length - 1];
+        // LA CRESTA ES REDONDA. Uniendo los picos con rectas salia una sierra
+        // de dientes, y una sierra de dientes iguales se lee como textura --como
+        // ruido-- no como relieve: no hay nada que el ojo pueda SEGUIR mientras
+        // se corre. Curvando por los puntos medios aparecen lomas, y una loma
+        // si se sigue. Eso es lo que convierte el desplazamiento en viaje.
+        const cresta = () => {
+          cx.moveTo(-90, pts[0][1]);
+          cx.lineTo(pts[0][0], pts[0][1]);
+          for (let i = 1; i < pts.length - 1; i++)
+            cx.quadraticCurveTo(pts[i][0], pts[i][1],
+              (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2);
+          cx.lineTo(ult[0], ult[1]);
+          cx.lineTo(w + 90, ult[1]);
+        };
+        cx.beginPath();
+        cx.moveTo(-90, y0 + 40); cx.lineTo(-90, pts[0][1]);
+        cresta();
+        cx.lineTo(w + 90, y0 + 40);
         cx.closePath();
+        cx.fillStyle = `rgba(${rgbP},${c.a * (0.55 + 0.45 * padLuz)})`;
         cx.fill();
+        // EL FILO ILUMINADO. Una mancha plana no se ve moverse: lo que el ojo
+        // persigue es un BORDE, y para perseguirlo el borde tiene que existir.
+        // El filo es de las capas LEJANAS, no de las de adelante: contra el
+        // cielo, una cresta iluminada se lee como cerro (y es lo que hace la
+        // luz rasante del horizonte en una sierra de verdad), pero las lomas
+        // bajas del frente son casi planas y su linea salia como un alambre
+        // horizontal cruzando la pantalla de punta a punta.
+        cx.beginPath(); cresta();
+        cx.strokeStyle = `rgba(${claro},${0.04 + 0.20 * c.l * c.l})`;
+        cx.lineWidth = 1.2;
+        cx.stroke();
+        // los bancos de neblina van entre la sierra del fondo y la del medio:
+        // ahi son valle, y de paso tapan a una capa y no a la otra -- que una
+        // cosa pase por delante de otra es la prueba mas barata de que hay
+        // profundidad y no cuatro dibujos apilados
+        if (ci === 0) {
+          const anchoC = w + 240;
+          for (const nb of NUBES) {
+            let X = (nb.x * esc - s.x * nb.f * esc) % anchoC;
+            if (X < -120) X += anchoC;
+            const gy = y0 - nb.y * esc, rx = nb.an * esc, ry = nb.al * esc;
+            cx.save();
+            cx.translate(X, gy); cx.scale(1, ry / rx);
+            const gr = cx.createRadialGradient(0, 0, 0, 0, 0, rx);
+            gr.addColorStop(0, `rgba(${claro},${nb.a * (0.55 + 0.45 * padLuz)})`);
+            gr.addColorStop(1, `rgba(${claro},0)`);
+            cx.fillStyle = gr;
+            cx.beginPath(); cx.arc(0, 0, rx, 0, Math.PI * 2); cx.fill();
+            cx.restore();
+          }
+        }
       }
     }
 
@@ -3628,8 +3986,10 @@ function arrancarNavegador () {
       if (bb < 0 || bb % 4) continue;
       cx.beginPath(); cx.moveTo(px(bb), py(0) + 14); cx.lineTo(px(bb), py(0.95)); cx.stroke();
     }
-    cx.fillStyle = C.tenue; cx.font = '12px system-ui'; cx.textAlign = 'left';
-    for (const z of SECCIONES) cx.fillText(z.n, px(z.x0) + 8, py(0) + 30);
+    // el nombre de la seccion, con la misma forma en los tres lugares donde
+    // aparece: el cartel que la anuncia, el informe y esta marca del piso
+    for (const z of SECCIONES) rotulo(z.n.toUpperCase(), px(z.x0) + 8, py(0) + 30, 'left', C.tenue);
+    cx.textAlign = 'left';
 
     // techos del silencio
     cx.fillStyle = 'rgba(232,230,224,0.10)';
@@ -3824,8 +4184,10 @@ function arrancarNavegador () {
     if (PISO && PISO.x1 > s.x - 3 && PISO.x0 < s.x + 7) {
       cx.fillStyle = 'rgba(232,230,224,0.22)';
       cx.fillRect(px(PISO.x0), py(PISO.y), (PISO.x1 - PISO.x0) * esc, 5);
-      cx.fillStyle = C.tenue; cx.font = '12px system-ui'; cx.textAlign = 'right';
-      cx.fillText('salida', px(PISO.x1) - 6, py(PISO.y) - 8);
+      cx.fillStyle = C.tenue; cx.font = 'bold 10px system-ui'; cx.textAlign = 'right';
+      cx.letterSpacing = '1.4px';
+      cx.fillText('SALIDA', px(PISO.x1) - 6, py(PISO.y) - 8);
+      cx.letterSpacing = '0px';
       cx.textAlign = 'left';
     }
 
@@ -4179,10 +4541,10 @@ function arrancarNavegador () {
     } else {
       cx.textAlign = 'left';
       cx.fillStyle = C.red; cx.font = '14px system-ui';
-      cx.fillText(`${nombreCancion()} · intento ${intento}${mejor ? `   mejor ${mejor}` : ''}`, 12, 22);
+      cx.fillText(`${nombreCancion()}  ·  Intento ${intento}${mejor ? `  ·  Mejor ${mejor}` : ''}`, 12, 22);
       // el atajo de revision, dicho donde se necesita
       cx.fillStyle = C.tenue; cx.font = '11px system-ui';
-      cx.fillText('◀ ▶  saltar de seccion', 12, h - 10);
+      cx.fillText('◀ ▶  Saltar de sección', 12, h - 10);
       if (!s.meta) dibujarPausa(w, h);
       if (ensayo) {                 // y que se sepa que esto no puntua
         cx.fillStyle = C.sucia; cx.font = 'bold 11px system-ui';
@@ -4224,13 +4586,13 @@ function arrancarNavegador () {
           cx.font = `bold ${Math.min(44, anP / 9)}px system-ui`;
           cx.fillText(`${a.pct}%`, w / 2, yP + 74);
           cx.fillStyle = 'rgba(232,230,224,0.35)'; cx.font = '12px system-ui';
-          cx.fillText(a.ensayo ? 'ensayo: no cuenta para el record'
-            : a.nuevo && a.record ? `nuevo record — antes ${a.record}%`
-            : a.record ? `tu record: ${a.record}%` : 'tu primera vuelta', w / 2, yP + 96);
+          cx.fillText(a.ensayo ? 'Ensayo: no cuenta para el récord'
+            : a.nuevo && a.record ? `NUEVO RÉCORD — antes llegabas al ${a.record}%`
+            : a.record ? `Tu récord: ${a.record}%` : 'Tu primera vuelta', w / 2, yP + 96);
           // ...y el detalle que dirige: cuantas limpias contra tu mejor marca
           if (!a.ensayo && a.mejorLimpias) {
             cx.fillStyle = C.tenue;
-            cx.fillText(`♪ ${a.limpiasRun} — tu mejor: ${a.mejorLimpias}`, w / 2, yP + 116);
+            cx.fillText(`♪ ${a.limpiasRun} limpias  ·  Tu mejor: ${a.mejorLimpias}`, w / 2, yP + 116);
           }
           // la barra de hasta donde llegaste, contra tu record: el "me faltaba
           // poco" deja de ser una frase y se ve
@@ -4251,13 +4613,13 @@ function arrancarNavegador () {
             btn('OTRA VEZ', w / 2, yB, () => reanudarMuerte(),
               { activo: true, ancho: anB, alto: 38, fuente: 'bold 15px system-ui', lista: botonesMuerte });
             if (a.seccion) {
-              btn(`▶  ensayar ${a.seccion}`, w / 2, yB + 44, () => ensayarMuerte(),
+              btn(`▶  Ensayar ${a.seccion.toUpperCase()}`, w / 2, yB + 44, () => ensayarMuerte(),
                 { rgb: C.impulsoRGB, ancho: anB, alto: 30, fuente: '12px system-ui', lista: botonesMuerte });
             }
-            btn('◀ menu', w / 2, yB + (a.seccion ? 84 : 44), () => salirDeMuerte(),
+            btn('◀  Menú', w / 2, yB + (a.seccion ? 84 : 44), () => salirDeMuerte(),
               { rgb: '232,230,224', ancho: 110, alto: 26, fuente: '12px system-ui', lista: botonesMuerte });
-            cx.fillStyle = C.tenue; cx.font = '11px system-ui';
-            cx.fillText('boton = otra vez  ·  → ensaya el tramo  ·  ESC al menu', w / 2, h - 12);
+            ayuda('Botón: otra vez  ·  →  ensayar el tramo  ·  ESC: al menú',
+              w / 2, h - 12, C.tenue, 11);
           }
           // el diagnostico entero: el informe por seccion, con la de la
           // muerte señalada -- se ve QUE tramo esta flojo, no solo cuanto
@@ -4281,10 +4643,10 @@ function arrancarNavegador () {
           // volver a la salida es un concierto que si
           if (avisoSeccion.aviso) {
             cx.fillStyle = C.sucia; cx.font = '11px system-ui';
-            cx.fillText('ENSAYO — esta corrida no puntua', w / 2, 48);
+            cx.fillText('ENSAYO — esta corrida no puntúa', w / 2, 48);
           } else if (avisoSeccion.deCero) {
             cx.fillStyle = C.tenue; cx.font = '11px system-ui';
-            cx.fillText('DE CERO — esta si cuenta', w / 2, 48);
+            cx.fillText('DE CERO — esta sí cuenta', w / 2, 48);
           }
           cx.restore();
         }
@@ -4301,7 +4663,7 @@ function arrancarNavegador () {
       const chuecas = s.tocadas.size - s.limpias.size;
       if (chuecas) {
         cx.fillStyle = C.sucia; cx.font = '13px system-ui';
-        cx.fillText(`chuecas ${chuecas}`, 12, 64);
+        cx.fillText(`✕ ${chuecas} chuecas`, 12, 64);
       }
       if (desvios.length) {                        // que tan al ritmo, no solo cuantas
         cx.fillStyle = C.red; cx.font = '13px system-ui';
@@ -4360,8 +4722,8 @@ function arrancarNavegador () {
           cx.fillRect(w / 2 + v * mw / 2 - 1, my - 6, 2, 14);
         }
         cx.fillStyle = C.tenue; cx.font = '10px system-ui'; cx.textAlign = 'center';
-        cx.fillText('antes', w / 2 - mw / 2 - 20, my + 5);
-        cx.fillText('tarde', w / 2 + mw / 2 + 20, my + 5);
+        rotulo('ANTES', w / 2 - mw / 2 - 22, my + 4);
+        rotulo('TARDE', w / 2 + mw / 2 + 22, my + 4);
         cx.textAlign = 'left';
       }
       if (s.meta) {
@@ -4387,22 +4749,22 @@ function arrancarNavegador () {
         cx.fillText(rg, w / 2, h * 0.11);
         cx.globalAlpha = rev(0.45);
         cx.fillStyle = C.peligro; cx.font = '14px system-ui';
-        cx.fillText(`${s.limpias.size}/${tot} limpias · ${s.perfectas.size} clavadas · ` +
-          `${chuecas} chuecas · racha ${s.mejorRacha}` +
-          (ORBES.length ? ` · ${s.orbes}/${ORBES.length} orbes` : ''), w / 2, h * 0.11 + 24);
+        cx.fillText(`${s.limpias.size}/${tot} limpias  ·  ${s.perfectas.size} clavadas  ·  ` +
+          `${chuecas} chuecas  ·  racha ${s.mejorRacha}` +
+          (ORBES.length ? `  ·  ${s.orbes}/${ORBES.length} orbes` : ''), w / 2, h * 0.11 + 24);
         // ganar mejorando tu marca no puede verse igual que no mejorarla
         if (metaRecord) {
           cx.globalAlpha = rev(0.8);
           cx.fillStyle = metaRecord.nuevo ? C.impulso : C.tenue; cx.font = '13px system-ui';
           cx.fillText(metaRecord.nuevo
-            ? (metaRecord.antes ? `★ nuevo record: ${s.limpias.size} limpias (antes ${metaRecord.antes})` : '★ tu primera marca')
-            : `tu record sigue en ${metaRecord.antes} limpias`, w / 2, h * 0.11 + 44);
+            ? (metaRecord.antes ? `★ NUEVO RÉCORD: ${s.limpias.size} limpias (antes ${metaRecord.antes})` : '★ Tu primera marca')
+            : `Tu récord sigue en ${metaRecord.antes} limpias`, w / 2, h * 0.11 + 44);
         }
         cx.globalAlpha = rev(1.2);
         dibujarInforme(w, h);
         cx.globalAlpha = rev(1.6);
-        cx.fillStyle = C.tenue; cx.font = '13px system-ui';
-        cx.fillText('toca — otra vez · ESC o aca abajo — menu', w / 2, h * 0.95);
+        ayuda('Tocá para jugar otra vez  ·  ESC para volver al menú',
+          w / 2, h * 0.95, C.tenue, 13);
         cx.restore();
       }
     }
