@@ -2312,11 +2312,15 @@ function arrancarNavegador () {
   // y velocidades que se multiplican por dos entre vecinas es exactamente lo
   // que se ve por la ventanilla: el cerro de atras casi quieto, la loma de
   // adelante pasando de largo.
+  // ...las opacidades van mas bajas que antes (0.14/0.18/0.22/0.28) y el
+  // cuerpo se rellena con degradado: cuatro recortes chatos apilados tapiaban
+  // el cielo y el fondo se sentia sobrecargado -- las sierras estan para
+  // anunciar la cancion, no para empapelar el teatro.
   const CAPAS = [
-    { f: 0.045, k: 0.86, base: 0.50, a: 0.14, salto: 14, l: 1, giro: 0 },
-    { f: 0.10, k: 0.62, base: 0.32, a: 0.18, salto: 7, l: 0.62, giro: 37 },
-    { f: 0.20, k: 0.46, base: 0.15, a: 0.22, salto: 4, l: 0.28, giro: 91 },
-    { f: 0.38, k: 0.34, base: 0.02, a: 0.28, salto: 2, l: 0, giro: 149 }
+    { f: 0.045, k: 0.86, base: 0.50, a: 0.11, salto: 14, l: 1, giro: 0 },
+    { f: 0.10, k: 0.62, base: 0.32, a: 0.14, salto: 7, l: 0.62, giro: 37 },
+    { f: 0.20, k: 0.46, base: 0.15, a: 0.17, salto: 4, l: 0.28, giro: 91 },
+    { f: 0.38, k: 0.34, base: 0.02, a: 0.21, salto: 2, l: 0, giro: 149 }
   ];
   // LAS NUBES. Todas las capas dibujan la misma partitura y van todas para el
   // mismo lado; en un cielo vacio no hay un objeto SUELTO al que agarrarse, y
@@ -5004,6 +5008,13 @@ function arrancarNavegador () {
       cx.fillRect(px(s.x) - rl, py(s.y + R) - rl, rl * 2, rl * 2);
     }
 
+    // Todas las formas del paisaje cuelgan de INDICES ENTEROS del mundo, nunca
+    // de la camara: asi un arbol es el mismo arbol cuadro a cuadro en vez de
+    // un hormigueo que cambia cada vez que avanzas medio pixel.
+    const azar = i => {
+      const v = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+      return v - Math.floor(v);
+    };
     // EL PAISAJE ES LA CANCION. Las montañas del fondo son la melodia misma
     // vista de lejos: lo que se viene, dibujado en el horizonte y comprimido
     // por la perspectiva. No es decorado inventado por seccion -- es el mapa,
@@ -5106,6 +5117,57 @@ function arrancarNavegador () {
           cx.fill();
         }
       }
+      // EL LUGAR ASOMA EN EL HORIZONTE. El mundo de abajo contaba el sitio,
+      // pero solo bajo tus pies: el cielo de la ciudad era identico al del
+      // desierto, y un lugar que solo existe en el zocalo no rodea a nadie.
+      // Cada bioma levanta ahora su perfil sobre la linea del horizonte
+      // --torres, cumbres, dunas--, mucho mas lejos que las sierras de la
+      // melodia: comprimido por la distancia, lavado al cielo y casi quieto.
+      // Lo que viene se ve venir compases antes, y lo que pasaste tarda en
+      // irse. NEBULOSA y el mar no dibujan nada: ahi el horizonte es abierto,
+      // y ese vacio tambien cuenta el lugar.
+      const fH = 0.10;
+      const pxH = wx => ((wx - s.x) * fH + 1.9) * esc;
+      const yHor = y0 - alza + 2;
+      const rgbH = tinte.map(v => Math.round(v * 0.66 + 10)).join(',');
+      const vH0 = s.x - (1.9 + 60 / esc) / fH;
+      const vH1 = s.x + ((w + 60) / esc - 1.9) / fH;
+      for (const z of TERRENOS) {
+        const a = Math.max(z.x0, vH0), b = Math.min(z.x1, vH1);
+        if (b <= a) continue;
+        // la rampa de los bordes: el perfil nace y muere DENTRO de su zona,
+        // no donde lo corta la pantalla
+        const env = xw => Math.max(0, Math.min(1, (xw - z.x0) / 4, (z.x1 - xw) / 4));
+        cx.beginPath();
+        cx.moveTo(pxH(a), yHor);
+        if (z.t === 'ciudad') {
+          for (let i = Math.ceil(a / 2); i * 2 <= b; i++) {
+            const xw = i * 2;
+            if (azar(i * 3.3) > 0.78) continue;       // baldios, tambien de lejos
+            const hh = esc * (0.06 + 0.30 * azar(i * 7.7)) *
+              (azar(i * 5.1) > 0.9 ? 1.5 : 1) * env(xw);
+            const X = pxH(xw), an = 2 * fH * esc * (0.45 + 0.4 * azar(i * 2.9));
+            cx.lineTo(X, yHor); cx.lineTo(X, yHor - hh);
+            cx.lineTo(X + an, yHor - hh); cx.lineTo(X + an, yHor);
+          }
+        } else if (z.t === 'montania') {
+          for (let xw = a; xw <= b; xw += 4)
+            cx.lineTo(pxH(xw), yHor -
+              esc * (0.07 + 0.34 * azar(Math.round(xw / 4) * 3.7)) * env(xw));
+        } else if (z.t === 'desierto') {
+          for (let xw = a; xw <= b; xw += 0.8)
+            cx.lineTo(pxH(xw), yHor -
+              esc * (0.05 + 0.08 * (0.5 + 0.5 * Math.sin(xw * 0.5))) * env(xw));
+        } else {                                      // bosque, tierra: monte bajo
+          for (let xw = a; xw <= b; xw += 1.2)
+            cx.lineTo(pxH(xw), yHor -
+              esc * (0.045 + 0.075 * azar(Math.round(xw / 1.2) * 2.3)) * env(xw));
+        }
+        cx.lineTo(pxH(b), yHor);
+        cx.closePath();
+        cx.fillStyle = `rgba(${rgbH},0.34)`;
+        cx.fill();
+      }
       for (let ci = 0; ci < CAPAS.length; ci++) {
         const c = CAPAS[ci];
         // la perspectiva aerea: cuanto mas lejos, mas lavada hacia el cielo del
@@ -5155,7 +5217,16 @@ function arrancarNavegador () {
         cresta();
         cx.lineTo(w + 90, y0 + 40);
         cx.closePath();
-        cx.fillStyle = `rgba(${rgbP},${c.a * (0.55 + 0.45 * padLuz)})`;
+        // EL CUERPO SE FUNDE HACIA ARRIBA. Con relleno chato, cuatro capas
+        // eran cuatro cartones apilados: la cresta medio disuelta en aire hace
+        // que cada sierra pese menos sin perder ni un pico.
+        let topeC = pts[0][1];
+        for (const p of pts) if (p[1] < topeC) topeC = p[1];
+        const aC = c.a * (0.55 + 0.45 * padLuz);
+        const gS = cx.createLinearGradient(0, topeC, 0, y0 - hundir + 24);
+        gS.addColorStop(0, `rgba(${rgbP},${aC * 0.5})`);
+        gS.addColorStop(1, `rgba(${rgbP},${aC})`);
+        cx.fillStyle = gS;
         cx.fill();
         // EL FILO ILUMINADO. Una mancha plana no se ve moverse: lo que el ojo
         // persigue es un BORDE, y para perseguirlo el borde tiene que existir.
@@ -5165,7 +5236,7 @@ function arrancarNavegador () {
         // bajas del frente son casi planas y su linea salia como un alambre
         // horizontal cruzando la pantalla de punta a punta.
         cx.beginPath(); cresta();
-        cx.strokeStyle = `rgba(${claro},${0.04 + 0.20 * c.l * c.l})`;
+        cx.strokeStyle = `rgba(${claro},${0.03 + 0.16 * c.l * c.l})`;
         cx.lineWidth = 1.2;
         cx.stroke();
         // los bancos de neblina van entre la sierra del fondo y la del medio:
@@ -5218,19 +5289,17 @@ function arrancarNavegador () {
       corre = Math.max(corre, b);
     }
     if (corre < V1) vacios.push([corre, V1]);
-    // EL TERRENO DE ALLA ABAJO. Dos planos: uno lejano y palido, uno cercano y
-    // oscuro. Es perspectiva aerea --lo lejos se destiñe-- y con eso alcanza
-    // para leer profundidad sin mover nada, que es lo que corresponde: el
-    // suelo bajo tus pies no hace paralaje, esta ahi abajo y punto.
-    //
-    // Todas las formas cuelgan de INDICES ENTEROS del mundo, nunca de la
-    // camara: asi un arbol es el mismo arbol cuadro a cuadro en vez de un
-    // hormigueo que cambia cada vez que avanzas medio pixel.
-    const azar = i => {
-      const v = Math.sin(i * 127.1 + 311.7) * 43758.5453;
-      return v - Math.floor(v);
-    };
-    const dibujarTerreno = (v0, v1) => {
+    // EL TERRENO DE ALLA ABAJO, Y A SU VELOCIDAD. Antes los planos se movian
+    // pegados a la camara: cambiaban de tamaño y de color pero viajaban
+    // juntos, y tres dibujos que viajan juntos son UN dibujo -- el valle
+    // entero parecia una calcomania pegada a la esfera. Ahora cada plano
+    // tiene su paralaje: el fondo del valle casi se queda, el medio acompaña,
+    // el cercano corre, y un lomo oscuro en primer plano pasa MAS RAPIDO que
+    // la camara -- que algo te sobrepase es la unica prueba de velocidad que
+    // el ojo acepta sin pensarla. De paso el paralaje compra anticipacion:
+    // el plano lejano comprime el mundo, asi que el bioma que viene asoma
+    // por la derecha varios compases antes de llegar.
+    const dibujarTerreno = () => {
       const base = py(0), hondo = h - base;
       if (hondo < 16) return;
       // LA SOMBRA DE ARRIBA ES SAGRADA. La sexta parte de la franja pegada a
@@ -5247,13 +5316,23 @@ function arrancarNavegador () {
         .map((v, i) => Math.round(Math.min(255, (v * (1 - t) + tinte[i] * t) * lum)))
         .join(',');
       const cieloRGB = tinte.map(v => Math.round(v)).join(',');
-      // TRES PLANOS. Con dos, el ojo lee "dos dibujos"; con tres y niebla entre
-      // medio lee PROFUNDIDAD. Cada plano se apoya mas abajo, crece, se acerca
-      // a su color propio y gana contraste.
+      // CUATRO PLANOS, CUATRO VELOCIDADES. Con dos, el ojo lee "dos dibujos";
+      // con varios, niebla entre medio y velocidades bien separadas lee
+      // PROFUNDIDAD. Cada plano se apoya mas abajo, crece, se acerca a su
+      // color propio y gana contraste. `f` es el paralaje --cuanto de la
+      // camara le llega--, y como en las sierras del cielo cada uno va a
+      // cerca de la mitad que el siguiente: velocidades apenas separadas se
+      // leen como una sola. `paso` compensa la compresion del paralaje para
+      // que la densidad EN PANTALLA quede pareja, y `frec` aprieta la
+      // ondulacion del suelo donde el paralaje la estiraria.
       const PLANOS = [
-        { pie: 0.50, tam: 0.56, tin: 0.50, lum: 0.85, paso: 1.00, bruma: 0.14 },
-        { pie: 0.80, tam: 0.74, tin: 0.24, lum: 1.20, paso: 1.5, bruma: 0.08 },
-        { pie: 1.12, tam: 0.96, tin: 0.04, lum: 0.55, paso: 2.2, bruma: 0 }
+        { pie: 0.50, tam: 0.56, tin: 0.50, lum: 0.85, paso: 3.0, bruma: 0.14, f: 0.28 },
+        { pie: 0.80, tam: 0.74, tin: 0.24, lum: 1.20, paso: 2.6, bruma: 0.08, f: 0.55 },
+        { pie: 1.12, tam: 0.96, tin: 0.04, lum: 0.55, paso: 2.4, bruma: 0, f: 0.85 },
+        // el primer plano: puro lomo, sin arboles ni torres -- a esta
+        // velocidad un detalle es parpadeo, y una silueta es velocidad
+        { pie: 1.18, tam: 0.85, tin: 0, lum: 0.24, paso: 1, bruma: 0, f: 1.5,
+          amp: 1.8, frec: 5, soloLomo: true }
       ];
       // LOS BULTOS NO SE REPARTEN PAREJO. Uno cada N tiempos es papel pintado:
       // el ojo caza la repeticion en medio segundo y el paisaje se vuelve una
@@ -5262,68 +5341,98 @@ function arrancarNavegador () {
       // se agrupan las cosas en el mundo.
       const grumo = (xw, k) => 0.5 + 0.5 *
         Math.sin(xw * 0.43 + k * 2.1) * Math.cos(xw * 0.169 + k * 1.3);
-      for (const z of TERRENOS) {
-        if (z.x1 < v0 || z.x0 > v1) continue;
-        const a = Math.max(z.x0, v0 - 1), b = Math.min(z.x1, v1 + 1);
-        if (b <= a) continue;
-        const local = TIERRA[z.t] || TIERRA.tierra;
-        cx.save();
-        cx.beginPath();
-        // el recorte se apoya en los BORDES DE LA ZONA, no en los de la
-        // pantalla: la tierra emerge y se vuelve a hundir donde el lugar
-        // empieza y termina, no donde termina la camara
-        const rampa = Math.min(2.2, (z.x1 - z.x0) / 3);
-        cx.moveTo(px(z.x0), h + 2);
-        cx.lineTo(px(z.x0 + rampa), yTope);
-        cx.lineTo(px(z.x1 - rampa), yTope);
-        cx.lineTo(px(z.x1), h + 2);
-        cx.closePath();
-        cx.clip();
-        for (let k = 0; k < PLANOS.length; k++) {
-          const P = PLANOS[k];
-          const pie = base + hondo * P.pie;
-          const alto = hondo * P.tam;
+      // la franja entera se recorta una sola vez: la bruma ahora va a lo
+      // ancho de la pantalla, y no puede subirse a la sombra sagrada
+      cx.save();
+      cx.beginPath(); cx.rect(0, yTope, w, h - yTope); cx.clip();
+      // EL ORDEN ES POR PLANO, NO POR ZONA. Con paralaje, en un mismo cuadro
+      // conviven el fondo de un bioma y el frente del anterior: si se pintara
+      // zona por zona, el plano lejano de la ciudad taparia el cercano del
+      // bosque. De atras hacia adelante, siempre.
+      for (let k = 0; k < PLANOS.length; k++) {
+        const P = PLANOS[k];
+        // la camara de este plano: misma formula que las sierras del cielo
+        const pxP = wx => ((wx - s.x) * P.f + 1.9) * esc;
+        // la ventana visible en coordenadas de mundo -- con paralaje chico es
+        // mucho mas ancha que la de la camara, y por eso se ve venir lejos
+        const v0 = s.x - (1.9 + 100 / esc) / P.f;
+        const v1 = s.x + (w / esc - 1.9 + 100 / esc) / P.f;
+        const pie = base + hondo * P.pie;
+        const alto = hondo * P.tam;
+        const sueloY = xw => pie - hondo * 0.045 * P.tam / 0.3 * (P.amp || 1) *
+          (Math.sin(xw * 0.7 * (P.frec || 1) + k * 3) +
+           0.6 * Math.sin(xw * 1.9 * (P.frec || 1) - k));
+        const pasoSuelo = 0.2 / (1 + P.f);   // mas denso donde el paralaje estira
+        let pinto = false;                   // si este plano no puso tierra, no pone niebla
+        for (const z of TERRENOS) {
+          if (z.x1 < v0 || z.x0 > v1) continue;
+          const a = Math.max(z.x0, v0 - 1), b = Math.min(z.x1, v1 + 1);
+          if (b <= a) continue;
+          pinto = true;
+          const local = TIERRA[z.t] || TIERRA.tierra;
           const col = tenir(local.cuerpo, P.tin, P.lum);
           const filo = tenir(local.filo, P.tin * 0.5, Math.min(1, P.lum * 1.8));
-          const sueloY = xw => pie - hondo * 0.045 * P.tam /
-            0.3 * (Math.sin(xw * 0.7 + k * 3) + 0.6 * Math.sin(xw * 1.9 - k));
+          cx.save();
+          cx.beginPath();
+          // el recorte se apoya en los BORDES DE LA ZONA, no en los de la
+          // pantalla: la tierra emerge y se vuelve a hundir donde el lugar
+          // empieza y termina, no donde termina la camara
+          const rampa = Math.min(2.2, (z.x1 - z.x0) / 3);
+          cx.moveTo(pxP(z.x0), h + 2);
+          cx.lineTo(pxP(z.x0 + rampa), yTope);
+          cx.lineTo(pxP(z.x1 - rampa), yTope);
+          cx.lineTo(pxP(z.x1), h + 2);
+          cx.closePath();
+          cx.clip();
           // EL SUELO DEL PLANO. Sin el, los bultos flotan en fila: hace falta
           // una tierra continua sobre la que pararse, y que ondule.
           cx.fillStyle = `rgba(${col},1)`;
           cx.beginPath();
-          cx.moveTo(px(a) - 8, h + 2);
-          for (let xw = a - 0.5; xw <= b + 0.5; xw += 0.2) cx.lineTo(px(xw), sueloY(xw));
-          cx.lineTo(px(b) + 8, h + 2);
+          cx.moveTo(pxP(a) - 8, h + 2);
+          for (let xw = a - 0.5; xw <= b + 0.5; xw += pasoSuelo)
+            cx.lineTo(pxP(xw), sueloY(xw));
+          cx.lineTo(pxP(b) + 8, h + 2);
           cx.closePath(); cx.fill();
-          local.dibujo(cx, { a, b, k, P, pie, alto, col, filo, sueloY,
-            px, py, esc, h, hondo, tT, azar, grumo });
-          if (!P.bruma) continue;
-          // LA NIEBLA ENTRE PLANOS. Es el truco entero: una veladura del color
-          // del cielo por delante de lo ya dibujado, y el plano siguiente se ve
-          // mas nitido POR CONTRASTE, sin tocarle un solo color.
-          const nb = cx.createLinearGradient(0, pie + hondo * 0.05, 0, pie - alto);
-          nb.addColorStop(0, `rgba(${cieloRGB},${P.bruma * 1.3})`);
-          nb.addColorStop(1, `rgba(${cieloRGB},0)`);
-          cx.fillStyle = nb;
-          cx.fillRect(px(a) - 8, pie - alto, (b - a) * esc + 16, alto + hondo * 0.05);
-          // ...y jirones que se arrastran: una niebla perfectamente quieta es
-          // un filtro encima del dibujo, no aire
-          for (let j = 0; j < 5; j++) {
-            const xw = a - 1 + ((j * 0.618 + tT * 0.01 * (1 + k)) % 1) * (b - a + 2);
-            const rx = esc * (0.7 + 0.5 * azar(j * 7 + k)), ry = hondo * 0.055;
-            cx.save();
-            cx.translate(px(xw), pie - hondo * 0.04 * azar(j + k * 3));
-            cx.scale(1, ry / rx);
-            const gj = cx.createRadialGradient(0, 0, 0, 0, 0, rx);
-            gj.addColorStop(0, `rgba(${cieloRGB},${0.10 + 0.05 * k})`);
-            gj.addColorStop(1, `rgba(${cieloRGB},0)`);
-            cx.fillStyle = gj;
-            cx.beginPath(); cx.arc(0, 0, rx, 0, Math.PI * 2); cx.fill();
-            cx.restore();
-          }
+          // ...y los bultos del bioma. `esc` va escalado por el paralaje: los
+          // anchos que los dibujos derivan de `paso * esc` quedan asi en
+          // proporcion a su separacion EN PANTALLA, no a la del mundo.
+          if (!P.soloLomo)
+            local.dibujo(cx, { a, b, k, P, pie, alto, col, filo, sueloY,
+              px: pxP, py, esc: esc * P.f, h, hondo, tT, azar, grumo });
+          cx.restore();
         }
-        cx.restore();
+        if (!P.bruma || !pinto) continue;    // NEBULOSA queda limpia: en el
+        // espacio no hay suelo, y la niebla de un suelo que no esta seria mentir
+        // LA NIEBLA ENTRE PLANOS. Es el truco entero: una veladura del color
+        // del cielo por delante de lo ya dibujado, y el plano siguiente se ve
+        // mas nitido POR CONTRASTE, sin tocarle un solo color.
+        const nb = cx.createLinearGradient(0, pie + hondo * 0.05, 0, pie - alto);
+        nb.addColorStop(0, `rgba(${cieloRGB},${P.bruma * 1.3})`);
+        nb.addColorStop(1, `rgba(${cieloRGB},0)`);
+        cx.fillStyle = nb;
+        cx.fillRect(0, pie - alto, w, alto + hondo * 0.05);
+        // ...y jirones que se arrastran: una niebla perfectamente quieta es
+        // un filtro encima del dibujo, no aire. Llevan una pizca del paralaje
+        // de su plano, asi la niebla tambien viaja.
+        for (let j = 0; j < 6; j++) {
+          const anchoJ = w + 240;
+          let X = ((j * 0.618 + tT * 0.008 * (1 + k)) * anchoJ
+            - s.x * P.f * 0.5 * esc) % anchoJ;
+          if (X < 0) X += anchoJ;
+          X -= 120;
+          const rx = esc * (0.7 + 0.5 * azar(j * 7 + k)), ry = hondo * 0.055;
+          cx.save();
+          cx.translate(X, pie - hondo * 0.04 * azar(j + k * 3));
+          cx.scale(1, ry / rx);
+          const gj = cx.createRadialGradient(0, 0, 0, 0, 0, rx);
+          gj.addColorStop(0, `rgba(${cieloRGB},${0.10 + 0.05 * k})`);
+          gj.addColorStop(1, `rgba(${cieloRGB},0)`);
+          cx.fillStyle = gj;
+          cx.beginPath(); cx.arc(0, 0, rx, 0, Math.PI * 2); cx.fill();
+          cx.restore();
+        }
       }
+      cx.restore();
     };
     // EL MAR: es el suelo del mundo en su tramo, y todo lo demas
     // --la red, el vacio, las teclas-- se dibuja encima.
@@ -5703,7 +5812,7 @@ function arrancarNavegador () {
     // dibujado antes el paisaje quedaba enterrado. Dibujado despues, el
     // paisaje ocupa el fondo de la franja y la sombra se queda con el borde,
     // que es lo unico que tenia que decir.
-    dibujarTerreno(V0, V1);
+    dibujarTerreno();
 
     // La linea del AHORA. La esfera esta siempre en el mismo punto de la
     // pantalla, asi que esta linea es el presente: la nota se toca cuando su
