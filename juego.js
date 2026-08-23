@@ -3891,10 +3891,13 @@ function arrancarNavegador () {
       irASeccion(e.key === 'ArrowRight' ? 1 : -1);
       return;
     }
-    // MODO DEBUG. Va con Ctrl a proposito: `esBoton` toma cualquier tecla suelta
-    // como el boton de tocar, asi que una 'd' pelada seria una nota. Con Ctrl no
-    // hay forma de encenderlo sin querer en medio de una corrida.
-    if (e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'd' || e.key === 'D')) {
+    // MODO DEBUG: F2. No puede ser una letra suelta --`esBoton` toma cualquier
+    // tecla de un caracter como el boton de tocar, asi que una 'd' pelada seria
+    // una nota-- y tampoco Ctrl+algo: Ctrl+D es el marcador del navegador, y
+    // aunque el preventDefault sea legal, pelearle a un atajo del navegador por
+    // una tecla que hay dos teclados y tres navegadores es perder. F2 no la usa
+    // nadie, tiene mas de un caracter (asi que no es una nota) y va sola.
+    if (e.key === 'F2') {
       e.preventDefault();
       if (e.repeat) return;
       debug = !debug;
@@ -4621,7 +4624,7 @@ function arrancarNavegador () {
     rotulo('EN EL JUEGO', xB, y, 'left');
     ayuda('ESC pausa  ·  ◀ ▶ saltan de sección  ·  M vuelve al menú',
       w / 2, y + 20, C.tenue);
-    ayuda('Ctrl+D muestra secciones y códigos de nota  ·  Ctrl+C copia el de acá',
+    ayuda('F2 muestra secciones y códigos de nota  ·  Ctrl+C copia el de acá',
       w / 2, y + 36, C.tenue);
     btn('◀  Volver', w / 2, h - 26, () => { pantalla = 'inicio'; },
       { rgb: '232,230,224', fuente: '12px system-ui', alto: 26 });
@@ -4850,7 +4853,7 @@ function arrancarNavegador () {
           ? `   ${au.graves ? '‼' : '⚠'} ${au.graves} graves · ${au.avisos} avisos` +
             (prox ? `   → ${codigoDe(NOTAS[prox.i])} ${prox.tipo}` : '')
           : '   ✓ la partitura cierra',
-        '   Ctrl+C copia  ·  Ctrl+D apaga'
+        '   Ctrl+C copia  ·  F2 apaga'
       ]);
     }
     cx.restore();

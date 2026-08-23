@@ -346,6 +346,10 @@ probar('el mundo no se despega del reloj del audio', () => {
 // se rompe en silencio y aparece justo cuando hace falta: reportando un bug.
 const ctrl = (key, code) => disparar('keydown',
   { key, code, ctrlKey: true, preventDefault () {}, repeat: false });
+// F2 va SIN modificador: si alguien la vuelve a atar a Ctrl+algo, el atajo se lo
+// come el navegador y el modo debug deja de existir sin que falle nada
+const efeDos = () => disparar('keydown',
+  { key: 'F2', code: 'F2', preventDefault () {}, repeat: false });
 
 probar('el modo debug rotula la cancion entera sin romper nada', () => {
   // hasta el menu de verdad y de ahi a EL VIAJE: es la cancion con tunel,
@@ -363,7 +367,7 @@ probar('el modo debug rotula la cancion entera sin romper nada', () => {
 });
 
 function probarDebug () {
-  ctrl('d', 'KeyD');
+  efeDos();
   correrCuadros(6);
   exigir(dijo('Ctrl+C copia'), 'el modo debug no dibujo su panel');
   // toda la cancion: se salta de seccion en seccion para pasar por los tramos
@@ -382,7 +386,7 @@ function probarDebug () {
 }
 
 probar('el modo debug se apaga y no deja rastro', () => {
-  ctrl('d', 'KeyD');
+  efeDos();
   correrCuadros(3);
   textos.length = 0;
   correrCuadros(8);

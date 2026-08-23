@@ -70,12 +70,12 @@ se agrega, se reparte.
 | volver una pantalla | `Esc` |
 | calibrar el desfase | `C` — si tu pantalla o tus auriculares llegan tarde |
 | **modo fácil** (con red) | `F`, o en configuración |
-| **modo debug** | `Ctrl+D` — rotula la partitura · `Ctrl+C` copia el código de acá |
+| **modo debug** | `F2` — rotula la partitura · `Ctrl+C` copia el código de acá |
 
 ### El modo debug: poder señalar el bug
 
 Describir un bug (*"cuando salta después del túnel se traba"*) obliga al que lo
-arregla a salir a buscar el lugar. `Ctrl+D` pone la partitura en pantalla como se
+arregla a salir a buscar el lugar. `F2` pone la partitura en pantalla como se
 numera una de verdad: el nombre de cada sección donde empieza, una **barra de
 compás** con su número, y sobre cada nota el **tiempo** en que cae.
 
