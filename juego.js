@@ -574,8 +574,16 @@ export const ANTES = 0.22;
 function compilar () {
   const notas = [];
   let b = 0;
-  for (const compas of CANCION) {
-    for (const tok of compas.trim().split(/\s+/)) {
+  // `c` y `t` son la DIRECCION MUSICAL de la nota: en que compas cae y en que
+  // tiempo dentro de el. No es decoracion para el modo debug -- es lo unico que
+  // sirve para nombrar una nota por escrito. El indice `i` es la posicion en el
+  // array: se corre entero en cuanto se edita un compas de mas arriba, asi que
+  // un bug anotado como "la nota 214" apunta manana a otra nota. `c` en cambio
+  // es el indice en `compases`, el MISMO numero que ya esta en el comentario de
+  // cada linea de la partitura, y no se mueve porque se edite lo de al lado.
+  for (let ci = 0; ci < CANCION.length; ci++) {
+    let t = 0;               // el tiempo dentro del compas, 0 = el primer golpe
+    for (const tok of CANCION[ci].trim().split(/\s+/)) {
       const [crudo, fig] = tok.split(':');
       const dur = parseFloat(fig);
       const silencio = crudo === '-';
@@ -585,12 +593,13 @@ function compilar () {
       const nombre = bajo ? crudo.slice(0, -1) : crudo;
       notas.push({
         i: notas.length, b, dur, nombre, silencio, bajo,
+        c: ci, t: t + 1,       // el musico cuenta 1-2-3-4, no 0-1-2-3
         f: silencio ? 0 : frecuencia(nombre),
         y: silencio ? 0 : bajo ? alturaBajo(nombre) : alturaDe(nombre),
         xm: b,                 // el punto exacto: el pulso. Aca la nota sale afinada.
         x0: b, x1: b + dur
       });
-      b += dur;
+      b += dur; t += dur;
     }
   }
   // LA PLATAFORMA EMPIEZA ANTES DEL PULSO. Si arranca justo en el pulso, se
@@ -1301,6 +1310,96 @@ export const enZonaBajo = x => ZONAS_BAJO.some(z => x >= z.x0 && x < z.x1);
 export let OCTAVAS = [];
 export const enOctava = x => OCTAVAS.some(z => x >= z.x0 && x < z.x1);
 export let SECCIONES = [];
+// EN QUE SECCION CAE ESTA x. Se usaba en tres lugares con tres filtros calcados;
+// ahora hay uno solo, y el modo debug lo comparte con el informe de muerte.
+export const seccionEn = x => SECCIONES.filter(z => z.x0 <= x + 1e-9).pop() || null;
+// La sigla de una seccion: 'nebulosa · el fantasma' -> NEBULOSA. Lo que va
+// antes del punto medio es el nombre; lo de atras es la explicacion, y en un
+// codigo que hay que copiar a mano la explicacion sobra.
+const sigla = n => (n || '?').split('·')[0].trim()
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 14) || '?';
+// EL CODIGO DE UNA NOTA -- lo que Seba me escribe cuando ve un bug. Tiene que
+// cumplir dos cosas a la vez: que el que lo lee en pantalla lo pueda copiar sin
+// equivocarse, y que yo lo pueda buscar en el archivo SIN ejecutar el juego.
+// Por eso es la coordenada musical y no el indice: NEBULOSA·c37·t2.5 es la linea
+// 37 de `compases` (la que ya dice "// 37" al costado) y el tiempo 2.5 de ese
+// compas. Sobrevive a que editemos la partitura, que es exactamente lo que
+// estamos haciendo cuando el codigo hace falta.
+// EL AUDITOR. Rotular la partitura sirve para DECIR donde esta el bug; esto
+// sirve para ENCONTRARLO. Recorre la cancion entera y devuelve todo lo que no
+// cierra, con el codigo de la nota donde pasa.
+//
+// Vive aca --y no dentro del modo debug-- porque lo usan los dos: el calco lo
+// pinta sobre el mapa, y `prueba.js` exige que no encuentre nada. Esa es la
+// unica forma de que el aviso que se ve en pantalla y el que corta el build
+// digan lo mismo: si estuviera escrito dos veces, se separarian a la primera
+// vez que se afine un umbral y el juego empezaria a perdonar lo que la prueba
+// castiga.
+//
+// GRAVE es la nota que NO SE PUEDE TOCAR (la partitura esta rota ahi). AVISO es
+// la que se puede pero por poco: no es un error, es un lugar donde mirar.
+export function auditar () {
+  const f = [];
+  const anotar = (k, grave, tipo, txt) => f.push({ i: k.i, x: k.xm, grave, tipo, txt });
+  for (const k of NOTAS) {
+    const sig = NOTAS[k.i + 1];
+    if (sig && k.x1 > sig.x0 + 1e-9)
+      anotar(k, true, 'solape', `la tabla se mete ${(k.x1 - sig.x0).toFixed(3)} en la siguiente`);
+    if (k.silencio) continue;
+    // el punto afinado en el canto: aterrizar y golpear serian el mismo instante
+    if (k.xm <= k.x0 + 0.03 || k.xm >= k.x1 - 0.03)
+      anotar(k, true, 'canto', 'el pulso cae en el borde de la tabla');
+    if (TECHOS.some(t => k.xm >= t.x0 && k.xm <= t.x1))
+      anotar(k, true, 'techo', 'el pulso queda debajo de un techo');
+    const salto = !k.escalera && !k.riel;
+    if (salto && k.x1 - k.x0 < 0.09)
+      anotar(k, true, 'estrecha', `ventana de ${(k.x1 - k.x0).toFixed(3)} tiempos`);
+    if (!salto || !sig || sig.silencio) continue;
+    const tv = vueloMinimo(sig.y - k.y);
+    // desde el toque MAS TARDE hay que aterrizar dentro de la que sigue
+    if (k.x1 + tv > sig.x1 - 0.05 + 1e-9)
+      anotar(k, true, 'inalcanzable', 'desde el toque tardio se pasa de largo la siguiente');
+    // ...y tocando EN EL PULSO hay que llegar antes del pulso siguiente
+    const margen = sig.xm - k.xm - tv;
+    if (margen < 0.05 - 1e-9)
+      anotar(k, true, 'apretada', `faltan ${(0.05 - margen).toFixed(3)} tiempos de vuelo`);
+    else if (margen < HOLGURA)
+      anotar(k, false, 'justa', `sobran ${margen.toFixed(3)} (comodo desde ${HOLGURA})`);
+  }
+  // UNA ZONA QUE NO CUBRE NINGUNA NOTA NO EXISTE. Es el error de edicion mas
+  // silencioso que tiene este formato: se corre una seccion dos compases, la
+  // zona de viento se queda donde estaba, y el viento simplemente deja de
+  // soplar. Nada falla, nada suena mal -- la mecanica desaparece.
+  const zonas = { tunel: TUNELES, viento: VIENTOS, agua: AGUAS, piston: ZONAS_PISTON,
+    voz: ZONAS_VOZ, octava: OCTAVAS, arpegio: ARPEGIOS };
+  for (const [nombre, arr] of Object.entries(zonas))
+    for (const z of arr || []) {
+      const dentro = NOTAS.filter(n => !n.silencio && n.xm >= z.x0 && n.xm < z.x1);
+      if (!dentro.length) {
+        const cerca = NOTAS.filter(n => n.xm >= z.x0 - 4 && n.xm < z.x1 + 4 && !n.silencio)[0];
+        f.push({ i: cerca ? cerca.i : 0, x: z.x0, grave: false, tipo: 'zonaMuda',
+          txt: `zona de ${nombre} ${z.x0}→${z.x1} sin una sola nota adentro` });
+      }
+    }
+  // Una seccion que arranca en medio de una nota: el rotulo, el matiz y el
+  // arreglo cambian con la esfera ya en el aire.
+  for (const z of SECCIONES) {
+    if (NOTAS.some(n => Math.abs(n.b - z.x0) < 1e-9)) continue;
+    const parte = NOTAS.filter(n => n.b < z.x0).pop();
+    f.push({ i: parte ? parte.i : 0, x: z.x0, grave: false, tipo: 'seccionCorrida',
+      txt: `"${z.n}" empieza en ${z.x0}, y ahi no arranca ninguna nota` });
+  }
+  return f.sort((a, b) => a.x - b.x);
+}
+
+export const codigoDe = k => {
+  // manda `xm` (el PULSO), no `x0`: la plataforma arranca 0.22 tiempos antes
+  // para que se pueda aterrizar, y con x0 la primera nota de cada seccion caia
+  // del lado de la seccion anterior -- justo la nota sobre la que mas se habla.
+  const z = seccionEn(k.xm);
+  return `${sigla(z && z.n)}·c${k.c}·t${Math.round(k.t * 1000) / 1000}`;
+};
 
 // Elegir cancion recompila TODO: la partitura, el mapa y el terreno deducido.
 // Es la unica puerta -- nadie escribe NOTAS ni HUECOS de afuera.
@@ -2446,7 +2545,7 @@ function arrancarNavegador () {
     fuerte: { ataque: 0.55, gan: 1.12, brillo: 1.25, vib: 0.8, cola: 0.9 }
   };
   const matiz = () =>
-    MATIZ[(SECCIONES.filter(z => z.x0 <= s.x).pop() || {}).m] || MATIZ.pleno;
+    MATIZ[(seccionEn(s.x) || {}).m] || MATIZ.pleno;
 
   function golpe (t, f, dur, gan, tipo = 'sine') {
     const o = ac.createOscillator(), g = ac.createGain();
@@ -3417,7 +3516,7 @@ function arrancarNavegador () {
       pct, record: antes ? antes.pct || 0 : 0, nuevo: !ensayo && (!antes || pct > (antes.pct || 0)),
       limpias: s.limpias, xm: s.x, limpiasRun: s.limpias.size,
       mejorLimpias: antes ? antes.limpias || 0 : 0,
-      seccion: (SECCIONES.filter(z => z.x0 <= s.x).pop() || {}).n,
+      seccion: (seccionEn(s.x) || {}).n,
       t: performance.now()
     };
     rielCerrar(); eRielCerrar();
@@ -3699,7 +3798,7 @@ function arrancarNavegador () {
 
   function ensayarMuerte () {
     if (!avisoMuerte || avisoMuerte.xm == null || !SECCIONES.length) return;
-    const z = SECCIONES.filter(z2 => z2.x0 <= avisoMuerte.xm).pop() || SECCIONES[0];
+    const z = seccionEn(avisoMuerte.xm) || SECCIONES[0];
     ensayo = z.x0 !== 0;
     // el mundo estaba congelado esperando: se descongela y saltarA reescribe t0
     // sobre el reloj ya corriendo
@@ -3792,6 +3891,25 @@ function arrancarNavegador () {
       irASeccion(e.key === 'ArrowRight' ? 1 : -1);
       return;
     }
+    // MODO DEBUG. Va con Ctrl a proposito: `esBoton` toma cualquier tecla suelta
+    // como el boton de tocar, asi que una 'd' pelada seria una nota. Con Ctrl no
+    // hay forma de encenderlo sin querer en medio de una corrida.
+    if (e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      if (e.repeat) return;
+      debug = !debug;
+      try { localStorage.setItem('drible:debug', debug ? '1' : '0'); } catch (_) {}
+      return;
+    }
+    if (debug && corriendo && e.ctrlKey && !e.altKey && !e.metaKey &&
+        (e.key === 'c' || e.key === 'C')) {
+      e.preventDefault();
+      if (e.repeat) return;
+      // con el raton encima de una nota se copia ESA; sin raton, la de aca --
+      // que es el caso de verdad: el bug acaba de pasar y no hay tiempo de apuntar
+      copiar(expediente(notaMirada || NOTAS[ultimaCercana()]));
+      return;
+    }
     if (!esBoton(e)) return;
     e.preventDefault();
     if (e.repeat) return;
@@ -3816,6 +3934,14 @@ function arrancarNavegador () {
 
   cv.addEventListener('pointerdown', e => {
     e.preventDefault();
+    // Ctrl+clic copia la nota que estas señalando, sin tocarla. Va con Ctrl para
+    // que el clic siga siendo el boton de tocar: un modo debug que te cambia el
+    // clic no se puede tener prendido mientras jugas, y prenderlo solo cuando ya
+    // viste el bug llega tarde -- el bug ya paso.
+    if (debug && corriendo && e.ctrlKey) {
+      copiar(expediente(notaMirada || NOTAS[ultimaCercana()]));
+      return;
+    }
     // tras morir: los botones del panel primero; fuera de ellos, otra vez
     if (esperando) {
       for (let i = botonesMuerte.length - 1; i >= 0; i--) {
@@ -4495,8 +4621,281 @@ function arrancarNavegador () {
     rotulo('EN EL JUEGO', xB, y, 'left');
     ayuda('ESC pausa  ·  ◀ ▶ saltan de sección  ·  M vuelve al menú',
       w / 2, y + 20, C.tenue);
+    ayuda('Ctrl+D muestra secciones y códigos de nota  ·  Ctrl+C copia el de acá',
+      w / 2, y + 36, C.tenue);
     btn('◀  Volver', w / 2, h - 26, () => { pantalla = 'inicio'; },
       { rgb: '232,230,224', fuente: '12px system-ui', alto: 26 });
+  }
+
+  // --- modo debug: la partitura con nombres propios ------------------------------
+  //
+  // Para arreglar un bug hay que poder SEÑALARLO, y sin esto la unica forma de
+  // hacerlo era describir el sintoma ("cuando salta despues del tunel se traba")
+  // y que el otro fuera a buscar el lugar. El modo debug le pone a cada seccion
+  // su nombre encima y a cada nota su codigo, asi el reporte deja de ser una
+  // descripcion y pasa a ser una direccion.
+  //
+  // Es un CALCO, no una variante del juego: se dibuja al final, encima de todo,
+  // y no toca la simulacion ni el audio ni un solo parametro. Un modo debug que
+  // cambia el timing es la peor clase de bug -- el que solo existe cuando lo
+  // miras.
+  let debug = false;
+  try { debug = localStorage.getItem('drible:debug') === '1'; } catch (_) {}
+  let notaMirada = null;          // sobre cual esta el raton (la que se copia)
+  let ultimoCopiado = 0;          // para el acuse: "copiado" durante un segundo
+  // La auditoria se calcula UNA vez por cancion, no por cuadro: recorre la
+  // partitura entera y no cambia mientras no se la recompile.
+  const GRAVE = '255,110,90', AVISO = '255,190,90';
+  let auditoria = null, auditadaDe = null;
+  const revisar = () => {
+    if (auditadaDe === CANCION_ID) return auditoria;
+    auditadaDe = CANCION_ID;
+    const f = auditar();
+    auditoria = { todo: f, graves: f.filter(a => a.grave).length,
+      avisos: f.filter(a => !a.grave).length, por: new Map() };
+    for (const a of f) {
+      if (!auditoria.por.has(a.i)) auditoria.por.set(a.i, []);
+      auditoria.por.get(a.i).push(a);
+    }
+    return auditoria;
+  };
+
+  // Todo lo que cubre una x: las zonas son la mitad de los bugs del juego (el
+  // viento que no sopla, el tunel que empieza un tiempo tarde) y ninguna se ve.
+  const zonasEn = x => {
+    const r = [];
+    const mirar = (nombre, arr) => {
+      if (arr) for (const z of arr) if (x >= z.x0 && x < z.x1) { r.push(nombre); break; }
+    };
+    mirar('tunel', TUNELES); mirar('viento', VIENTOS); mirar('agua', AGUAS);
+    mirar('piston', ZONAS_PISTON); mirar('voz', ZONAS_VOZ); mirar('octava', OCTAVAS);
+    mirar('bajo', ZONAS_BAJO); mirar('rodar', TRAMOS_RODAR); mirar('arpegio', ARPEGIOS);
+    mirar('techo', TECHOS); mirar('hueco', HUECOS);
+    return r;
+  };
+
+  // EL EXPEDIENTE. Lo que se copia no es el codigo pelado: es el codigo mas todo
+  // lo que yo tendria que preguntar despues. Copiar solo "NEBULOSA·c37·t2" y
+  // tener que ir y venir tres mensajes averiguando si era riel, si habia viento
+  // y si la habia afinado deja el trabajo a medio hacer.
+  const expediente = k => {
+    const z = seccionEn(k.xm);
+    const zonas = zonasEn(k.xm);
+    const prev = NOTAS[k.i - 1], sig = NOTAS[k.i + 1];
+    return [
+      `${codigoDe(k)}   [drible · ${CANCION_ID} · ${nombreCancion()}]`,
+      `seccion  ${z ? z.n : '?'}  (matiz ${z ? z.m : '?'})`,
+      `nota     ${k.silencio ? 'SILENCIO' : k.nombre}  dur ${k.dur}` +
+        `${k.bajo ? '  BAJO' : ''}${k.riel ? '  RIEL' : ''}` +
+        (k.silencio ? '' : `  altura ${k.y.toFixed(2)}  ${k.f.toFixed(1)} Hz`),
+      `pulso    beat ${k.b}   (compas ${k.c}, tiempo ${k.t})`,
+      // la plataforma NO empieza en el pulso, y la mitad de los bugs de
+      // aterrizaje viven en esa diferencia: se dice aparte
+      `tabla    x ${+k.x0.toFixed(3)} → ${+k.x1.toFixed(3)}   (ancho ${+(k.x1 - k.x0).toFixed(3)})`,
+      `zonas    ${zonas.length ? zonas.join(' · ') : '(ninguna)'}`,
+      `estado   ${s.limpias.has(k.i) ? 'limpia' : s.tocadas.has(k.i) ? 'CHUECA' : 'sin tocar'}` +
+        `${s.perfectas.has(k.i) ? '  clavada' : ''}`,
+      ...(revisar().por.get(k.i) || [])
+        .map(a => `${a.grave ? '‼ ' : '⚠ '}${a.tipo}   ${a.txt}`),
+      `vecinas  ← ${prev ? codigoDe(prev) + ' ' + (prev.silencio ? '-' : prev.nombre) : '(inicio)'}` +
+        `   → ${sig ? codigoDe(sig) + ' ' + (sig.silencio ? '-' : sig.nombre) : '(fin)'}`,
+      // muerto, `s` ya es una simulacion nueva parada en x=0: decir "esfera x 0"
+      // en el expediente de la nota que te mato es peor que no decir nada
+      esperando && avisoMuerte
+        ? `muerte   x ${avisoMuerte.xm.toFixed(2)}  ${avisoMuerte.txt || '?'}` +
+          `  ·  ${avisoMuerte.pct}%  ${modoFacil ? 'facil' : 'sin red'}`
+        : `esfera   x ${s.x.toFixed(2)}  y ${s.y.toFixed(2)}  vy ${s.vy.toFixed(2)}` +
+          `  racha ${s.racha}  ${modoFacil ? 'facil' : 'sin red'}`,
+      'bug: '
+    ].join('\n');
+  };
+
+  // Se copia al portapapeles Y se escupe a la consola. Leer un codigo de la
+  // pantalla y tipearlo es justo donde se cuela el error que manda a mirar el
+  // compas equivocado; y si el portapapeles falla (una pagina servida por
+  // file://), la consola sigue teniendo el texto entero para arrastrar.
+  const copiar = txt => {
+    console.log('%c[drible debug]\n' + txt, 'color:#7ec8ff');
+    try { navigator.clipboard.writeText(txt); } catch (_) {}
+    ultimoCopiado = performance.now();
+  };
+
+  // EL CALCO. Todo el dibujo del modo debug vive aca y no toca una sola linea
+  // del render normal: se llama al final, con la transformacion ya puesta, y lo
+  // unico que lee del juego es donde estan las cosas.
+  //
+  // El texto sigue la logica de una partitura de verdad: la barra de compas
+  // lleva SU numero, y las notas adentro llevan solo su tiempo. Poner el codigo
+  // entero sobre cada nota era una pared de letras que tapaba justo el mapa que
+  // hay que mirar -- el numero de compas se dice una vez y vale para las ocho
+  // notas que siguen.
+  const DBG = '126,200,255';
+  function dibujarDebug (w, h, px, py, y0) {
+    // CON EL INFORME ENCIMA, EL CALCO SE APARTA. Al morir, el instrumento que
+    // importa es el informe por seccion --que dice donde te tiro y ofrece
+    // ensayar ese tramo-- y el panel del debug le tapaba justo la primera
+    // casilla. Queda una sola linea arriba: alcanza para copiar, y no pelea.
+    if (esperando || s.meta) {
+      notaMirada = null;               // lo que copies es donde moriste, no lo ultimo mirado
+      const aqui = NOTAS[ultimaCercana()];
+      cx.save();
+      cx.font = 'bold 11px ui-monospace, Menlo, monospace';
+      cx.textAlign = 'center';
+      const et = `▶ ${aqui ? codigoDe(aqui) : '?'}   ·   Ctrl+C copia`;
+      const an = cx.measureText(et).width + 20;
+      cx.fillStyle = 'rgba(10,12,16,0.9)';
+      cx.fillRect(w / 2 - an / 2, 8, an, 18);
+      cx.fillStyle = performance.now() - ultimoCopiado < 1200 ? C.impulso : `rgb(${DBG})`;
+      cx.fillText(performance.now() - ultimoCopiado < 1200 ? '✓ copiado' : et, w / 2, 21);
+      cx.restore();
+      return;
+    }
+    const x0v = s.x - 3, x1v = s.x + 7.5;
+    cx.save();
+    cx.textAlign = 'left';
+    cx.lineWidth = 1;
+
+    // Las barras de compas, con su numero. Es la linea del archivo: c37 es
+    // compases[37], la que ya tiene "// 37" al costado.
+    let compasAnterior = -1;
+    cx.font = '10px ui-monospace, Menlo, monospace';
+    for (const k of NOTAS) {
+      if (k.x1 < x0v || k.x0 > x1v || k.c === compasAnterior) continue;
+      compasAnterior = k.c;
+      // la barra va en el PULSO (`b`), no en el borde de la tabla: la tabla
+      // arranca 0.22 tiempos antes y la barra quedaba corrida contra la musica
+      const X = px(k.b);
+      cx.strokeStyle = `rgba(${DBG},0.22)`;
+      cx.beginPath(); cx.moveTo(X, 58); cx.lineTo(X, y0 + 6); cx.stroke();
+      cx.fillStyle = `rgba(${DBG},0.9)`;
+      cx.fillText(`c${k.c}`, X + 3, 70);
+    }
+
+    // Los nombres de las secciones, en la barra donde empiezan. Van arriba de
+    // todo y en mayuscula: es el rotulo del tramo, no una nota mas.
+    // El rotulo de seccion va en una placa opaca: si no, cae sobre el cielo, la
+    // montaña o el sol segun donde estes, y el unico texto que TIENE que leerse
+    // de un vistazo es el que a veces no se lee.
+    cx.font = 'bold 11px ui-monospace, Menlo, monospace';
+    for (const z of SECCIONES) {
+      if (z.x0 < x0v || z.x0 > x1v) continue;
+      // la sigla es lo que Seba escribe en el codigo, asi que va tal cual; atras
+      // solo lo que la sigla NO dice (el subtitulo), para no repetir el nombre
+      const resto = z.n.split('·').slice(1).join('·').trim();
+      const X = px(z.x0), et = sigla(z.n) + (resto ? `  ${resto}` : '');
+      cx.strokeStyle = `rgba(${DBG},0.8)`;
+      cx.beginPath(); cx.moveTo(X, 40); cx.lineTo(X, y0 + 6); cx.stroke();
+      const an = cx.measureText(et).width + 10;
+      cx.fillStyle = 'rgba(10,12,16,0.9)';
+      cx.fillRect(X + 1, 26, an, 16);
+      cx.fillStyle = `rgb(${DBG})`;
+      cx.fillText(et, X + 6, 38);
+    }
+
+    // Las notas: el tiempo dentro del compas, y nada mas. Alternar la altura
+    // evita que dos corcheas seguidas escriban una sobre la otra.
+    cx.font = '9px ui-monospace, Menlo, monospace';
+    cx.textAlign = 'center';
+    let mejor = null, mejorD = 26;      // la mas cercana al raton, si hay alguna
+    for (const k of NOTAS) {
+      if (k.x1 < x0v || k.x0 > x1v) continue;
+      const X = px(k.xm), Y = k.silencio ? y0 : py(k.y);
+      if (raton.x >= 0) {
+        const d = Math.hypot(raton.x - X, raton.y - Y);
+        if (d < mejorD) { mejorD = d; mejor = k; }
+      }
+      // el tiempo ENTERO se escribe mas cerca de la tecla y mas fuerte: en un
+      // compas de semicorcheas los seis numeros pesan igual y no se ve el pulso
+      const entero = Number.isInteger(k.t);
+      cx.fillStyle = k.silencio ? `rgba(${DBG},0.3)`
+        : entero ? `rgba(${DBG},0.95)` : `rgba(${DBG},0.5)`;
+      cx.font = entero ? 'bold 10px ui-monospace, Menlo, monospace'
+        : '9px ui-monospace, Menlo, monospace';
+      const alt = entero ? 15 : 27;
+      // LO QUE EL AUDITOR SEÑALO se pinta con SU color y se lleva el numero: el
+      // calco no es solo para nombrar el bug que ya viste, es para ver el que
+      // todavia no. Rojo = no se puede tocar. Ambar = se puede, pero por poco.
+      const mal = revisar().por.get(k.i);
+      if (mal) {
+        const rgb = mal.some(a => a.grave) ? GRAVE : AVISO;
+        cx.fillStyle = `rgb(${rgb})`;
+        cx.fillText(mal.some(a => a.grave) ? '‼' : '⚠', X, Y - alt - 11);
+      }
+      cx.fillText(k.silencio ? '·' : String(k.t), X, Y - alt);
+      cx.strokeStyle = `rgba(${DBG},0.2)`;
+      cx.beginPath(); cx.moveTo(X, Y - alt + 3); cx.lineTo(X, Y - 7); cx.stroke();
+    }
+    notaMirada = mejor;
+
+    // La nota mirada se abre entera: el codigo completo, listo para copiar.
+    if (mejor) {
+      const X = px(mejor.xm), Y = mejor.silencio ? y0 : py(mejor.y);
+      cx.strokeStyle = `rgb(${DBG})`; cx.lineWidth = 2;
+      cx.beginPath(); cx.arc(X, Y, 13, 0, 7); cx.stroke();
+      panelDebug(w, h, expediente(mejor).split('\n'));
+    } else {
+      // Sin raton encima, el calco igual dice DONDE esta la esfera ahora: es el
+      // caso real -- el bug acaba de pasar y las dos manos estan en las teclas.
+      const aqui = NOTAS[Math.max(0, ultimaCercana())];
+      const z = seccionEn(s.x), zn = zonasEn(s.x);
+      const au = revisar();
+      // el proximo problema ADELANTE, con su codigo: el resumen "3 graves" no
+      // sirve de nada si despues hay que salir a buscar donde estan
+      const prox = au.todo.find(a => a.x > s.x);
+      panelDebug(w, h, [
+        `▶ ${aqui ? codigoDe(aqui) : '?'}`,
+        `   ${z ? z.n : '?'}   x ${s.x.toFixed(2)}`,
+        zn.length ? `   ${zn.join(' · ')}` : '   —',
+        au.todo.length
+          ? `   ${au.graves ? '‼' : '⚠'} ${au.graves} graves · ${au.avisos} avisos` +
+            (prox ? `   → ${codigoDe(NOTAS[prox.i])} ${prox.tipo}` : '')
+          : '   ✓ la partitura cierra',
+        '   Ctrl+C copia  ·  Ctrl+D apaga'
+      ]);
+    }
+    cx.restore();
+  }
+
+  // La nota que la esfera esta pisando, o la ultima que dejo atras: sirve para
+  // el panel y para que Ctrl+C sin raton copie el lugar donde estas.
+  //
+  // TRAS MORIR MIRA DONDE MURIO, no donde esta. Morir rearma el mundo en x=0 al
+  // instante, asi que con `s.x` el informe de muerte --el momento en que mas
+  // ganas hay de reportar algo-- copiaba siempre la primera nota de la cancion.
+  const ultimaCercana = () => {
+    const x = esperando && avisoMuerte ? avisoMuerte.xm : s.x;
+    if (!esperando && s.tecla >= 0) return s.tecla;
+    let j = 0;
+    for (const k of NOTAS) { if (k.x0 <= x) j = k.i; else break; }
+    return j;
+  };
+
+  function panelDebug (w, h, lineas) {
+    cx.save();
+    cx.font = '11px ui-monospace, Menlo, monospace';
+    cx.textAlign = 'left';
+    let anchoMax = 0;
+    for (const l of lineas) anchoMax = Math.max(anchoMax, cx.measureText(l).width);
+    const pw = anchoMax + 20, ph = lineas.length * 15 + 14;
+    // arriba del aviso de salto de seccion, que vive pegado al borde de abajo
+    const bx = 12, by = h - ph - 30;
+    cx.fillStyle = 'rgba(10,12,16,0.88)';
+    cx.fillRect(bx, by, pw, ph);
+    cx.strokeStyle = `rgba(${DBG},0.5)`; cx.lineWidth = 1;
+    cx.strokeRect(bx + 0.5, by + 0.5, pw - 1, ph - 1);
+    lineas.forEach((l, i) => {
+      cx.fillStyle = i === 0 ? `rgb(${DBG})` : 'rgba(232,230,224,0.72)';
+      cx.font = i === 0 ? 'bold 11px ui-monospace, Menlo, monospace'
+        : '11px ui-monospace, Menlo, monospace';
+      cx.fillText(l, bx + 10, by + 18 + i * 15);
+    });
+    // el acuse de copiado: sin esto no hay forma de saber si el Ctrl+C entro
+    if (performance.now() - ultimoCopiado < 1200) {
+      cx.fillStyle = C.impulso;
+      cx.font = 'bold 11px ui-monospace, Menlo, monospace';
+      cx.fillText('✓ copiado', bx + pw + 10, by + 18);
+    }
+    cx.restore();
   }
 
   function dibujar (dtSeg) {
@@ -5971,6 +6370,8 @@ function arrancarNavegador () {
         cx.restore();
       }
     }
+    // El calco va ULTIMO: encima de todo lo dibujado, y sin haber tocado nada.
+    if (debug && corriendo) dibujarDebug(w, h, px, py, y0);
     hud.textContent = '';
   }
 }

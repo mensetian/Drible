@@ -12,7 +12,8 @@
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
   CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, ZONAS_PISTON, Y_GRAVE, HOLGURA,
-  TRAMOS_RODAR, mandaRodar, RANGOS, rango, UMBRAL, AFINADO, PERFECTO, ROCE
+  TRAMOS_RODAR, mandaRodar, RANGOS, rango, UMBRAL, AFINADO, PERFECTO, ROCE,
+  auditar, codigoDe
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -366,6 +367,17 @@ function correr (id) {
     ['el mapa sube y baja de verdad (rango > medio octava)',
       Math.max(...NOTAS.filter(k => !k.silencio).map(k => k.y)) -
       Math.min(...NOTAS.filter(k => !k.silencio).map(k => k.y)) > 0.15, ''],
+
+    // EL AUDITOR, QUE ES EL MISMO QUE VE EL JUGADOR. `auditar()` es lo que el
+    // modo debug pinta sobre el mapa; exigirlo aca ata las dos puntas: lo que
+    // corta el build y lo que se ve en pantalla no pueden decir cosas distintas.
+    // Y da el codigo de la nota, asi que la falla se abre en `compases` sin
+    // buscar: no dice "hay un salto imposible", dice cual.
+    ['el auditor no encuentra nada GRAVE (lo mismo que marca el modo debug)',
+      !auditar().filter(a => a.grave).length,
+      auditar().filter(a => a.grave).map(a => `${codigoDe(NOTAS[a.i])} ${a.tipo}: ${a.txt}`)
+        .join(' · ') ||
+        `${auditar().filter(a => !a.grave).length} avisos (saltos justos, nada roto)`],
 
     // --- el nivel se puede tocar ---------------------------------------------
     // se arranca arriba y el primer gesto es tocar una nota, no trepar desde la red

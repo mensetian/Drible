@@ -70,6 +70,43 @@ se agrega, se reparte.
 | volver una pantalla | `Esc` |
 | calibrar el desfase | `C` — si tu pantalla o tus auriculares llegan tarde |
 | **modo fácil** (con red) | `F`, o en configuración |
+| **modo debug** | `Ctrl+D` — rotula la partitura · `Ctrl+C` copia el código de acá |
+
+### El modo debug: poder señalar el bug
+
+Describir un bug (*"cuando salta después del túnel se traba"*) obliga al que lo
+arregla a salir a buscar el lugar. `Ctrl+D` pone la partitura en pantalla como se
+numera una de verdad: el nombre de cada sección donde empieza, una **barra de
+compás** con su número, y sobre cada nota el **tiempo** en que cae.
+
+Eso da una dirección: `NEBULOSA·c37·t2.5` es el tiempo 2.5 del compás 37 — la
+línea 37 de `compases`, la que ya lleva `// 37` al costado en `juego.js`. No es el
+índice de la nota a propósito: el índice se corre entero en cuanto se edita un
+compás de más arriba, y el código de ayer apuntaría hoy a otra nota — justo cuando
+el archivo se está editando es cuando el código hace falta.
+
+Con el ratón encima de una nota se abre su **expediente** (altura, duración, riel,
+zonas que la cubren, si la afinaste, las vecinas), y `Ctrl+C` lo copia entero al
+portapapeles y a la consola. Sin el ratón encima copia el de donde estás parado,
+que es el caso real: el bug acaba de pasar y las dos manos están en las teclas.
+
+Y además **marca solo lo raro**. `auditar()` recorre la canción entera y pinta la
+nota donde algo no cierra: **‼ rojo** = no se puede tocar (la tabla se mete en la
+siguiente, el salto no llega cayendo, el pulso cae en el canto o bajo un techo),
+**⚠ ámbar** = se puede pero por poco. También caza los dos errores de edición que
+no fallan nunca y no se ven: una **zona muda** (se corrió una sección, la zona de
+viento se quedó donde estaba, y el viento dejó de soplar) y una **sección corrida**
+que empieza donde no arranca ninguna nota. El panel lleva la cuenta y el código del
+próximo problema hacia adelante, para no salir a buscarlo.
+
+Ese auditor es **el mismo** que corre `prueba.js`: una prueba exige que no
+encuentre nada grave. Escrito dos veces se habrían separado a la primera vez que
+se afinara un umbral, y el juego habría empezado a perdonar lo que el build
+castiga.
+
+Es un **calco**: se dibuja al final, encima de todo, y no toca la simulación ni el
+audio ni un solo parámetro. Un modo debug que cambia el timing es la peor clase
+de bug — el que solo existe cuando lo mirás.
 
 Dos canciones, cada una con su mapa: **ESFERA** (100 BPM), que enseña el gesto, y
 **AURORA · EL VIAJE**, la canción entera del estudio — 64 compases que van por

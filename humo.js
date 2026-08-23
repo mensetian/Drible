@@ -339,5 +339,57 @@ probar('el mundo no se despega del reloj del audio', () => {
   exigir(peor < 0.05, `el mundo se corrio ${peor.toFixed(3)} tiempos del audio`);
 });
 
+// EL MODO DEBUG. Es un calco encima del juego, y su unico deber es no romper
+// nada: se dibuja sobre CADA nota de la cancion --silencios, rieles, la primera
+// y la ultima-- y cualquier vecina que no exista o cualquier zona vacia lo
+// tiraria abajo. Como se prende con una tecla y no lo toca ninguna otra prueba,
+// se rompe en silencio y aparece justo cuando hace falta: reportando un bug.
+const ctrl = (key, code) => disparar('keydown',
+  { key, code, ctrlKey: true, preventDefault () {}, repeat: false });
+
+probar('el modo debug rotula la cancion entera sin romper nada', () => {
+  // hasta el menu de verdad y de ahi a EL VIAJE: es la cancion con tunel,
+  // pistones, viento y agua, o sea donde el calco tiene algo que decir
+  disparar('keydown', { key: 'Escape', code: 'Escape', preventDefault () {}, repeat: false });
+  correrCuadros(3);
+  disparar('keydown', { key: 'm', code: 'KeyM', preventDefault () {}, repeat: false });
+  correrCuadros(5);
+  exigir(dijo('ELEGÍ TU CANCIÓN'), 'no se llego al menu para elegir el viaje');
+  disparar('keydown', { key: '2', code: 'Digit2', preventDefault () {}, repeat: false });
+  correrCuadros(20);
+  // el volcado a consola es parte del copiado; aca solo estorba
+  const log = console.log; console.log = () => {};
+  try { probarDebug(); } finally { console.log = log; }
+});
+
+function probarDebug () {
+  ctrl('d', 'KeyD');
+  correrCuadros(6);
+  exigir(dijo('Ctrl+C copia'), 'el modo debug no dibujo su panel');
+  // toda la cancion: se salta de seccion en seccion para pasar por los tramos
+  // raros (tunel, pistones, el silencio largo, la vuelta final)
+  for (let i = 0; i < 14; i++) {
+    disparar('keydown', { key: 'ArrowRight', preventDefault () {}, repeat: false });
+    correrCuadros(25);
+    disparar('pointermove', { offsetX: 400 + i * 20, offsetY: 300 + i * 9 });
+    correrCuadros(4);
+    ctrl('c', 'KeyC');            // copiar en cualquier punto, con y sin raton encima
+    correrCuadros(2);
+  }
+  exigir(dijo('·c'), 'ningun codigo de nota llego a la pantalla');
+  exigir(dijo('AMANECER') || dijo('VUELO') || dijo('MOTOR'),
+    'ninguna seccion del viaje se rotulo');
+}
+
+probar('el modo debug se apaga y no deja rastro', () => {
+  ctrl('d', 'KeyD');
+  correrCuadros(3);
+  textos.length = 0;
+  correrCuadros(8);
+  exigir(!dijo('Ctrl+C copia'), 'el panel del debug siguio dibujandose apagado');
+  exigir(dijo('Intento'), 'apagar el debug se llevo puesto el HUD');
+  exigir(localStorage.getItem('drible:debug') === '0', 'el modo debug no recordo que quedo apagado');
+});
+
 console.log(fallas ? `\n${fallas} FALLAS` : '\nsin fallas');
 process.exit(fallas ? 1 : 0);
