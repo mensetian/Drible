@@ -13,7 +13,7 @@ import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
   CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, ZONAS_PISTON, Y_GRAVE, HOLGURA,
   TRAMOS_RODAR, mandaRodar, RANGOS, rango, UMBRAL, AFINADO, PERFECTO, ROCE,
-  auditar, codigoDe
+  auditar, codigoDe, primeraNotaDe, SECCIONES
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -378,6 +378,21 @@ function correr (id) {
       auditar().filter(a => a.grave).map(a => `${codigoDe(NOTAS[a.i])} ${a.tipo}: ${a.txt}`)
         .join(' · ') ||
         `${auditar().filter(a => !a.grave).length} avisos (saltos justos, nada roto)`],
+
+    // ENSAYAR UNA SECCION EMPIEZA EN SU PRIMERA NOTA. Suena obvio y no lo era:
+    // saltarA buscaba la primera nota con `x0 >= el beat de la seccion`, y `x0`
+    // es donde arranca la TABLA, que empieza 0.22 antes del pulso. La nota que
+    // cae justo EN el beat quedaba descartada por esos 0.22 y el salto entraba
+    // con la nota de entrada ya perdida. Pasaba en 21 de 23 secciones, y en
+    // AIRE (una redonda) se comia el compas entero. No lo veia nadie: el tramo
+    // se juega igual, solo que empezado tarde.
+    ['ensayar una seccion arranca en SU primera nota, no en la siguiente',
+      SECCIONES.every(z => {
+        const k = primeraNotaDe(z.x0);
+        const antes = NOTAS.filter(n => !n.silencio && n.xm >= z.x0 && n.xm < k.xm);
+        return !antes.length;
+      }),
+      SECCIONES.map(z => `${z.n}→${codigoDe(primeraNotaDe(z.x0))}`).join(' · ')],
 
     // --- el nivel se puede tocar ---------------------------------------------
     // se arranca arriba y el primer gesto es tocar una nota, no trepar desde la red

@@ -1393,6 +1393,20 @@ export function auditar () {
   return f.sort((a, b) => a.x - b.x);
 }
 
+// LA PRIMERA NOTA DE UN TRAMO, buscada por el PULSO. Parece un detalle y es el
+// que rompia ensayar una seccion: la tabla de una nota empieza ANTES del pulso
+// (ver ANTES, mas arriba), asi que preguntar "cual es la primera nota con
+// x0 >= 164" descarta justamente la nota que cae EN 164 --su tabla arranca en
+// 163.78-- y devuelve la siguiente. El salto entraba a la seccion con la nota
+// de entrada ya perdida, y en el peor caso --NEBULOSA, AIRE-- se comia la
+// ligadura larga que ES la seccion.
+//
+// Va exportada y con nombre porque la regla no se puede sostener con cuidado:
+// `x0` es fisica (donde se aterriza) y `xm` es musica (donde suena). Cada vez
+// que se le hace una pregunta MUSICAL a `x0` sale una respuesta corrida 0.22.
+export const primeraNotaDe = bx =>
+  NOTAS.find(n => !n.silencio && n.xm >= bx - 1e-9) || NOTAS[0];
+
 export const codigoDe = k => {
   // manda `xm` (el PULSO), no `x0`: la plataforma arranca 0.22 tiempos antes
   // para que se pueda aterrizar, y con x0 la primera nota de cada seccion caia
@@ -3770,8 +3784,10 @@ function arrancarNavegador () {
   let avisoSeccion = null;
   function saltarA (bx) {
     rielCerrar(); eRielCerrar();
-    const k = NOTAS.find(n => !n.silencio && n.x0 >= bx - 0.001) || NOTAS[0];
+    const k = primeraNotaDe(bx);
     s = crearSim({ sinRed });
+    // se ATERRIZA en la tabla (que empieza antes del pulso): asi se entra
+    // rodando y se golpea al cruzar la marca, igual que en el resto del juego
     s.x = Math.max(0, k.x0);
     s.estado = 'apoyada'; s.tecla = k.i; s.y = k.y; s.saliendoDe = -1;
     t0 = ac.currentTime - desfase - s.x * SPB;   // el juego va s.x; el audio, adelante
@@ -3782,7 +3798,10 @@ function arrancarNavegador () {
     cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
     leccionViva = null; rachaRota = null; avisoSeccion = null;
-    ultSeccion = SECCIONES.filter(z => z.x0 <= s.x).length - 1;   // el salto no se auto-anuncia
+    // el salto no se auto-anuncia (irASeccion ya puso su cartel). Se cuenta por
+    // el PULSO de la nota y no por s.x: s.x cae 0.22 antes, o sea todavia en la
+    // seccion anterior, y la que acabas de elegir se anunciaba sola encima.
+    ultSeccion = SECCIONES.filter(z => z.x0 <= k.xm).length - 1;
     finSonado = false;
   }
   function irASeccion (d) {
