@@ -160,14 +160,17 @@ const CANCIONES = {
       'A4!:1 A4:.5 A4:.5 G4:.5 E4:.75 E5!:.75',           // 25  Am  y otra vuelta
       'G4!:1 G4:.5 G4:.5 B4:.5 G4:.75 D5!:.75',           // 26  G
       'F4!:1 A4:.5 A4:.5 C5:.5 A4:.75 C5!:.75',           // 27  F
-      'E4!:1 G#4:.5 B4:.5 G#4:.5 E4:.75 B4!:.75',         // 28  E
+      // EL SALTO DEL MAR: la cadencia ya se dijo entera en el 24. Aca el bajo
+      // deja la tonica y se va todo -- tres tiempos de agua, la esfera picando
+      // sobre el mar, y el ultimo pique la manda al build.
+      'E4!:1 -:3',                                        // 28  E
       // GRAVEDAD -- el segundo build: puro bajo trepando, y los PISTONES
       // armandose a la vista. Aca la urgencia empuja a adelantarse, que es
       // justo lo que el martillo cobra.
       'D4!:1 D4!:1 F4!:1 D4!:1',                          // 29  Dm
       'D4!:1 F4!:1 A4!:1 D5!:1',                          // 30  Dm
       'F4!:1 A4!:1 C5!:1 A4!:1',                          // 31  F
-      'E4!:1 G#4!:1 B4!:1 E5!:1',                         // 32  E   la escalera al drop
+      'E4!:.5 G#4!:.25 B4!:.25 -:3',                      // 32  E   la escalera, y el aire
       // DESPEGUE II -- el coro vuelve, y ya te lo sabes: por eso los martillos
       // caen sobre las notas que anticipas.
       'E5:.75 E5:.75 C5:.5 A4:1 C5:.5 D5:.5',             // 33  Am
@@ -294,7 +297,8 @@ const CANCIONES = {
     // El marcado `lanza` es el ultimo de una tanda: en vez de picar en el
     // lugar, te devuelve a la linea de vuelo de la proxima tecla -- el golpe
     // que te mete de nuevo en la cancion.
-    tambores: [1, 2, 3, 194, { x: 195, lanza: true }, 261, 262, 263],
+    tambores: [1, 2, 3, 114, { x: 115, lanza: true },
+      194, { x: 195, lanza: true }, 261, 262, 263],
     // EL MAR DEL VUELO: el verso entero se navega sobre agua. La red ahi es
     // superficie -- se dibuja como olas y recibe con chapuzon, no con golpe.
     aguas: [{ x0: 84, x1: 116 }],
@@ -321,7 +325,16 @@ const CANCIONES = {
     // se cruza VOLANDO -- alto, lento, y justo en el silencio que el redoble
     // acaba de dejar. Volar el corte y caer sobre el crash de SUPERNOVA es el
     // mejor segundo de la cancion, y lo hace tu mano.
-    vientos: [{ x0: 209.4, x1: 212.6, g: 0.4 }],
+    // EL VIENTO SOLO SIRVE DONDE HAY QUE CRUZAR UN VACIO. Con el destino
+    // fijo, menos gravedad da un arco MAS PLANO, no mas alto: lo unico que el
+    // aire puede regalar es convertir en vuelo un silencio que de otro modo
+    // habria que cruzar rodando por abajo. Por eso las dos columnas caen sobre
+    // los dos silencios largos de la cancion, y no sobre cualquier lado --
+    // ambos, ademas, en la puerta de un drop.
+    vientos: [
+      { x0: 128.4, x1: 132.6, g: 0.45 },     // la escalera vuela a DESPEGUE II
+      { x0: 209.4, x1: 212.6, g: 0.4 }       // EL GRAN VUELO, a SUPERNOVA
+    ],
     // EL TUNEL. Los dos compases del redoble de GRAVEDAD se atraviesan por
     // adentro: la banda se AHOGA (pasabajos sobre el fondo), tu bajo sigue
     // nitido -- tu instrumento viaja con vos -- y el riser trepa limpio por
@@ -746,8 +759,9 @@ function tramosRodar () {
   for (const n of NOTAS) {
     if (!n.silencio || n.piso || n.volado) continue;
     const sig = NOTAS[n.i + 1];
+    const ant = NOTAS[n.i - 1];
     r.push({
-      x0: +(n.x0 - 0.3).toFixed(3),
+      x0: +Math.min(n.x0 - 0.3, ant && !ant.silencio ? ant.xm - 0.05 : Infinity).toFixed(3),
       x1: +((sig ? sig.x0 : n.x0 + n.dur) + 0.2).toFixed(3)
     });
   }
@@ -860,7 +874,7 @@ const calcularTechos = () => NOTAS
     !TAMBORES.some(tb => !tb.piso && tb.x > n.x0 && tb.x < n.x0 + n.dur))
   .map(n => {
     const ant = NOTAS[n.i - 1];
-    const caida = ant && !ant.silencio ? Math.sqrt(2 * ant.y / G) : 0.4;
+    const caida = ant && !ant.silencio ? Math.sqrt(2 * ant.y / gravedadEn(ant.xm)) : 0.4;
     return {
       x0: +(n.x0 + caida + 0.25).toFixed(3),
       x1: +(reenganche(n) - 0.35).toFixed(3),
@@ -1330,7 +1344,7 @@ export function elegirCancion (id) {
       // mucho antes) y el riel queda MAS ARRIBA, asi que la esfera le pasa por
       // debajo. Un fallo costaba la corrida entera en vez de la nota.
       const ant = NOTAS[n.i - 1];
-      const caida = ant && !ant.silencio ? Math.sqrt(2 * ant.y / G) + 0.25 : 0.7;
+      const caida = ant && !ant.silencio ? Math.sqrt(2 * ant.y / gravedadEn(ant.xm)) + 0.25 : 0.7;
       return { x0: +(n.x0 + Math.max(0.7, caida)).toFixed(3), x1: +(n.x1 - 0.1).toFixed(3) };
     })
     // si de tan corrido el abismo ya no es un abismo, no hay abismo
@@ -1656,7 +1670,7 @@ export function paso (s, dt) {
     // reenganche tiene su ventana, y dejarla pasar es haberse caido
     if (s.sinRed && !mandaRodar(s.x)) { s.viva = false; s.causa = 'red'; return; }
     for (const tb of TAMBORES) {
-      if (tb.piso || s.tamboresHechos.has(tb.i) || s.x < tb.x) continue;
+      if (tb.piso || s.tamboresHechos.has(tb.i) || s.x < tb.x || s.x - tb.x > 0.4) continue;
       s.tamboresHechos.add(tb.i);
       s.eventos.push({ tipo: 'tambor', x: s.x, y: 0, i: tb.i, lanza: tb.lanza });
       s.estado = 'aire'; s.tecla = -1; s.saliendoDe = -1; s.soltoEn = null;
@@ -1703,6 +1717,10 @@ export function paso (s, dt) {
   // golpe que reclamo queda mudo, y eso ahora es el backbeat: se oye faltar.
   // Solo el que ACABA de expirar emite: tras un salto de seccion, los que
   // quedaron muy atras se marcan en silencio.
+  // los parches que quedaron atras se dan por pasados: pendientes, saltaban
+  // en la proxima rodada, a compases de distancia de donde vivian
+  for (const tb of TAMBORES)
+    if (!tb.piso && !s.tamboresHechos.has(tb.i) && s.x > tb.x + 0.4) s.tamboresHechos.add(tb.i);
   for (const p of PISTONES) {
     if (s.pistones.has(p.x) || s.x <= p.x1 + 0.02) continue;
     s.pistones.add(p.x);
@@ -3321,10 +3339,18 @@ function arrancarNavegador () {
           chispas(e.x, 0, 5);
         }
         squash = 0.9;
-        // la primera caida merece su leccion: la red no es el final, es un
-        // toque de distancia de la cancion. Dos veces y basta -- al que no
-        // reacciona no lo convence la tercera, y el cartel pasa a ser ruido.
-        if (!aprendidas.has('red') && ++vecesRed <= 2)
+        // EN UN CORTE EL CARTEL MENTIRIA. Ahi tocar no reengancha --el mapa
+        // manda, la esfera driblea sola-- y el cartel de siempre mandaba a
+        // hacer justo lo que no hay que hacer. Aca va el suyo, una vez.
+        if (parcheAdelante(s)) {
+          if (!aprendidas.has('parche')) {
+            aprendidas.add('parche');
+            leccionViva = { txt: 'DEJALA PICAR — este corte lo toca ella', t: performance.now() };
+          }
+        } else if (!aprendidas.has('red') && ++vecesRed <= 2)
+          // la primera caida merece su leccion: la red no es el final, es un
+          // toque de distancia de la cancion. Dos veces y basta -- al que no
+          // reacciona no lo convence la tercera, y el cartel pasa a ser ruido.
           leccionViva = { txt: 'TOCÁ para volver a la canción', t: performance.now() };
       } else if (e.tipo === 'aire' || e.tipo === 'saltoRed') {
         ruido(ac.currentTime, 0.04, 0.03, 'highpass', 3000);
