@@ -953,9 +953,10 @@ const TIERRA = {
         const xw = (i + 0.55 * (e.azar(i * 7 + e.k) - 0.5)) * paso;
         if (e.azar(i * 13 + e.k * 3) > 0.22 + 0.78 * e.grumo(xw, e.k)) continue;
         const r = e.azar(i * 3 + e.k);
-        const hh = e.alto * (0.26 + 0.44 * r) * (e.azar(i * 17) > 0.94 ? 1.5 : 1);
-        const an = hh * 0.30;
         const X = e.px(xw), Y = e.sueloY(xw) + 2;
+        const hh = e.techo(Y, e.alto * (0.26 + 0.44 * r) *
+          (e.azar(i * 17) > 0.94 ? 1.5 : 1));
+        const an = hh * 0.30;
         cx.fillStyle = `rgba(${e.col},1)`;
         // un abeto no es un triangulo: son tres faldas montadas, y esa silueta
         // escalonada es lo que lo hace leer como arbol y no como cono
@@ -987,9 +988,9 @@ const TIERRA = {
         if (e.azar(i * 11 + e.k * 7) > 0.3 + 0.7 * e.grumo(xw, e.k + 1)) continue;
         const r = e.azar(i * 1.7 + e.k);
         const torre = e.azar(i * 17 + e.k) > 0.9;
-        const hh = e.alto * (0.2 + 0.62 * r) * (torre ? 1.75 : 1);
         const an = Math.max(3, paso * e.esc * (0.42 + 0.3 * e.azar(i * 2)));
         const X = e.px(xw), Y = e.sueloY(xw) + 2;
+        const hh = e.techo(Y, e.alto * (0.2 + 0.62 * r) * (torre ? 1.75 : 1));
         cx.fillStyle = `rgba(${e.col},1)`;
         cx.fillRect(X - an / 2, Y - hh, an, hh + e.hondo);
         // el canto iluminado: una sola linea, y el bloque deja de ser un
@@ -1032,10 +1033,13 @@ const TIERRA = {
         const xw = (i + 0.6 * (e.azar(i * 3 + e.k) - 0.5)) * paso;
         const r = 0.45 + 0.55 * e.azar(i * 3.7 + e.k);
         const macizo = 0.5 + 0.5 * e.grumo(xw, e.k + 2);
-        cum.push({ xw, y: e.sueloY(xw) - e.alto * r * macizo, r: r * macizo });
+        const yg = e.sueloY(xw);
+        cum.push({ xw, y: yg - e.techo(yg, e.alto * r * macizo), r: r * macizo });
       }
-      const cima = Math.min(...cum.map(c => c.y));
-      const gM = cx.createLinearGradient(0, cima, 0, e.pie + e.hondo * 0.1);
+      // el techo del degradado sale de la cumbre MAS ALTA POSIBLE, no de la que
+      // se ve: atado a lo visible se corria solo cada vez que una cumbre entraba
+      // o salia de cuadro, y toda la ladera cambiaba de tono de golpe
+      const gM = cx.createLinearGradient(0, e.pie - e.alto, 0, e.pie + e.hondo * 0.1);
       const cl = e.col.split(',').map(Number);
       gM.addColorStop(0, `rgba(${cl.map(v => Math.round(Math.min(255, v * 1.5 + 12))).join(',')},1)`);
       gM.addColorStop(0.55, `rgba(${e.col},1)`);
@@ -1079,8 +1083,8 @@ const TIERRA = {
       // las dunas son una sola curva suave por plano: lo que las hace dunas es
       // la CRESTA iluminada, el filo donde el viento apila la arena
       const fr = 0.42 + 0.3 * e.k;
-      const lomo = xw => e.sueloY(xw) - e.alto *
-        (0.30 + 0.30 * Math.sin(xw * fr + e.k) * Math.cos(xw * fr * 0.37 + 1.1));
+      const lomo = xw => e.sueloY(xw) - e.techo(e.sueloY(xw), e.alto *
+        (0.30 + 0.30 * Math.sin(xw * fr + e.k) * Math.cos(xw * fr * 0.37 + 1.1)));
       const cd = e.col.split(',').map(Number);
       const gD = cx.createLinearGradient(0, e.pie - e.alto * 0.6, 0, e.pie + e.hondo * 0.1);
       gD.addColorStop(0, `rgba(${cd.map(v => Math.round(Math.min(255, v * 1.45 + 10))).join(',')},1)`);
@@ -1185,7 +1189,7 @@ export let PASOS_PISTON = new Set();   // pasos reclamados por caños: llevan cr
 function pistones () {
   const r = [];
   const spec = CANCIONES[CANCION_ID].estudio;
-  for (const z of (CANCIONES[CANCION_ID].pistones || [])) {
+  for (const [zi, z] of (CANCIONES[CANCION_ID].pistones || []).entries()) {
     let n = 0;
     for (const k of NOTAS) {
       if (k.silencio || k.xm < z.x0 || k.xm >= z.x1) continue;
@@ -1297,9 +1301,14 @@ function pistones () {
       if (++n % (z.cada || 1)) continue;
       PASOS_BATERIA.add(mr.p);
       PASOS_PISTON.add(mr.p);
-      r.push({ x: mr.x, x0: +(mr.x - 0.15).toFixed(3), x1: +(mr.x + 0.15).toFixed(3), y: mr.tope, instr: mr.golpe, paso: mr.p });
+      r.push({ x: mr.x, x0: +(mr.x - 0.15).toFixed(3), x1: +(mr.x + 0.15).toFixed(3), y: mr.tope, instr: mr.golpe, paso: mr.p, zona: zi });
     }
   }
+  // cada caño sabe cuantos son en su zona: el que completa el pleno paga el
+  // cierre (fill + crash), y eso se decide al pisarlo, no al final de la zona
+  const porZona = {};
+  for (const p of r) porZona[p.zona] = (porZona[p.zona] || 0) + 1;
+  for (const p of r) p.deZona = porZona[p.zona];
   return r;
 }
 
@@ -1536,6 +1545,10 @@ export function crearSim (opts = {}) {
     // nadie los tocara. `pistonazos` cuenta solo los de contacto real -- que es
     // lo que hay que mirar para saber si el jugador ENTENDIO el caño.
     pistones: new Set(), pistonazos: 0,
+    // la CADENA: pisotones seguidos sin dejar escapar ningun caño. Escala el
+    // excedente musical de cada pisoton; perder o rozar uno la enfria.
+    // `pistonesZona` cuenta pisotones por zona: el pleno paga fill + crash.
+    cadenaPiston: 0, pistonesZona: {},
     eventos: []
   };
 }
@@ -1837,6 +1850,7 @@ export function paso (s, dt) {
   for (const p of PISTONES) {
     if (s.pistones.has(p.x) || s.x <= p.x1 + 0.02) continue;
     s.pistones.add(p.x);
+    s.cadenaPiston = 0;               // se escapo uno: la cadena se enfria
     if (s.x - p.x1 < 0.5)
       s.eventos.push({ tipo: 'piston', modo: 'perdido', x: p.x, y: p.y, instr: p.instr, paso: p.paso });
   }
@@ -1872,11 +1886,19 @@ function pisarPiston (s, yAntes) {
     if (s.x <= p.x0 || s.x >= p.x1) continue;
     if (yAntes < p.y || s.y > p.y) continue;
     s.pistones.add(p.x); s.pistonazos++;
+    // PISARLO CUENTA. Era el unico acierto del juego que no movia ningun
+    // numero: rozarlo costaba la racha y clavarlo no daba nada. Ahora suma
+    // como una limpia, con el mismo hito cada 8.
+    s.racha++; s.mejorRacha = Math.max(s.mejorRacha, s.racha);
+    if (s.racha % 8 === 0) s.eventos.push({ tipo: 'hito', n: s.racha, x: s.x, y: p.y });
+    s.cadenaPiston++;
+    s.pistonesZona[p.zona] = (s.pistonesZona[p.zona] || 0) + 1;
     s.y = p.y;
     // te deja EXACTAMENTE en la linea de vuelo hacia la proxima tecla: si
     // acertarle te descolocara, acertarle seria un castigo
     s.vy = haciaLaProxima(s, s.vy);
-    s.eventos.push({ tipo: 'piston', modo: 'encima', x: s.x, y: p.y, instr: p.instr, paso: p.paso });
+    s.eventos.push({ tipo: 'piston', modo: 'encima', x: s.x, y: p.y, instr: p.instr, paso: p.paso,
+      cadena: s.cadenaPiston, completa: s.pistonesZona[p.zona] === p.deZona });
     return;
   }
 }
@@ -1889,6 +1911,7 @@ function rozarPiston (s) {
     if (s.pistones.has(p.x)) continue;
     if (s.x <= p.x0 || s.x >= p.x1) continue;
     s.pistones.add(p.x); s.pistonazos++;
+    s.cadenaPiston = 0;               // el rescate no es un pisoton
     if (s.racha >= 6) s.eventos.push({ tipo: 'rachaRota', n: s.racha, x: s.x, y: s.y });
     s.racha = 0;
     s.bloqueo = Math.max(s.bloqueo, s.x + CASTIGO);
@@ -3325,11 +3348,47 @@ function arrancarNavegador () {
             // tarde, y una corchea con puntillo corrida se oye como un tropiezo.
             // El paso del caño es un dato de la partitura -- desde ahi el eco
             // cae donde tiene que caer aunque la mano no.
-            const g = ac.createGain(); g.gain.value = 0.3; g.connect(solo);
+            // Y AHORA ES EXCEDENTE DE VERDAD. A 0.3 se hundia en el arreglo y
+            // el premio de pisar era la cancion "normal" -- o sea ninguno:
+            // acertar sonaba igual que si el caño no existiera. Sube a 0.45 y
+            // trae una segunda repeticion que se apaga, la cola de delay que
+            // el fondo nunca toca solo: pisar suena MAS que la cancion.
+            const g = ac.createGain(); g.gain.value = 0.45; g.connect(solo);
             eTambor(instr, Math.max(ac.currentTime + 0.02,
               t0 + (e.paso / 4 + 0.75) * SPB), g);
+            const g2 = ac.createGain(); g2.gain.value = 0.22; g2.connect(solo);
+            eTambor(instr, Math.max(ac.currentTime + 0.02,
+              t0 + (e.paso / 4 + 1.5) * SPB), g2);
             // el destello del bombo es del BOMBO: un tom no lo enciende
             if ('kKx'.includes(instr)) golpesVista.push(ac.currentTime);
+          }
+          // LA CADENA SE OYE SUBIR. Cada pisoton consecutivo agrega una capa
+          // que el arreglo no toca solo: del segundo, un hat abierto a
+          // contratiempo; del tercero, un shimmer de semicorcheas. Es el
+          // jugador bombeando el build con los caños -- dejar escapar uno
+          // enfria las capas, y eso tambien se oye.
+          const enGrilla = dt => Math.max(ac.currentTime + 0.02, t0 + (e.paso / 4 + dt) * SPB);
+          if ((e.cadena || 0) >= 2) {
+            const gh = ac.createGain(); gh.gain.value = 0.3; gh.connect(solo);
+            eTambor('H', enGrilla(0.5), gh);
+          }
+          if ((e.cadena || 0) >= 3) {
+            const gs = ac.createGain(); gs.gain.value = 0.18; gs.connect(solo);
+            eTambor('h', enGrilla(0.25), gs); eTambor('h', enGrilla(1.25), gs);
+          }
+          // EL PLENO DE LA ZONA: pisaste TODOS los caños del build. Fill de
+          // toms subiendo al tiempo siguiente y crash en el tiempo -- el
+          // mismo crash del drop, con su flash y su estrella fugaz: el juego
+          // ya enseño que ese sonido significa "esto explota", y aca explota
+          // por vos.
+          if (e.completa) {
+            const gf = ac.createGain(); gf.gain.value = 0.5; gf.connect(solo);
+            eTambor('t', enGrilla(0.25), gf);
+            eTambor('T', enGrilla(0.5), gf);
+            eTambor('u', enGrilla(0.75), gf);
+            const tCrash = enGrilla(1);
+            eCrash(tCrash); crashVista.push(tCrash);
+            avisos.push({ x: e.x, y: e.y + 0.12, t: performance.now(), chueca: false, suc: 0, txt: 'TODOS LOS CAÑOS' });
           }
           // SIN FOLEY ENCIMA. Habia un siseo agudo (ruido pasa-altos a 2.4k) y
           // un bombazo de 90 Hz pegados al golpe: dos sonidos que no son de la
@@ -3340,11 +3399,14 @@ function arrancarNavegador () {
           // que no desafinan nada.
           ruido(ac.currentTime, 0.025, 0.05, 'lowpass', 800);
           // el cuerpo entero lo siente: hit-stop, anillo, el mundo pisado
-          retencion = 0.09;
+          retencion = e.completa ? 0.13 : 0.09;
           aros.push({ x: e.x, y: e.y, t: performance.now() });
           destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
-          chispas(e.x, e.y, 8, true, C.esferaRGB);
-          chispas(e.x, e.y, 8, true, C.impulsoRGB);
+          // las chispas crecen con la cadena: el tercer pisoton seguido SE VE
+          // mas grande que el primero, no solo se oye
+          const nCh = 8 + 3 * Math.min(4, (e.cadena || 1) - 1);
+          chispas(e.x, e.y, nCh, true, C.esferaRGB);
+          chispas(e.x, e.y, nCh, true, C.impulsoRGB);
           pump = 1; pisada = 1;
           cabezas.set(e.paso, { t: performance.now(), modo: 'encima' });
         } else {
@@ -5177,12 +5239,23 @@ function arrancarNavegador () {
         // entero y al horizonte casi no lo toca
         const hundir = pisada * pisada * 5 * c.l;
         // Los puntos PRIMERO y el trazo despues: para redondear una cresta hay
-        // que conocer al vecino, y ademas hace falta uno de cada lado FUERA de
-        // la pantalla. Sin eso la silueta arrancaba en el primer pico visible y
-        // el borde izquierdo era un tajo diagonal que aparecia y desaparecia
+        // que conocer al vecino, y ademas hacen falta VARIOS de cada lado FUERA
+        // de la pantalla. Sin eso la silueta arrancaba en el primer pico visible
+        // y el borde izquierdo era un tajo diagonal que aparecia y desaparecia
         // solo -- justo el tipo de movimiento que delata que esto es un dibujo.
+        //
+        // CUANTOS, Y POR QUE MAS DE UNO. Guardando un solo punto de cada lado
+        // las sierras BRINCABAN al pasarlas: la curva se traza por los puntos
+        // medios, asi que el tramo que arranca en el primer punto llega hasta
+        // el medio de los DOS siguientes -- mas de un pico adentro de la
+        // pantalla. Cuando el de mas atras se caia de la lista, ese tramo
+        // entero cambiaba de forma en un cuadro: un salto seco justo donde el
+        // jugador acaba de pasar. Con tres de cada lado el relevo ocurre
+        // siempre fuera de cuadro, y la cresta corre lisa.
+        const MARGEN = 3;
         const pts = [];
-        let previo = null;
+        const cola = [];
+        let sobran = 0;
         for (let i = 0; i < NOTAS.length; i += c.salto) {
           const nn = NOTAS[i];
           if (nn.silencio) continue;
@@ -5191,39 +5264,52 @@ function arrancarNavegador () {
           // pasaje, asi que las cuatro siluetas no riman entre si
           const nh = NOTAS[(i + c.giro) % NOTAS.length];
           const Y = y0 - hundir - (c.base + (nh.silencio ? 0.1 : nh.y) * c.k) * esc;
-          if (X < -90) { previo = [X, Y]; continue; }
-          if (!pts.length && previo) pts.push(previo);
+          if (X < -90) {
+            cola.push([X, Y]);
+            if (cola.length > MARGEN) cola.shift();
+            continue;
+          }
+          if (!pts.length && cola.length) pts.push(...cola);
           pts.push([X, Y]);
-          if (X > w + 90) break;
+          if (X > w + 90 && ++sobran >= MARGEN) break;
         }
         if (pts.length < 2) continue;
         const ult = pts[pts.length - 1];
+        // los faldeos de los extremos arrancan fuera de cuadro salvo al
+        // principio y al final de la cancion, donde no hay mas partitura de
+        // donde sacarlos: ahi la silueta se prolonga plana hasta el borde
+        const izq = Math.min(-90, pts[0][0]);
+        const der = Math.max(w + 90, ult[0]);
         // LA CRESTA ES REDONDA. Uniendo los picos con rectas salia una sierra
         // de dientes, y una sierra de dientes iguales se lee como textura --como
         // ruido-- no como relieve: no hay nada que el ojo pueda SEGUIR mientras
         // se corre. Curvando por los puntos medios aparecen lomas, y una loma
         // si se sigue. Eso es lo que convierte el desplazamiento en viaje.
         const cresta = () => {
-          cx.moveTo(-90, pts[0][1]);
+          cx.moveTo(izq, pts[0][1]);
           cx.lineTo(pts[0][0], pts[0][1]);
           for (let i = 1; i < pts.length - 1; i++)
             cx.quadraticCurveTo(pts[i][0], pts[i][1],
               (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2);
           cx.lineTo(ult[0], ult[1]);
-          cx.lineTo(w + 90, ult[1]);
+          cx.lineTo(der, ult[1]);
         };
         cx.beginPath();
-        cx.moveTo(-90, y0 + 40); cx.lineTo(-90, pts[0][1]);
+        cx.moveTo(izq, y0 + 40); cx.lineTo(izq, pts[0][1]);
         cresta();
-        cx.lineTo(w + 90, y0 + 40);
+        cx.lineTo(der, y0 + 40);
         cx.closePath();
         // EL CUERPO SE FUNDE HACIA ARRIBA. Con relleno chato, cuatro capas
         // eran cuatro cartones apilados: la cresta medio disuelta en aire hace
         // que cada sierra pese menos sin perder ni un pico.
-        let topeC = pts[0][1];
-        for (const p of pts) if (p[1] < topeC) topeC = p[1];
+        //
+        // El techo del degradado sale de la NOTA MAS ALTA POSIBLE de la capa,
+        // no del pico que se ve: atado a lo visible, cada vez que un pico alto
+        // entraba o salia de la lista el degradado entero se corria de golpe
+        // -- el mismo brinco que la cresta, pero en el color.
         const aC = c.a * (0.55 + 0.45 * padLuz);
-        const gS = cx.createLinearGradient(0, topeC, 0, y0 - hundir + 24);
+        const gS = cx.createLinearGradient(0, y0 - hundir - (c.base + 0.7 * c.k) * esc,
+          0, y0 - hundir + 24);
         gS.addColorStop(0, `rgba(${rgbP},${aC * 0.5})`);
         gS.addColorStop(1, `rgba(${rgbP},${aC})`);
         cx.fillStyle = gS;
@@ -5306,6 +5392,23 @@ function arrancarNavegador () {
       // la linea del piso no se pinta NUNCA: esa oscuridad que se hunde es lo
       // que significa "aca te caes", y ningun paisaje puede robarle el lugar.
       const yTope = base + hondo * 0.10;
+      // EL TECHO ES BLANDO. Protegerla con un recorte y nada mas la defendia,
+      // si, pero al precio de GUILLOTINAR: los abetos altos del plano lejano y
+      // las torres de la ciudad llegaban ahi arriba y se cortaban todos a la
+      // misma altura, o sea una linea recta cruzando la pantalla de punta a
+      // punta -- el mismo alambre horizontal que delata el dibujo.
+      //
+      // Asi que el limite deja de ser un cuchillo y pasa a ser una COMPRESION:
+      // un bulto bajo conserva su altura casi intacta, y solo los que se
+      // acercan al techo se van achatando, sin llegar a tocarlo nunca. La
+      // cuenta es la suave de siempre --t / (1 + t^4)^(1/4)--: identidad
+      // mientras sobra lugar, asintota cuando no.
+      const techo = (yg, hh) => {
+        const lugar = yg - yTope;
+        if (lugar <= 0 || hh <= 0) return 0;
+        const t = hh / lugar;
+        return lugar * t / Math.pow(1 + t * t * t * t, 0.25);
+      };
       const tT = performance.now() / 1000;
       // AEROPERSPECTIVA. Lo lejano no es "lo mismo pero mas chico": es lo
       // mismo TEÑIDO DEL COLOR DEL CIELO y sin contraste. Y como el cielo de
@@ -5397,7 +5500,7 @@ function arrancarNavegador () {
           // anchos que los dibujos derivan de `paso * esc` quedan asi en
           // proporcion a su separacion EN PANTALLA, no a la del mundo.
           if (!P.soloLomo)
-            local.dibujo(cx, { a, b, k, P, pie, alto, col, filo, sueloY,
+            local.dibujo(cx, { a, b, k, P, pie, alto, col, filo, sueloY, techo,
               px: pxP, py, esc: esc * P.f, h, hondo, tT, azar, grumo });
           cx.restore();
         }
@@ -5406,11 +5509,19 @@ function arrancarNavegador () {
         // LA NIEBLA ENTRE PLANOS. Es el truco entero: una veladura del color
         // del cielo por delante de lo ya dibujado, y el plano siguiente se ve
         // mas nitido POR CONTRASTE, sin tocarle un solo color.
-        const nb = cx.createLinearGradient(0, pie + hondo * 0.05, 0, pie - alto);
+        // ...y no puede tener BORDES. Un rectangulo de veladura termina en una
+        // arista horizontal a lo ancho de toda la pantalla --se veia como una
+        // linea dibujada al fondo del valle--, asi que arriba nace en cero
+        // JUSTO en el borde del recorte (si naciera mas arriba, el recorte la
+        // cortaria a media opacidad y esa seria la linea) y abajo baja hasta el
+        // pie de la pantalla, donde ya no hay borde que ver: el plano siguiente
+        // se dibuja encima.
+        const nb = cx.createLinearGradient(0, pie + hondo * 0.05,
+          0, Math.max(pie - alto, yTope));
         nb.addColorStop(0, `rgba(${cieloRGB},${P.bruma * 1.3})`);
         nb.addColorStop(1, `rgba(${cieloRGB},0)`);
         cx.fillStyle = nb;
-        cx.fillRect(0, pie - alto, w, alto + hondo * 0.05);
+        cx.fillRect(0, yTope, w, h - yTope);
         // ...y jirones que se arrastran: una niebla perfectamente quieta es
         // un filtro encima del dibujo, no aire. Llevan una pizca del paralaje
         // de su plano, asi la niebla tambien viaja.
