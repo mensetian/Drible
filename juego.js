@@ -5460,9 +5460,35 @@ function arrancarNavegador () {
         // la rampa de los bordes: el perfil nace y muere DENTRO de su zona,
         // no donde lo corta la pantalla
         const env = xw => Math.max(0, Math.min(1, (xw - z.x0) / 4, (z.x1 - xw) / 4));
+        // LAS CUMBRES CUELGAN DE INDICES DEL MUNDO, NUNCA DE LA CAMARA. Aca
+        // estaba el brinco que quedaba. Los vertices se tomaban arrancando en
+        // `a`, que es el borde de la VENTANA --o sea que se corre con vos--, y
+        // la altura salia de azar(round(xw / paso)): al deslizarse el muestreo,
+        // ese redondeo cambiaba de indice y TODAS las cumbres se resorteaban
+        // juntas, cada 1.2 tiempos de avance.
+        //
+        // Y explica por que se veia donde se veia. Mientras el principio de la
+        // zona esta a la vista, `a` se clava en z.x0 --un numero fijo-- y el
+        // perfil no se mueve un pelo; el brinco arranca EXACTAMENTE cuando la
+        // zona empieza a quedar atras y `a` pasa a colgar de la camara. Medido
+        // sobre el bosque: 0.00 px antes, 12.14 px de brinco en un cuadro
+        // despues, contra 0.66 px de movimiento propio.
+        //
+        // Con el indice tomado del mundo, la cumbre numero 12 es la misma
+        // cumbre siempre, se la mire desde donde se la mire. La ciudad ya lo
+        // hacia asi, y por eso era la unica que no brincaba.
+        const perfil = (paso, alto) => {
+          const i0 = Math.floor(a / paso), i1 = Math.ceil(b / paso);
+          cx.moveTo(pxH(i0 * paso), yHor);
+          for (let i = i0; i <= i1; i++) {
+            const xw = i * paso;
+            cx.lineTo(pxH(xw), yHor - alto(i, xw) * env(xw));
+          }
+          cx.lineTo(pxH(i1 * paso), yHor);
+        };
         cx.beginPath();
-        cx.moveTo(pxH(a), yHor);
         if (z.t === 'ciudad') {
+          cx.moveTo(pxH(a), yHor);
           for (let i = Math.ceil(a / 2); i * 2 <= b; i++) {
             const xw = i * 2;
             if (azar(i * 3.3) > 0.78) continue;       // baldios, tambien de lejos
@@ -5472,20 +5498,14 @@ function arrancarNavegador () {
             cx.lineTo(X, yHor); cx.lineTo(X, yHor - hh);
             cx.lineTo(X + an, yHor - hh); cx.lineTo(X + an, yHor);
           }
+          cx.lineTo(pxH(b), yHor);
         } else if (z.t === 'montania') {
-          for (let xw = a; xw <= b; xw += 4)
-            cx.lineTo(pxH(xw), yHor -
-              esc * (0.07 + 0.34 * azar(Math.round(xw / 4) * 3.7)) * env(xw));
+          perfil(4, i => esc * (0.07 + 0.34 * azar(i * 3.7)));
         } else if (z.t === 'desierto') {
-          for (let xw = a; xw <= b; xw += 0.8)
-            cx.lineTo(pxH(xw), yHor -
-              esc * (0.05 + 0.08 * (0.5 + 0.5 * Math.sin(xw * 0.5))) * env(xw));
+          perfil(0.8, (i, xw) => esc * (0.05 + 0.08 * (0.5 + 0.5 * Math.sin(xw * 0.5))));
         } else {                                      // bosque, tierra: monte bajo
-          for (let xw = a; xw <= b; xw += 1.2)
-            cx.lineTo(pxH(xw), yHor -
-              esc * (0.045 + 0.075 * azar(Math.round(xw / 1.2) * 2.3)) * env(xw));
+          perfil(1.2, i => esc * (0.045 + 0.075 * azar(i * 2.3)));
         }
-        cx.lineTo(pxH(b), yHor);
         cx.closePath();
         cx.fillStyle = `rgba(${rgbH},0.34)`;
         cx.fill();
