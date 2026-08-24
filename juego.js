@@ -2460,16 +2460,23 @@ function arrancarNavegador () {
   // tubo tiene dibujada y aterriza sola en la salida, que es lo que hace que
   // el cañon parezca estar apuntando de verdad.
   let entrada = null;
+  let canionEco = -1e9;             // cuando disparo: despues se apaga y se va
   const ENTRADA_T = 3;                // tiempos que dura el preambulo entero
   const ENTRADA_VUELO = 1;            // ...de los cuales el ultimo es el vuelo
-  const CANION_X = -1.35;             // a la izquierda de la salida, fuera de partitura
-  const CANION_BOCA = 0.30;           // altura de la boca sobre la salida
-  // La fisica del tiro, resuelta de una vez: sale de la boca, sube 0.55 mas y
-  // cae justo en la salida al cumplirse el tiempo de vuelo. De aca sale
-  // tambien el angulo del tubo -- el dibujo OBEDECE a la trayectoria.
-  const TIRO_G = 5.535, TIRO_VY = 2.47;
-  const TIRO_VX = -CANION_X / ENTRADA_VUELO;
-  const CANION_ANG = Math.atan2(TIRO_VY, TIRO_VX);
+  // LA GEOMETRIA SALE DE UN SOLO LUGAR y el dibujo la OBEDECE. Si el tubo y la
+  // parabola se calculan por separado, tarde o temprano la esfera sale por el
+  // costado del cañon y lo que se ve es una bola volando al lado de un adorno.
+  // Aca se declara el cañon --donde esta, cuanto mide, a que angulo apunta-- y
+  // el tiro se deriva: la boca del tubo ES el punto de partida, y la gravedad
+  // se elige para que el arco caiga exactamente en la salida.
+  const CANION_X = -1.45;             // el margen visible a la izquierda es 1.9
+  const CANION_LT = 0.42;             // largo del tubo
+  const CANION_ANG = 58 * Math.PI / 180;
+  const BOCA_X = CANION_X + CANION_LT * Math.cos(CANION_ANG);
+  const BOCA_Y = CANION_LT * Math.sin(CANION_ANG);      // sobre la salida
+  const TIRO_VX = -BOCA_X / ENTRADA_VUELO;              // hasta x = 0
+  const TIRO_VY = TIRO_VX * Math.tan(CANION_ANG);       // sale EN el angulo del tubo
+  const TIRO_G = 2 * (BOCA_Y + TIRO_VY * ENTRADA_VUELO) / (ENTRADA_VUELO ** 2);
   let sacudidaT = 0;                  // cuando empezo el temblor de camara
   let derivaViento = 0;               // lo que el viento lleva corrido al cielo
   const SACUDIDA = 420;               // cuanto dura, en ms
@@ -2822,9 +2829,9 @@ function arrancarNavegador () {
     // `carga` es cuanto lleva encendido el tubo (0 a 1), `retro` el retroceso
     // a lo largo del eje, `disparo` los ms desde el fogonazo: los tres son
     // dibujo puro, pero salen del MISMO reloj que la trayectoria.
-    entrada = { carga: 0, retro: 0, disparo: -1, dx: CANION_X, salio: false };
+    entrada = { carga: 0, retro: 0, disparo: -1, dx: BOCA_X, salio: false };
     s.estado = 'aire'; s.tecla = -1; s.vy = 0;
-    s.y = PISO.y + CANION_BOCA;
+    s.y = PISO.y + BOCA_Y;
     estela.length = 0;
     sonarEntrada(t0 - dur);
   }
@@ -2838,10 +2845,13 @@ function arrancarNavegador () {
       const u = (-b - ENTRADA_VUELO) / (ENTRADA_T - ENTRADA_VUELO);  // 1 -> 0
       entrada.carga = 1 - u;          // el tubo se enciende de a poco
       entrada.retro = 0;
-      // la esfera espera adentro, asomando por la boca: se la ve QUE va a
-      // salir disparada, que es lo que hace que el disparo signifique algo
-      entrada.dx = CANION_X - 0.05 * (1 - entrada.carga);
-      s.y = PISO.y + CANION_BOCA - 0.05 * (1 - entrada.carga);
+      // La esfera espera SOBRE EL EJE del tubo, asomando por la boca, y a
+      // medida que carga se HUNDE hacia adentro. Ese retroceso es la
+      // anticipacion: el disparo se ve venir en el cuerpo de la esfera, no
+      // solo en la luz, y por eso salir despues se siente como soltarse.
+      const d = CANION_LT - 0.06 - 0.14 * entrada.carga;
+      entrada.dx = CANION_X + d * Math.cos(CANION_ANG);
+      s.y = PISO.y + d * Math.sin(CANION_ANG);
       s.vy = 0;
       return;
     }
@@ -2854,8 +2864,7 @@ function arrancarNavegador () {
       flash = 0.7; flashRGB = '255,225,170';
       // el fogonazo sale POR LA BOCA y en la direccion del tubo: humo y
       // chispas empujadas por el disparo, no una explosion simetrica
-      const bx = CANION_X + Math.cos(CANION_ANG) * 0.42;
-      const by = PISO.y + CANION_BOCA;
+      const bx = BOCA_X, by = PISO.y + BOCA_Y;
       for (let i = 0; i < 26; i++) {
         const a = CANION_ANG + (Math.random() - 0.5) * 0.9;
         const v = 0.5 + Math.random() * 2.2;
@@ -2876,8 +2885,11 @@ function arrancarNavegador () {
     // velocidad inicial que dibuja el angulo del tubo, y una gravedad que la
     // deja exactamente en la plataforma al cumplirse el tiempo.
     const v = Math.max(0, Math.min(1, (b + ENTRADA_VUELO) / ENTRADA_VUELO));
-    entrada.dx = CANION_X + TIRO_VX * v;
-    s.y = PISO.y + CANION_BOCA + TIRO_VY * v - 0.5 * TIRO_G * v * v;
+    // la boca se apaga enseguida: lo que quedaba encendido todo el vuelo se
+    // leia como una lampara, y un fogonazo es justamente lo que NO dura
+    entrada.carga = Math.max(0, 1 - v * 3);
+    entrada.dx = BOCA_X + TIRO_VX * v;
+    s.y = PISO.y + BOCA_Y + TIRO_VY * v - 0.5 * TIRO_G * v * v;
     s.vy = TIRO_VY - TIRO_G * v;
     // el retroceso del tubo: un golpe seco hacia atras que vuelve solo
     entrada.retro = 0.30 * Math.exp(-7 * v) * Math.cos(11 * v);
@@ -2887,6 +2899,7 @@ function arrancarNavegador () {
     // la camara acusa el golpe y salta la tierra. Y cae en el tiempo 1.
     const dx = entrada.dx;
     entrada = null;
+    canionEco = performance.now();
     s.estado = 'apoyada'; s.tecla = PISO.i; s.y = PISO.y; s.vy = 0;
     s.anticipos.length = 0;           // lo que se toco volando no cuenta
     squash = 1; retencion = 0.06; asientoV = -3.2;
@@ -4000,7 +4013,7 @@ function arrancarNavegador () {
     avisoMuerte = null;
     try { ac.resume(); } catch (_) {}
     bandaVuelve();
-    t0 = ac.currentTime + 0.4;      // el respiro justo antes de la caida
+    t0 = ac.currentTime + 0.2;      // el respiro justo antes de que el cañon cargue
     relojSuave = null;
     proxBeat = 0;
     abrirEntrada();                 // volver a empezar tambien es CAER a la salida
@@ -6447,6 +6460,65 @@ function arrancarNavegador () {
       cx.lineTo(px(tb.x) + 6, yF + 6);
       cx.stroke();
     };
+    // El cañon, en tres piezas: la cuña que lo ancla, el tubo que patea y la
+    // boca que se enciende. El tubo va inclinado EXACTAMENTE en el angulo de
+    // la trayectoria: si el dibujo y la parabola no coinciden, deja de leerse
+    // como una maquina apuntando y pasa a ser un adorno al lado de una bola
+    // que vuela sola.
+    function dibujarCanion () {
+      const vivo = !!entrada;
+      const car = vivo ? (entrada.carga || 0) : 1;
+      const ret = vivo ? (entrada.retro || 0) : 0;
+      const alfa = vivo ? 1 : Math.max(0, 1 - (ahoraP - canionEco) / 900);
+      // el temblor de la carga: alto y nervioso, y se corta seco al disparar --
+      // una maquina cargando vibra, no se balancea
+      const tmb = vivo && !entrada.salio ? car * car * 2.6 : 0;
+      const bx = px(CANION_X) + tmb * (Math.random() - 0.5);
+      const by = py(PISO.y) + tmb * (Math.random() - 0.5);
+      const L = CANION_LT * esc, An = 0.092 * esc;
+      cx.save();
+      cx.globalAlpha = alfa;
+      cx.translate(bx, by);
+      // LA CUÑA: no retrocede. Lo que patea es el tubo, y que una parte quede
+      // clavada es lo que hace que el retroceso se lea como retroceso.
+      cx.fillStyle = 'rgba(134,146,168,0.26)';
+      cx.beginPath();
+      cx.moveTo(-0.17 * esc, 2); cx.lineTo(0.21 * esc, 2);
+      cx.lineTo(0.11 * esc, 0.145 * esc); cx.lineTo(-0.09 * esc, 0.145 * esc);
+      cx.closePath(); cx.fill();
+      cx.fillStyle = 'rgba(134,146,168,0.38)';
+      cx.fillRect(-0.19 * esc, 0.145 * esc, 0.40 * esc, 3);
+      // EL TUBO, en el eje del disparo. En pantalla la Y va al reves, asi que
+      // el angulo del mundo entra negado.
+      cx.rotate(-CANION_ANG);
+      cx.translate(-ret * 0.33 * esc, 0);
+      cx.fillStyle = 'rgba(150,163,186,0.42)';
+      cx.beginPath();
+      if (cx.roundRect) cx.roundRect(-0.10 * esc, -An, L + 0.10 * esc, An * 2, An * 0.55);
+      else cx.rect(-0.10 * esc, -An, L + 0.10 * esc, An * 2);
+      cx.fill();
+      // la culata y los dos aros de refuerzo: es lo que le da peso de maquina
+      cx.fillStyle = 'rgba(116,128,150,0.55)';
+      cx.beginPath(); cx.arc(-0.06 * esc, 0, An * 1.16, 0, Math.PI * 2); cx.fill();
+      for (const q of [0.30, 0.66]) cx.fillRect(L * q, -An * 1.18, 0.035 * esc, An * 2.36);
+      // LA BOCA se enciende con la carga y revienta al disparar: el resplandor
+      // sale del tubo hacia adelante, no es un aro simetrico pegado encima
+      const rGl = An * (1.5 + 2.2 * car);
+      const gl = cx.createRadialGradient(L, 0, 1, L, 0, rGl);
+      gl.addColorStop(0, `rgba(255,232,190,${0.18 + 0.62 * car})`);
+      gl.addColorStop(0.5, `rgba(${C.esferaRGB},${0.20 * car})`);
+      gl.addColorStop(1, 'rgba(255,190,90,0)');
+      cx.fillStyle = gl;
+      cx.beginPath(); cx.arc(L, 0, rGl, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = `rgba(20,22,26,${0.85 - 0.5 * car})`;
+      cx.beginPath(); cx.ellipse(L, 0, An * 0.34, An * 0.92, 0, 0, Math.PI * 2); cx.fill();
+      cx.restore();
+    }
+    // EL CAÑON. La maquina que te pone en la partitura. Se dibuja solo durante
+    // el preambulo y un rato despues --humeando, mientras la camara lo deja
+    // atras-- porque no es escenografia: es el gesto de arranque, y una vez
+    // que la cancion empezo no tiene nada mas que decir.
+    if (PISO && (entrada || ahoraP - canionEco < 900)) dibujarCanion();
     // la plataforma de salida: se empieza arriba, a la altura de la primera nota
     if (PISO && PISO.x1 > s.x - 3 && PISO.x0 < s.x + 7) {
       cx.fillStyle = 'rgba(232,230,224,0.22)';
@@ -6659,7 +6731,12 @@ function arrancarNavegador () {
     // brillante, y encima crecia con la racha. Leia como bicho, no como
     // movimiento. Ahora son fantasmas de la propia esfera --el desenfoque de
     // toda la vida-- y SOLO en el aire: una pelota que rueda no deja cometa.
-    if (s.estado === 'aire') estela.push({ x: s.x, y: s.y + R });
+    // LA X DEL DISPARO. Durante el preambulo la esfera todavia no avanzo --el
+    // mundo esta quieto y la camara mira la salida-- asi que su lugar en
+    // pantalla es un desvio de DIBUJO: mover s.x moveria la camara pegada a
+    // ella y el arco no se veria nunca, se veria el mundo desfilando.
+    const sx = entrada ? entrada.dx : s.x;
+    if (s.estado === 'aire') estela.push({ x: sx, y: s.y + R });
     else if (estela.length) estela.shift();
     if (estela.length > 13) estela.shift();
     // particulas
@@ -6708,10 +6785,17 @@ function arrancarNavegador () {
     if (s.estado === 'apoyada' && s.tecla >= 0) teclaHundida.set(s.tecla, asiento);
     // se estira EN LA DIRECCION en que va, no siempre para arriba: es lo que
     // hace que un cuerpo parezca cuerpo y no un icono que cambia de tamaño
-    const estira = s.estado === 'aire' ? Math.min(0.26, Math.abs(s.vy) * 0.15) : 0;
+    // ...y volando en el arco del cañon el estiron lo manda la rapidez de
+    // VERDAD, no solo la vertical: en el pico la esfera sigue cruzando a toda
+    // velocidad, y con la vertical sola se quedaba redonda justo ahi.
+    const estira = entrada
+      ? Math.min(0.26, Math.hypot(s.vy, TIRO_VX) * 0.09)
+      : s.estado === 'aire' ? Math.min(0.26, Math.abs(s.vy) * 0.15) : 0;
     const k = squash * 0.3;
-    const cxb = px(s.x), cyb = py(s.y + asiento + R * (1 - k));
-    const ang = Math.atan2(-s.vy * (s.estado === 'aire' ? 1 : 0), 1);
+    const cxb = px(sx), cyb = py(s.y + asiento + R * (1 - k));
+    const ang = entrada
+      ? Math.atan2(-s.vy, TIRO_VX)
+      : Math.atan2(-s.vy * (s.estado === 'aire' ? 1 : 0), 1);
     const rx = R * esc * (1 + k + estira), ry = R * esc * (1 - k - estira);
 
     if (corriendo && s.estado === 'aire' && enViento(s.x) && Math.random() < 0.5)
