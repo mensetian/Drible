@@ -914,6 +914,23 @@ export let ZONAS_PISTON = [];      // las zonas declaradas por la cancion
 export let ZONAS_VOZ = [];
 export const vozEn = x => (ZONAS_VOZ.find(z => x >= z.x0 && x < z.x1) || {}).tipo || null;
 export const ROCE = 0.13;          // debajo de esto vas rasante: te agarra el vastago
+// EL PISOTON CARGADO: cuanto margen tiene el toque alrededor del contacto con
+// la cabeza. Es la ventana afinada de siempre, para los dos lados -- cargar un
+// caño pide la misma precision que sonar una nota limpia, ni mas ni menos, y
+// asi no hay una destreza nueva que aprender: es el toque de siempre dado en
+// el unico lugar del mapa donde no hay tecla que lo cobre.
+//
+// El toque ADELANTADO ya vive en la cola de anticipos y se cobra de ahi. El
+// ATRASADO usa la misma gracia que el coyote: el gesto fue el correcto y el
+// reloj humano no es exacto, asi que el caño queda cargable un instante mas.
+export const CARGA = 0.18;
+// ...y cuanto PESA el aire del vuelo cargado. La altura de un arco es el
+// tiempo de vuelo al cuadrado por la gravedad, y el tiempo aca NO se puede
+// tocar: x ES el tiempo, asi que estirar el vuelo es llegar tarde a la nota
+// que sigue. Queda la gravedad. El caño te lanza con mas fuerza y el aire de
+// ESE vuelo pesa el doble y medio, asi que la esfera sube mucho mas y vuelve
+// a caer en la MISMA tecla y en el MISMO instante: la cancion no se entera.
+export const CARGA_G = 2.6;
 // El caño elige su golpe con JERARQUIA, no por cercania: el golpe entero
 // ('x' = bombo+caja+clap) manda sobre la caja, la caja sobre el clap, y el hat
 // es el ultimo recurso.
@@ -1549,6 +1566,9 @@ export function crearSim (opts = {}) {
     // excedente musical de cada pisoton; perder o rozar uno la enfria.
     // `pistonesZona` cuenta pisotones por zona: el pleno paga fill + crash.
     cadenaPiston: 0, pistonesZona: {},
+    // el PISOTON CARGADO: los que ademas se pagaron con un toque. `cargaViva`
+    // es la gracia del toque atrasado, igual que el coyote de una tecla.
+    cargas: 0, cargaViva: null,
     eventos: []
   };
 }
@@ -1877,6 +1897,44 @@ function haciaLaProxima (s, minimo = 1.1) {
   return Math.min(1.9, (sig.y - s.y) / T + G * T / 2);
 }
 
+// EL ARCO CARGADO. Mismo destino y mismo instante de llegada que el pisoton
+// simple --la nota que sigue no se entera-- pero el vuelo se hace ALTO: el
+// caño te lanza con mucha mas fuerza y el aire de ese vuelo pesa CARGA_G
+// veces mas, asi que la esfera sube al doble y vuelve a caer justo a tiempo.
+// Devuelve null si no hay arco que comprar: ahi no se cobra el toque tampoco.
+function arcoCargado (s) {
+  const g0 = gravedadEn(s.x);
+  const sig = NOTAS.find(n => !n.silencio && !s.tocadas.has(n.i) &&
+    n.x0 + MIRA - s.x >= vueloMinimo(n.y - s.y));
+  if (!sig) return null;
+  const T = Math.max(0.25, sig.x0 + MIRA - s.x);
+  // El impulso tiene tope (el mismo 1.9 de siempre: mas arriba el arco se va
+  // de la pantalla). Si el aire cargado pidiera mas de lo que la esfera puede
+  // empujar, se carga SOLO lo que entre -- un arco mas bajo es mejor que uno
+  // que se pasa de largo y no llega a la tecla.
+  const dy = sig.y - s.y;
+  const g = Math.min(g0 * CARGA_G, Math.max(g0, (1.88 - dy / T) * 2 / T));
+  if (g <= g0 * 1.15) return null;         // no alcanza para que se note: no es carga
+  const vy = dy / T + g * T / 2;
+  // ...y ningun techo puede quedar debajo de la cima. El premio no puede
+  // matarte: esa es la misma regla por la que fallar un caño no castiga.
+  const cima = s.y + vy * vy / (2 * g);
+  if (TECHOS.some(t => t.x1 > s.x && t.x0 < s.x + T && cima + 2 * R > t.y)) return null;
+  return { g, vy };
+}
+
+// El toque que CARGA el caño. Es el toque de siempre --no hay gesto nuevo--
+// dado en el unico lugar del mapa donde no hay tecla que lo cobre. Si llego
+// adelantado ya esta esperando en la cola de anticipos: se saca de ahi, porque
+// un toque se gasta UNA vez. Se acepta solo el que cayo cerca del contacto: el
+// que se dio mucho antes es para la tecla que viene y no se le puede robar.
+function cobrarCarga (s) {
+  const i = s.anticipos.findIndex(xt => s.x - xt <= CARGA);
+  if (i < 0) return false;
+  s.anticipos.splice(i, 1);
+  return true;
+}
+
 // PISARLO: el premio. Le caiste encima, o sea que el salto salio a tiempo. El
 // caño suena su golpe, se hunde, y te deja de nuevo en la linea de vuelo -- no
 // puede descolocarte, porque entonces acertarle seria un castigo.
@@ -1894,11 +1952,25 @@ function pisarPiston (s, yAntes) {
     s.cadenaPiston++;
     s.pistonesZona[p.zona] = (s.pistonesZona[p.zona] || 0) + 1;
     s.y = p.y;
-    // te deja EXACTAMENTE en la linea de vuelo hacia la proxima tecla: si
-    // acertarle te descolocara, acertarle seria un castigo
-    s.vy = haciaLaProxima(s, s.vy);
+    // ¿lo CARGASTE? Solo se cobra el toque si hay arco que comprar: gastarlo
+    // por nada seria robarle un toque a la tecla que viene.
+    const arco = arcoCargado(s);
+    const carga = !!arco && cobrarCarga(s);
+    if (carga) {
+      s.cargas++;
+      s.gAire = arco.g; s.vy = arco.vy;
+      s.cargaViva = null;
+    } else {
+      // te deja EXACTAMENTE en la linea de vuelo hacia la proxima tecla: si
+      // acertarle te descolocara, acertarle seria un castigo
+      s.vy = haciaLaProxima(s, s.vy);
+      // ...y el caño queda CARGABLE un instante mas, por si el toque viene un
+      // pelo tarde. Es la misma gracia que el coyote: el gesto fue el correcto
+      // y el reloj de una mano no es exacto.
+      s.cargaViva = arco ? { hasta: s.x + CARGA, y: p.y, instr: p.instr, paso: p.paso } : null;
+    }
     s.eventos.push({ tipo: 'piston', modo: 'encima', x: s.x, y: p.y, instr: p.instr, paso: p.paso,
-      cadena: s.cadenaPiston, completa: s.pistonesZona[p.zona] === p.deZona });
+      cadena: s.cadenaPiston, completa: s.pistonesZona[p.zona] === p.deZona, cargado: carga });
     return;
   }
 }
@@ -1921,6 +1993,22 @@ function rozarPiston (s) {
     s.eventos.push({ tipo: 'piston', modo: 'abajo', x: s.x, y: s.y, instr: p.instr, paso: p.paso, alto: p.y });
     return;
   }
+}
+
+// EL CARGADO TARDE. Le pegaste al caño y el toque llego un pelo despues del
+// contacto. Es el mismo perdon que el coyote --el gesto fue el correcto, lo
+// que fallo es el reloj de una mano-- y se paga igual: el arco se estira
+// AHORA, con la esfera todavia pegada a la cabeza, asi que se ve como un solo
+// impulso y no como una correccion.
+function cargarTarde (s) {
+  if (!s.cargaViva || s.x > s.cargaViva.hasta || s.estado !== 'aire') return false;
+  const arco = arcoCargado(s);
+  if (!arco) { s.cargaViva = null; return false; }
+  const c = s.cargaViva; s.cargaViva = null;
+  s.cargas++;
+  s.gAire = arco.g; s.vy = arco.vy;
+  s.eventos.push({ tipo: 'piston', modo: 'carga', x: s.x, y: c.y, instr: c.instr, paso: c.paso });
+  return true;
 }
 
 // Gasta un toque en el estado actual. Devuelve si sono una nota; si no sono,
@@ -2039,6 +2127,10 @@ export function tocar (s, b) {
     return;
   }
   if (aplicar(s)) return;
+  // ...y si no habia nota que cobrar, todavia puede haber un caño recien
+  // pisado esperando su carga. Va DESPUES de aplicar a proposito: una nota de
+  // verdad --el coyote de la tecla que dejaste-- manda sobre un premio.
+  if (cargarTarde(s)) return;
   // Martillar no es adelantarse. Un toque en falso pegado al anterior corta la
   // racha y deja el boton sordo. Sin esto se termina el nivel a puro spam: la
   // esfera aterriza sola sobre cada tecla, asi que el toque siempre cae bien y
@@ -2386,7 +2478,39 @@ function arrancarNavegador () {
   let desfase = 0;                       // segundos
   try { desfase = Math.max(0, Math.min(0.35, +localStorage.getItem('drible:desfase') || 0)); } catch (_) {}
   const ahoraAudio = () => ac ? (ac.currentTime - t0) / SPB : 0;
-  const ahora = () => ac ? (ac.currentTime - t0 - desfase) / SPB : 0;
+  // EL RELOJ DEL AUDIO NO AVANZA PAREJO, y el mundo cuelga de el. Medido en
+  // Chrome, cuadro a cuadro: la pantalla da 6.95 ms con 1.2 ms de desvio --liso--
+  // pero ac.currentTime se mueve en escalones del bloque de audio (128 muestras,
+  // 2.9 ms) y llega a los tirones: en el 31% de los cuadros NO avanza NADA, y en
+  // otro 31% avanza mas del doble. La seguidilla real, medida:
+  //     0.0 / 11.6 / 0.0 / 8.7 / 11.6 / 8.7 / 0.0 ...
+  // Como s.x persigue este reloj, uno de cada tres cuadros el mundo se quedaba
+  // QUIETO y el siguiente saltaba doble: 1.9 px de tiron a 400 px/s. En las
+  // teclas --lineas finas y sueltas-- no se ve; sobre una silueta grande y
+  // continua como las sierras se ve como un salto de fotograma.
+  //
+  // La salida NO es volver al reloj de cuadros: ese DERIVA, y la deriva era el
+  // bug anterior (dos relojes de hardware distintos, 139 ms acumulados sobre el
+  // viaje entero). Se usan los dos, cada uno para lo que sirve: el de PANTALLA
+  // para avanzar, que es liso, y el del AUDIO para corregir el rumbo de a poco.
+  // Los dos tienen el MISMO promedio, asi que el mundo no se separa de la
+  // musica -- lo unico que se tira es el escalon.
+  let relojSuave = null;                 // el reloj del MUNDO, en tiempos
+  const ENGANCHE = 0.08;                 // cuanto del error se corrige por cuadro
+  const SALTO = 0.25;                    // de aca en mas no se persigue: se engancha
+  const ahoraCrudo = () => ac ? (ac.currentTime - t0 - desfase) / SPB : 0;
+  const ahora = () => relojSuave != null ? relojSuave : ahoraCrudo();
+  // Se llama UNA vez por cuadro, antes de mover nada: todo lo que pase en ese
+  // cuadro --la fisica, el dibujo, lo que juzga un apreton-- lee el mismo
+  // instante, y ese instante avanza parejo.
+  const correrReloj = dtSeg => {
+    if (!ac) { relojSuave = null; return; }
+    const bc = ahoraCrudo();
+    // un salto DE VERDAD --arrancar, volver de la pausa, saltar de seccion--
+    // no se persigue de a poco: ahi el reloj se engancha de una
+    if (relojSuave == null || Math.abs(bc - relojSuave) > SALTO) relojSuave = bc;
+    else relojSuave += dtSeg / SPB + (bc - relojSuave) * ENGANCHE;
+  };
   // Un asomo para la prueba de humo, y SOLO si alguien lo pidio antes de cargar
   // el modulo (en el navegador no existe nunca). La distancia entre el mundo y
   // el reloj del audio no la dibuja nada: es exactamente el tipo de error que
@@ -2396,7 +2520,21 @@ function arrancarNavegador () {
   // caceria de flechas contra el reloj, con la esfera muriendose en el medio.
   if (globalThis.__dribleDiag) globalThis.__dribleDiag = bx => {
     if (bx != null && corriendo) { saltarA(bx); ensayo = true; }
-    return { x: s.x, b: ahora() };
+    // ...y la contabilidad del caño: sin esto, verificar que un pisoton cobra
+    // (racha, cadena, cierre de zona) obliga a leerlo de la pantalla
+    // el reloj del MUNDO junto al del AUDIO: la separacion entre los dos no la
+    // dibuja nada, y es el error que se cuela durante minutos sin que ninguna
+    // prueba lo pueda ver. Aca se puede medir.
+    return { x: s.x, b: ahora(), crudo: ahoraCrudo(), spb: SPB,
+      racha: s.racha, mejorRacha: s.mejorRacha,
+      // `pistonazos` cuenta tambien los rescates por abajo; `encima` son los
+      // pisotones de verdad, que es lo que hay que mirar para saber si cobro
+      pistonazos: s.pistonazos, cadena: s.cadenaPiston,
+      encima: Object.values(s.pistonesZona).reduce((a, b) => a + b, 0),
+      // los cierres se derivan del estado, no de los eventos: la cola se vacia
+      // cada cuadro, asi que contarlos ahi devolvia 0 salvo por casualidad
+      cierres: [...new Set(PISTONES.map(p => p.zona))]
+        .filter(z => (s.pistonesZona[z] || 0) === PISTONES.filter(p => p.zona === z).length).length };
   };
 
   // --- sintesis --------------------------------------------------------------
@@ -2504,6 +2642,7 @@ function arrancarNavegador () {
     bandaVuelve();
     rodadaAbrir();
     t0 = ac.currentTime + 0.12;
+    relojSuave = null;
     proxBeat = 0;
     finSonado = false;
   }
@@ -3567,6 +3706,7 @@ function arrancarNavegador () {
     try { ac.resume(); } catch (_) {}
     bandaVuelve();
     t0 = ac.currentTime + 1.0;      // el respiro justo antes del compas 1
+    relojSuave = null;
     proxBeat = 0;
   }
   function morirOReiniciar () {
@@ -3619,6 +3759,7 @@ function arrancarNavegador () {
     esperando = true;
     muerteEn = performance.now();
     t0 = ac.currentTime + 1.0;
+    relojSuave = null;
     proxBeat = 0;
     setTimeout(() => { if (esperando) try { ac.suspend(); } catch (_) {} }, 1600);
     estela.length = 0; rotos.length = 0; rastroEco.length = 0;
@@ -3857,6 +3998,7 @@ function arrancarNavegador () {
     s.x = Math.max(0, k.x0);
     s.estado = 'apoyada'; s.tecla = k.i; s.y = k.y; s.saliendoDe = -1;
     t0 = ac.currentTime - desfase - s.x * SPB;   // el juego va s.x; el audio, adelante
+    relojSuave = null;
     proxBeat = Math.floor(ahoraAudio() * 4) / 4;
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
     rotos.length = 0; rastroEco.length = 0;
@@ -4092,6 +4234,10 @@ function arrancarNavegador () {
       t0 += crudo - dtSeg;
       proxBeat = Math.max(proxBeat, Math.floor(ahoraAudio() * 4) / 4);
     }
+    // el reloj del mundo se corre UNA vez, aca, y despues de haberle devuelto
+    // a t0 el tiempo que el mundo no vivio: si se corriera antes, perseguiria
+    // un instante que esta por moverse
+    correrReloj(dtSeg);
     if (calib) {
       if (!calib.listo && ac.currentTime > calib.fin) cerrarCalib();
       else if (calib.listo && ac.currentTime > calib.fin + 3.2) { calib = null; pantalla = 'config'; }
