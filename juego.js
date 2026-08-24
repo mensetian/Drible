@@ -1262,12 +1262,23 @@ function pistones () {
         return t2 <= 0 ? Infinity : k.y + vy2 * t2 - G * t2 * t2 / 2;
       };
       const CLAVADA = AFINADO * PERFECTO;
-      const topeJusto = dt => {
-        let min = Infinity;
-        for (let dev = -CLAVADA; dev <= CLAVADA + 1e-9; dev += CLAVADA / 4)
-          min = Math.min(min, alturaEn(dt, dev));
-        return +(min - 0.004).toFixed(3);            // y un pelo mas, por la integracion
-      };
+      // LA CABEZA VA EN EL ARCO, NO DEBAJO. Antes se apoyaba en el punto mas
+      // BAJO del arco de todas las pulsaciones clavadas, para que ninguna se
+      // la perdiera. Funcionaba -- y desafinaba la cancion entera: una cabeza
+      // mas baja se cruza MAS TARDE, y medido sobre los diez caños del viaje
+      // el golpe salia entre 85 y 94 ms detras de su semicorchea. A 112 BPM la
+      // semicorchea son 134 ms, o sea que el acento caia a dos tercios de
+      // figura del pulso: eso es lo que sonaba a ruido al lado de la musica y
+      // no a musica. Encima el arreglo abre su crater EN el pulso, asi que el
+      // agache y el golpe ni siquiera se juntaban.
+      //
+      // Ahora la cabeza se apoya en el arco de la pulsacion CLAVADA. Clavar la
+      // nota anfitriona es cruzar la cabeza exactamente en su semicorchea, y
+      // llegar corrido corre el acento lo mismo que te corriste vos -- que es
+      // lo que tiene que pasar en un juego de ritmo. La tolerancia no se
+      // perdio: la sigue dando el ancho de la ventana [x0,x1], que es donde
+      // corresponde, porque ensanchar en X no mueve el reloj.
+      const topeJusto = dt => +(alturaEn(dt, 0) - 0.004).toFixed(3);
       const cabe = (x, tope) => {
         if (tope < 2 * R + 0.06) return false;    // tan bajo que ya es la red
         const x0 = x - 0.15, x1 = x + 0.15;
@@ -1284,44 +1295,44 @@ function pistones () {
         return bat && 'xscHh'.includes(bat[p % 16]) ? bat[p % 16] : null;
       };
       let mr = null;
-      // candidatos en grilla: pasos del lado que BAJA del arco (en la subida
-      // la esfera pasa rozando por debajo y el caño es impisable). El margen
-      // tras la cima es finisimo a proposito -- en el galope el unico paso
-      // alcanzable cae apenas pasada la cima -- y lo compensa la cabeza: va 5
-      // milesimas DEBAJO del arco, asi el cruce en bajada existe aunque la
-      // integracion discreta nunca pise la cima exacta.
+      // EL CAÑO SE PARA SIEMPRE EN LA GRILLA, sin excepcion. Antes habia una
+      // rama "fuera de grilla" que se usaba cuando el arreglo no tenia un
+      // golpe libre en ningun paso alcanzable -- y en el viaje se usaba en los
+      // DIEZ caños, o sea que la rama en grilla era letra muerta. De ahi salia
+      // el desfase: el caño se paraba en el punto fisico del arco y despues
+      // buscaba un golpe hasta 0.2 tiempos lejos, asi que el acento sonaba a
+      // ~90 ms de su semicorchea. A 112 BPM eso son dos tercios de figura: no
+      // es un baterista laid-back, esta fuera de tiempo, y es exactamente lo
+      // que sonaba a ruido pegado a la cancion en vez de a cancion.
+      //
+      // Ahora el paso manda y la cabeza se acomoda: se elige un paso de
+      // semicorchea del lado que BAJA del arco, y la cabeza se apoya en la
+      // altura que el arco tiene EN ese paso. Clavar la nota anfitriona es
+      // cruzar la cabeza justo en su semicorchea, y llegar corrido corre el
+      // acento lo mismo que te corriste vos: en un juego de ritmo ese es el
+      // resultado correcto, no un error a corregir.
       const p0 = Math.ceil((k.xm + Math.max(0.15, vy / G + 0.015)) * 4);
       const p1 = Math.ceil((k.xm + T - 0.08) * 4) - 1;
       for (let p = p0; p <= p1; p++) {
-        const golpe = golpeEn(p);
-        if (!golpe) continue;
         const dt = p / 4 - k.xm;
         const tope = topeJusto(dt);
         const x = +(p / 4).toFixed(3);
         if (!cabe(x, tope)) continue;
+        // El golpe puede salir de dos lados. Si el arreglo tiene uno libre en
+        // ese paso, el caño lo RECLAMA: la esfera lo toca o no suena, que es
+        // el trato de siempre. Si no lo tiene, el caño lo AGREGA -- un tom
+        // afinado por la altura de la cabeza, en un paso donde la bateria
+        // callaba. Agregar es mejor que robar: pisarlo SUMA un acento a la
+        // cancion, y fallarlo la deja exactamente como estaba escrita, sin el
+        // agujero que antes castigaba al que erraba rompiendole el arreglo.
+        const golpe = golpeEn(p);
         // apenas pasada la cima es donde pisar se SIENTE pisar
         const d = Math.abs(dt - (vy / G + 0.2));
-        if (!mr || PESO[golpe] > PESO[mr.golpe] ||
-            (PESO[golpe] === PESO[mr.golpe] && d < mr.d)) mr = { p, golpe, x, tope, d };
+        const peso = golpe ? PESO[golpe] + 1 : 0.5;   // el prestado gana al agregado
+        if (!mr || peso > mr.peso || (peso === mr.peso && d < mr.d))
+          mr = { p, golpe, x, tope, d, peso, agregado: !golpe };
       }
-      if (!mr) {
-        // fuera de grilla: el punto fisico del arco, y el golpe libre mas
-        // pesado a menos de 0.2 tiempos -- el pisoton suena al contacto, a lo
-        // sumo ~107 ms del paso del golpe: acento humano, no flam
-        const dt = Math.max(vy / G + 0.1, Math.min(T * 0.72, vy / G + 0.2));
-        if (dt <= 0.15 || dt >= T - 0.08) continue;
-        const tope = topeJusto(dt);
-        const x = +(k.xm + dt).toFixed(3);
-        if (!cabe(x, tope)) continue;
-        for (let p = Math.ceil((x - 0.2) * 4); p <= Math.floor((x + 0.2) * 4); p++) {
-          const golpe = golpeEn(p);
-          if (!golpe) continue;
-          const d = Math.abs(p / 4 - x);
-          if (!mr || PESO[golpe] > PESO[mr.golpe] ||
-              (PESO[golpe] === PESO[mr.golpe] && d < mr.d)) mr = { p, golpe, x, tope, d };
-        }
-      }
-      if (!mr) continue;      // sin golpe no hay piston: un caño mudo es decorado
+      if (!mr) continue;      // ningun paso alcanzable: aca no entra un caño
       // `cada` cuenta caños VIABLES, no teclas. Contando teclas, el azar del
       // muestreo elegia justo las corcheas del galope --donde ningun caño
       // cabe-- y DESPEGUE II se quedaba sin martillos aunque sus negras los
@@ -2375,15 +2386,29 @@ function arrancarNavegador () {
   // tope que evita saltos la dejaba prendida a medio apagar. Guardando CUANDO
   // empezo, la cuenta sale igual venga como venga el reloj, y en reposo vale
   // exactamente cero. Es el mismo trato que ya tienen los destellos y la fugaz.
-  // LA ENTRADA. La esfera aparecia ya puesta en la plataforma, quieta, y medio
-  // segundo despues el mundo arrancaba: la cancion empezaba sin que nada
-  // hubiera empezado. Ahora CAE -- entra desde arriba de la pantalla, con su
-  // estela, y toca la salida exactamente en el tiempo 1. El primer golpe de la
-  // cancion es el suyo, y desde ese golpe todo lo demas es consecuencia.
-  // `T` son los tiempos de caida (los que dura el preambulo, que ya existia
-  // como espera muerta); `aterrizo` es el latigazo, una sola vez.
+  // LA ENTRADA ES UN CAÑON. La esfera aparecia ya puesta en la plataforma y
+  // medio segundo despues arrancaba todo: la cancion empezaba sin que nada
+  // hubiera empezado. Dejarla CAER de arriba tampoco alcanzo -- una caida no
+  // tiene gesto: no hay nadie decidiendola, la cosa simplemente estaba arriba.
+  // Un disparo si: hay una MAQUINA, se la ve cargar, y en el momento exacto te
+  // escupe al mapa. Son tres actos, y los tres estan atados al pulso:
+  //   compas -3 a -1  LA CARGA    el tubo tiembla y la boca se enciende
+  //   compas -1       EL DISPARO  fogonazo, retroceso, la camara acusa
+  //   compas -1 a 0   EL VUELO    un arco que termina clavado en el tiempo 1
+  // La parabola no es decorativa: sale de la boca con la inclinacion que el
+  // tubo tiene dibujada y aterriza sola en la salida, que es lo que hace que
+  // el cañon parezca estar apuntando de verdad.
   let entrada = null;
-  const ALTO_ENTRADA = 2.4;           // desde donde cae: bien fuera de cuadro, arriba
+  const ENTRADA_T = 3;                // tiempos que dura el preambulo entero
+  const ENTRADA_VUELO = 1;            // ...de los cuales el ultimo es el vuelo
+  const CANION_X = -1.35;             // a la izquierda de la salida, fuera de partitura
+  const CANION_BOCA = 0.30;           // altura de la boca sobre la salida
+  // La fisica del tiro, resuelta de una vez: sale de la boca, sube 0.55 mas y
+  // cae justo en la salida al cumplirse el tiempo de vuelo. De aca sale
+  // tambien el angulo del tubo -- el dibujo OBEDECE a la trayectoria.
+  const TIRO_G = 5.535, TIRO_VY = 2.47;
+  const TIRO_VX = -CANION_X / ENTRADA_VUELO;
+  const CANION_ANG = Math.atan2(TIRO_VY, TIRO_VX);
   let sacudidaT = 0;                  // cuando empezo el temblor de camara
   let derivaViento = 0;               // lo que el viento lleva corrido al cielo
   const SACUDIDA = 420;               // cuanto dura, en ms
@@ -2726,39 +2751,87 @@ function arrancarNavegador () {
       (agua ? vv * (1 + 0.2 * Math.sin(vaiven * 5.3)) : vv), ac.currentTime, 0.06);
   }
 
-  // Abre la caida: corre el compas 1 los tiempos que dure, agenda el silbido y
-  // pone la esfera en el aire. Solo desde la SALIDA -- reanudar en mitad de la
-  // cancion no es una entrada, es seguir.
-  const ENTRADA_T = 2;                // tiempos que dura la caida
+  // Abre el disparo: corre el compas 1 los tiempos que dure el preambulo,
+  // agenda la carga y mete la esfera DENTRO del tubo. Solo desde la SALIDA --
+  // reanudar en mitad de la cancion no es una entrada, es seguir.
   function abrirEntrada () {
     if (!ac || !PISO || s.x > 0.001 || !s.viva) { entrada = null; return; }
     const dur = ENTRADA_T * SPB;
     t0 += dur;
-    entrada = { T: ENTRADA_T, aterrizo: false };
+    // `carga` es cuanto lleva encendido el tubo (0 a 1), `retro` el retroceso
+    // a lo largo del eje, `disparo` los ms desde el fogonazo: los tres son
+    // dibujo puro, pero salen del MISMO reloj que la trayectoria.
+    entrada = { carga: 0, retro: 0, disparo: -1, dx: CANION_X, salio: false };
     s.estado = 'aire'; s.tecla = -1; s.vy = 0;
-    s.y = PISO.y + ALTO_ENTRADA;
+    s.y = PISO.y + CANION_BOCA;
     estela.length = 0;
-    sonarEntrada(t0 - dur, dur);
+    sonarEntrada(t0 - dur);
   }
-  // La caida se dibuja sola: mientras el compas 1 no llego, `b` es negativo y
-  // ESE es el reloj de la caida. Cae con aceleracion constante --altura
-  // proporcional al cuadrado de lo que falta-- asi que llega al piso rapido y
-  // el ojo lee peso, no un descenso de ascensor.
+  // El preambulo se dibuja solo: mientras el compas 1 no llego, `b` es negativo
+  // y ESE es el reloj de los tres actos. Nada de esto integra cuadros -- se
+  // deriva del tiempo musical, asi que un tiron no descoloca el disparo.
   function seguirEntrada (b) {
     if (!entrada) return;
-    const u = Math.max(0, Math.min(1, -b / entrada.T));
-    s.y = PISO.y + ALTO_ENTRADA * u * u;
-    s.vy = -2 * ALTO_ENTRADA * (1 - u) / entrada.T;
-    if (u > 0) return;
-    // TOCO. El aterrizaje es el mismo gesto que cualquier otro del juego:
-    // se aplasta, la camara acusa el golpe y salta la tierra.
+    // ------------------------------------------------- acto 1: LA CARGA
+    if (b < -ENTRADA_VUELO) {
+      const u = (-b - ENTRADA_VUELO) / (ENTRADA_T - ENTRADA_VUELO);  // 1 -> 0
+      entrada.carga = 1 - u;          // el tubo se enciende de a poco
+      entrada.retro = 0;
+      // la esfera espera adentro, asomando por la boca: se la ve QUE va a
+      // salir disparada, que es lo que hace que el disparo signifique algo
+      entrada.dx = CANION_X - 0.05 * (1 - entrada.carga);
+      s.y = PISO.y + CANION_BOCA - 0.05 * (1 - entrada.carga);
+      s.vy = 0;
+      return;
+    }
+    // ------------------------------------------------- acto 2: EL DISPARO
+    if (!entrada.salio) {
+      entrada.salio = true;
+      entrada.carga = 1;
+      entrada.disparo = performance.now();
+      sacudidaT = performance.now();
+      flash = 0.7; flashRGB = '255,225,170';
+      // el fogonazo sale POR LA BOCA y en la direccion del tubo: humo y
+      // chispas empujadas por el disparo, no una explosion simetrica
+      const bx = CANION_X + Math.cos(CANION_ANG) * 0.42;
+      const by = PISO.y + CANION_BOCA;
+      for (let i = 0; i < 26; i++) {
+        const a = CANION_ANG + (Math.random() - 0.5) * 0.9;
+        const v = 0.5 + Math.random() * 2.2;
+        particulas.push({ x: bx, y: by, rgb: i % 3 ? '255,210,140' : C.esferaRGB,
+          vx: Math.cos(a) * v, vy: Math.sin(a) * v, vida: 1, g: 2.2 });
+      }
+      // el humo: lento, pesado, y casi sin gravedad -- se queda colgado
+      for (let i = 0; i < 14; i++) {
+        const a = CANION_ANG + (Math.random() - 0.5) * 1.5;
+        particulas.push({ x: bx, y: by, rgb: '150,150,160',
+          vx: Math.cos(a) * (0.15 + Math.random() * 0.5),
+          vy: Math.sin(a) * (0.15 + Math.random() * 0.5) + 0.15,
+          vida: 1, g: 0.15 });
+      }
+    }
+    // ------------------------------------------------- acto 3: EL VUELO
+    // v va de 0 (boca) a 1 (salida). La parabola es de verdad: la misma
+    // velocidad inicial que dibuja el angulo del tubo, y una gravedad que la
+    // deja exactamente en la plataforma al cumplirse el tiempo.
+    const v = Math.max(0, Math.min(1, (b + ENTRADA_VUELO) / ENTRADA_VUELO));
+    entrada.dx = CANION_X + TIRO_VX * v;
+    s.y = PISO.y + CANION_BOCA + TIRO_VY * v - 0.5 * TIRO_G * v * v;
+    s.vy = TIRO_VY - TIRO_G * v;
+    // el retroceso del tubo: un golpe seco hacia atras que vuelve solo
+    entrada.retro = 0.30 * Math.exp(-7 * v) * Math.cos(11 * v);
+    if (v < 1) return;
+    // ------------------------------------------------- ATERRIZA
+    // El impacto es el mismo gesto que cualquier otro del juego: se aplasta,
+    // la camara acusa el golpe y salta la tierra. Y cae en el tiempo 1.
+    const dx = entrada.dx;
     entrada = null;
     s.estado = 'apoyada'; s.tecla = PISO.i; s.y = PISO.y; s.vy = 0;
-    s.anticipos.length = 0;           // lo que se toco cayendo no cuenta
-    squash = 1; retencion = 0.06; asientoV = -2.6;
+    s.anticipos.length = 0;           // lo que se toco volando no cuenta
+    squash = 1; retencion = 0.06; asientoV = -3.2;
     sacudidaT = performance.now();
     flash = 0.5; flashRGB = C.esferaRGB;
-    chispas(0, PISO.y, 16, false, C.esferaRGB);
+    chispas(dx, PISO.y, 18, false, C.esferaRGB);
     estela.length = 0;
   }
 
@@ -2965,25 +3038,67 @@ function arrancarNavegador () {
       }
     }
   }
-  // EL SILBIDO DE LA CAIDA y el GOLPE de llegada. Baja en vez de subir --un
-  // riser anuncia lo que viene, esto anuncia lo que LLEGA-- y termina justo
-  // cuando la esfera toca: el aire se corta con el impacto, no despues.
-  function sonarEntrada (tCae, dur) {
-    const n = Math.max(1, ac.sampleRate * dur | 0), buf = ac.createBuffer(1, n, ac.sampleRate);
+  // EL SONIDO DEL DISPARO, en los mismos tres actos que la imagen: la carga
+  // que crece, el estampido, y el silbido de la esfera cruzando el aire. El
+  // ultimo golpe cae en el compas 1, asi que el estampido queda a un tiempo
+  // exacto de la cancion: el preambulo tambien esta en tempo.
+  function sonarEntrada (tIni) {
+    const durC = (ENTRADA_T - ENTRADA_VUELO) * SPB;   // la carga
+    const tD = tIni + durC;                           // el disparo
+    const durV = ENTRADA_VUELO * SPB;                 // el vuelo
+    // --- LA CARGA: un zumbido que sube de tono y de volumen. Lo que hace que
+    // se sienta que algo se esta acumulando es que el filtro se abra junto con
+    // la ganancia -- subir solo el volumen suena a fundido, no a tension.
+    const gc = ac.createGain();
+    gc.gain.setValueAtTime(0.0001, tIni);
+    gc.gain.exponentialRampToValueAtTime(0.075, tD - 0.02);
+    gc.gain.exponentialRampToValueAtTime(0.0001, tD + 0.02);
+    const lpc = ac.createBiquadFilter();
+    lpc.type = 'lowpass'; lpc.Q.value = 4;
+    lpc.frequency.setValueAtTime(180, tIni);
+    lpc.frequency.exponentialRampToValueAtTime(1400, tD);
+    gc.connect(master);
+    for (const [tipo, mul, gan] of [['sawtooth', 1, 1], ['square', 0.5, 0.5]]) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = tipo; g.gain.value = gan;
+      o.frequency.setValueAtTime(46 * mul, tIni);
+      o.frequency.exponentialRampToValueAtTime(96 * mul, tD);
+      o.connect(g).connect(lpc).connect(gc);
+      o.start(tIni); o.stop(tD + 0.05);
+    }
+    eRiser(tIni, durC);
+    // --- EL ESTAMPIDO. Tres cosas a la vez y ninguna es opcional: el CUERPO
+    // (un sub que se desploma de 140 a 30), el AIRE (ruido grave que revienta
+    // y se apaga en 200 ms) y el CHASQUIDO metalico de la valvula.
+    const ob = ac.createOscillator(), gb = ac.createGain();
+    ob.type = 'sine';
+    ob.frequency.setValueAtTime(140, tD);
+    ob.frequency.exponentialRampToValueAtTime(30, tD + 0.22);
+    gb.gain.setValueAtTime(0.0001, tD);
+    gb.gain.exponentialRampToValueAtTime(0.55, tD + 0.006);
+    gb.gain.exponentialRampToValueAtTime(0.0001, tD + 0.42);
+    ob.connect(gb).connect(master); ob.start(tD); ob.stop(tD + 0.45);
+    ruido(tD, 0.20, 0.34, 'lowpass', 420, 1.4);
+    ruido(tD, 0.05, 0.10, 'bandpass', 3200, 1.6);
+    ruido(tD + 0.008, 0.30, 0.09, 'highpass', 900, 0.7);   // la cola de aire
+    // --- EL VUELO: el silbido pasa. Sube mientras se aleja del cañon y baja
+    // al caer, que es el doppler de toda la vida y lo que ata el sonido al arco.
+    const n = Math.max(1, ac.sampleRate * durV | 0), buf = ac.createBuffer(1, n, ac.sampleRate);
     const d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    for (let k = 0; k < n; k++) d[k] = Math.random() * 2 - 1;
     const src = ac.createBufferSource(); src.buffer = buf;
-    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2.2;
-    f.frequency.setValueAtTime(2600, tCae);
-    f.frequency.exponentialRampToValueAtTime(240, tCae + dur);
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0.0001, tCae);
-    g.gain.exponentialRampToValueAtTime(0.11, tCae + dur * 0.75);
-    g.gain.exponentialRampToValueAtTime(0.0001, tCae + dur);
-    src.connect(f).connect(g).connect(master);
-    src.start(tCae); src.stop(tCae + dur + 0.02);
-    // el impacto: el bombo del tiempo 1 con cuerpo de tierra debajo
-    const t = tCae + dur;
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 3.2;
+    f.frequency.setValueAtTime(700, tD);
+    f.frequency.exponentialRampToValueAtTime(2100, tD + durV * 0.45);
+    f.frequency.exponentialRampToValueAtTime(520, tD + durV);
+    const gv = ac.createGain();
+    gv.gain.setValueAtTime(0.0001, tD);
+    gv.gain.exponentialRampToValueAtTime(0.085, tD + durV * 0.35);
+    gv.gain.exponentialRampToValueAtTime(0.0001, tD + durV);
+    src.connect(f).connect(gv).connect(master);
+    src.start(tD); src.stop(tD + durV + 0.02);
+    // --- EL IMPACTO, clavado en el tiempo 1: el bombo con cuerpo de tierra
+    const t = tD + durV;
     kick(t);
     ruido(t, 0.09, 0.10, 'lowpass', 700, 1);
     golpe(t, 92, 0.16, 0.09, 'triangle');
