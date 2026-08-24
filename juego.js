@@ -2401,6 +2401,12 @@ function arrancarNavegador () {
   // que faltaba: se ve, se siente en el cuerpo de la esfera, y no dice nada.
   const aros = [];
   let retencion = 0;
+  // EL SONAR DEL TUNEL. Adentro, tu rebote es lo unico que hay: cada pique
+  // emite un pulso de luz que revela lo que viene, y el pique LIMPIO ademas
+  // entreabre el pasabajos un instante -- vos dejas entrar a la banda.
+  const sonarTunel = [];              // pulsos de luz vivos {x, y, t, suc}
+  let sonarT = -1e9;                  // ultimo pique limpio adentro (ms)
+  const tunelesCruzados = new Set();  // salidas ya festejadas (se rearman al volver)
   function celebrar (e) {
     if (!e.perfecto) return;
     aros.push({ x: e.x, y: e.y, t: performance.now() });
@@ -3668,6 +3674,12 @@ function arrancarNavegador () {
         desvios.push(Math.abs(e.tarde) * SPB * 1000);
         if (desvios.length > 24) desvios.shift();
         aviso(e);
+        // adentro del tunel el pique es sonar: luz que se expande, y si fue
+        // limpio, la rendija por la que se cuela la banda un instante
+        if (TUNELES.some(z => e.x >= z.x0 && e.x < z.x1)) {
+          sonarTunel.push({ x: e.x, y: e.y, t: performance.now(), suc: e.suc });
+          if (!e.chueca) sonarT = performance.now();
+        }
         if (NOTAS[e.i].bajo) {
           // tecla de bajo: la esfera esta tocando el bajo del estudio -- dos
           // octavas abajo de donde pisa, con la voz de alla. Sin eco: el bajo
@@ -4080,6 +4092,7 @@ function arrancarNavegador () {
     marcas.length = 0;
     avisos.length = 0;
     aros.length = 0;
+    sonarTunel.length = 0; tunelesCruzados.clear(); sonarT = -1e9;
     flash = 1;
   }
 
@@ -4103,6 +4116,7 @@ function arrancarNavegador () {
     metaEn = 0; muerteVista = null; leccionViva = null; vecesRed = 0;
     s = crearSim({ sinRed });
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
+    sonarTunel.length = 0; tunelesCruzados.clear(); sonarT = -1e9;
     rotos.length = 0; rastroEco.length = 0;
     corriendo = true;
     arrancarAudio();
@@ -4318,6 +4332,7 @@ function arrancarNavegador () {
     relojSuave = null;
     proxBeat = Math.floor(ahoraAudio() * 4) / 4;
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
+    sonarTunel.length = 0; tunelesCruzados.clear(); sonarT = -1e9;
     rotos.length = 0; rastroEco.length = 0;
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
@@ -4599,9 +4614,15 @@ function arrancarNavegador () {
     }
     // el tunel: entrar ahoga de a poco (la boca se traga el sonido), salir
     // abre DE GOLPE -- el reventon de volver a oirlo todo, clavado al crash
+    // ...y adentro, el sonar lo entreabre: cada pique limpio deja pasar a la
+    // banda por una rendija que se vuelve a cerrar sola. Un tunel bien
+    // dribleado SUENA distinto a uno flojo -- el premio es musical.
     if (tunelLP) {
       const dentro = TUNELES.some(z => s.x >= z.x0 && s.x < z.x1);
-      tunelLP.frequency.setTargetAtTime(dentro ? 460 : 18000, ac.currentTime, dentro ? 0.3 : 0.05);
+      const abre = dentro ? Math.max(0, 1 - (performance.now() - sonarT) / 450) : 0;
+      tunelLP.frequency.setTargetAtTime(
+        dentro ? 460 + 2200 * abre * abre : 18000,
+        ac.currentTime, dentro ? (abre > 0 ? 0.06 : 0.3) : 0.05);
     }
     // El viento sopla al entrar -- una vez por pasada, y se rearma si volves.
     // El whoosh dura lo que dura la zona: no es un efecto suelto, es el sonido
@@ -4612,6 +4633,16 @@ function arrancarNavegador () {
         eRiser(ac.currentTime, (v.x1 - v.x0) * SPB * 0.8);
         chispas(s.x + 0.15, Math.max(0.1, s.y), 14, true, '180,220,255');
       } else if (s.x < v.x0 - 1) vientosHechos.delete(v.x0);
+    }
+    // CRUZAR LA BOCA DE SALIDA se festeja en el cuerpo: el crash ya pone el
+    // flash (via crashVista), aca van las esquirlas de luz del reventon
+    for (const tz of TUNELES) {
+      if (s.x >= tz.x1 && s.x < tz.x1 + 1 && !tunelesCruzados.has(tz.x0)) {
+        tunelesCruzados.add(tz.x0);
+        chispas(s.x, Math.max(0.1, s.y), 20, true, '255,235,180');
+        chispas(s.x, Math.max(0.1, s.y), 12, true, '180,220,255');
+        aros.push({ x: s.x, y: s.y, t: performance.now() });
+      } else if (s.x < tz.x0 - 1) tunelesCruzados.delete(tz.x0);
     }
     procesar();
     if (!s.viva) { if (!muerteSonada) sonarMuerte(); muerteSonada = false; morirOReiniciar(); }
@@ -4996,8 +5027,14 @@ function arrancarNavegador () {
       { activo: true, ancho: Math.min(220, w * 0.62), alto: chico ? 36 : 42,
         fuente: `bold ${chico ? 15 : 17}px system-ui` });
     cx.restore();
-    btn('Ajustes', w / 2, yJ + (chico ? 34 : 40), () => { pantalla = 'config'; },
-      { rgb: C.impulsoRGB, fuente: '12px system-ui', alto: 26 });
+    // Dos puertas secundarias, una al lado de la otra: preferencias y glosario.
+    // LAS PIEZAS va aca --y no escondido en Ajustes-- porque no es una opcion,
+    // es la respuesta a "que es esa cosa", y esa pregunta aparece jugando.
+    const anSec = Math.min(108, w * 0.3);
+    btn('Ajustes', w / 2 - anSec / 2 - 4, yJ + (chico ? 34 : 40), () => { pantalla = 'config'; },
+      { rgb: C.impulsoRGB, fuente: '12px system-ui', alto: 26, ancho: anSec });
+    btn('Las piezas', w / 2 + anSec / 2 + 4, yJ + (chico ? 34 : 40), () => { pantalla = 'piezas'; },
+      { rgb: C.teclaRGB, fuente: '12px system-ui', alto: 26, ancho: anSec });
     // el rango mas alto que tenes, que es lo unico que este juego colecciona
     const alto = NIVELES.map(leerRecord).filter(r => r && r.rango)
       .sort((a, b) => RANGOS.indexOf(b.rango) - RANGOS.indexOf(a.rango))[0];
@@ -5143,6 +5180,420 @@ function arrancarNavegador () {
   // LOS AJUSTES, en tres grupos: como se porta el juego, como se porta la
   // maquina, y que teclas hay. Antes eran dos botones sueltos y cuatro
   // renglones flotando entre ellos, sin decir cual explicaba a cual.
+  // ---------------------------------------------------------------------------
+  // LAS PIEZAS. Un glosario adentro del juego, y no por prolijidad: durante el
+  // desarrollo se confundieron dos veces el PARCHE (rebota solo, sin boton) con
+  // el CAÑO (hay que caerle encima en el aire), y esa confusion costo dos
+  // rondas de trabajo sobre el objeto equivocado. Si los que hicieron el juego
+  // no le dan el mismo nombre a la misma cosa, el jugador tampoco va a poder.
+  //
+  // Las laminas se dibujan con las PRIMITIVAS DEL JUEGO --la red al 20%, la
+  // tecla azul translucida, la esfera ambar-- y no con iconos aparte. Un
+  // glosario ilustrado con simbolos propios enseña los simbolos, no el juego.
+  //
+  // Y cada pieza dice su GESTO: que hacés vos con eso. Es el dato que faltaba,
+  // porque la mitad de las piezas del mapa no se tocan --el parche pica solo,
+  // la ligada la paga la caida, bajo el techo hay que no hacer nada-- y eso no
+  // se deduce de mirarlas.
+  let piezaCat = 0;
+  const PIEZA_CATS = ['TECLAS', 'EN EL AIRE', 'EL PISO', 'ZONAS', 'EL FONDO'];
+
+  // El vocabulario de trazo, compartido por todas las laminas: si cada una
+  // dibujara su propia red, tarde o temprano una iba a mentir.
+  const pRed = (x, y, an) => {
+    cx.strokeStyle = C.red; cx.lineWidth = 2;
+    cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x + an, y); cx.stroke();
+  };
+  const pTecla = (x, y, an, a = 0.55, al = 4) => {
+    cx.fillStyle = `rgba(${C.teclaRGB},${a})`; cx.fillRect(x, y, an, al);
+  };
+  const pEsfera = (x, y, r = 6) => {
+    cx.fillStyle = C.esfera; cx.beginPath(); cx.arc(x, y, r, 0, Math.PI * 2); cx.fill();
+  };
+  const pArco = (x0, y0, x1, y1, alza, rgb = C.esferaRGB, a = 0.3) => {
+    cx.strokeStyle = `rgba(${rgb},${a})`; cx.lineWidth = 1.6; cx.setLineDash([3, 4]);
+    cx.beginPath(); cx.moveTo(x0, y0);
+    cx.quadraticCurveTo((x0 + x1) / 2, Math.min(y0, y1) - alza, x1, y1);
+    cx.stroke(); cx.setLineDash([]);
+  };
+  const pDicho = (txt, x, y, rgb = '232,230,224', a = 0.45) => {
+    cx.textAlign = 'center'; cx.fillStyle = `rgba(${rgb},${a})`;
+    cx.font = '9px system-ui'; cx.fillText(txt, x, y);
+  };
+  // el caño, que se dibuja en tres fichas distintas y tiene que ser el mismo
+  const pCanio = (x, yBase, yTope, an) => {
+    cx.fillStyle = `rgba(${C.esferaRGB},0.32)`;
+    cx.fillRect(x - an * 0.16, yTope, an * 0.32, yBase - yTope);
+    cx.fillStyle = C.impulso;
+    cx.fillRect(x - an / 2, yTope - 5, an, 5);
+    cx.fillStyle = 'rgba(255,255,255,0.65)';
+    cx.fillRect(x - an / 2, yTope - 7, an, 2);
+  };
+
+  const PIEZAS = [
+    // ---- las teclas: la melodia -------------------------------------------
+    { c: 0, nom: 'Tecla', ges: 'Tocá al pisarla', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      pTecla(x + an * 0.28, y + al * 0.58, an * 0.44);
+      cx.strokeStyle = 'rgba(232,230,224,0.3)'; cx.lineWidth = 1; cx.setLineDash([2, 3]);
+      cx.beginPath(); cx.moveTo(x + an / 2, y + al * 0.3); cx.lineTo(x + an / 2, y + al * 0.78);
+      cx.stroke(); cx.setLineDash([]);
+      pEsfera(x + an / 2, y + al * 0.58 - 7);
+      pDicho('el pulso', x + an / 2, y + al * 0.24);
+    } },
+    { c: 0, nom: 'Riel', ges: 'Mantené apretado', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      cx.strokeStyle = `rgba(${C.teclaRGB},0.8)`; cx.lineWidth = 5; cx.lineCap = 'round';
+      cx.beginPath(); cx.moveTo(x + an * 0.14, y + al * 0.64);
+      cx.lineTo(x + an * 0.72, y + al * 0.64); cx.lineTo(x + an * 0.88, y + al * 0.46);
+      cx.stroke(); cx.lineCap = 'butt';
+      pEsfera(x + an * 0.38, y + al * 0.64 - 7);
+      pDicho('la nota larga', x + an / 2, y + al * 0.26);
+    } },
+    { c: 0, nom: 'Escalera', ges: 'Un toque por escalón', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      for (let i = 0; i < 4; i++) pTecla(x + an * (0.12 + i * 0.19), y + al * (0.76 - i * 0.11), an * 0.19);
+      pEsfera(x + an * 0.6, y + al * 0.43 - 7);
+      pDicho('suenan en orden', x + an / 2, y + al * 0.2);
+    } },
+    { c: 0, nom: 'Ligada', ges: 'Ninguno: dejate caer', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      pTecla(x + an * 0.12, y + al * 0.4, an * 0.28);
+      pTecla(x + an * 0.6, y + al * 0.76, an * 0.28, 0.28);
+      cx.strokeStyle = `rgba(${C.suciaRGB},0.85)`; cx.lineWidth = 1.6; cx.setLineDash([3, 3]);
+      cx.beginPath(); cx.moveTo(x + an * 0.4, y + al * 0.4);
+      cx.quadraticCurveTo(x + an * 0.52, y + al * 0.5, x + an * 0.62, y + al * 0.76);
+      cx.stroke(); cx.setLineDash([]);
+      pEsfera(x + an * 0.4, y + al * 0.4 - 7);
+      pDicho('no la toques', x + an / 2, y + al * 0.18, C.suciaRGB, 0.9);
+    } },
+    { c: 0, nom: 'Tecla de bajo', ges: 'Igual, pero cambia la voz', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      pTecla(x + an * 0.06, y + al * 0.26, an * 0.2, 0.2);
+      pTecla(x + an * 0.74, y + al * 0.26, an * 0.2, 0.2);
+      pTecla(x + an * 0.32, y + al * 0.74, an * 0.36, 0.75, 6);
+      pEsfera(x + an / 2, y + al * 0.74 - 8);
+      pDicho('la banda de abajo', x + an / 2, y + al * 0.5);
+    } },
+    { c: 0, nom: 'Silencio', ges: 'Ninguno. Y no sueltes', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      pTecla(x + an * 0.04, y + al * 0.68, an * 0.2);
+      pTecla(x + an * 0.76, y + al * 0.68, an * 0.2);
+      pArco(x + an * 0.18, y + al * 0.68, x + an * 0.82, y + al * 0.68, al * 0.36);
+      pEsfera(x + an / 2, y + al * 0.3);
+      pDicho('respiro', x + an / 2, y + al * 0.86, '232,230,224', 0.32);
+    } },
+    { c: 0, nom: 'Plataforma de salida', ges: 'Ninguno: mirá el conteo', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      cx.fillStyle = `rgba(${C.suciaRGB},0.5)`; cx.fillRect(x + an * 0.04, y + al * 0.7, an * 0.68, 6);
+      cx.fillStyle = `rgba(${C.impulsoRGB},0.5)`;
+      for (let i = 0; i < 3; i++) {
+        cx.beginPath(); cx.arc(x + an * (0.22 + i * 0.16), y + al * 0.7 - 3, 4.5, 0, Math.PI * 2); cx.fill();
+      }
+      pEsfera(x + an * 0.11, y + al * 0.7 - 8);
+      pDicho('acá empezás', x + an / 2, y + al * 0.34);
+    } },
+
+    // ---- en el aire --------------------------------------------------------
+    { c: 1, nom: 'Orbe', ges: 'Ninguno: pasá por adentro', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      pTecla(x + an * 0.04, y + al * 0.7, an * 0.18);
+      pTecla(x + an * 0.78, y + al * 0.7, an * 0.18);
+      pArco(x + an * 0.16, y + al * 0.7, x + an * 0.86, y + al * 0.7, al * 0.4, C.esferaRGB, 0.2);
+      cx.strokeStyle = C.impulso; cx.lineWidth = 1.8;
+      [[0.34, 0.44], [0.5, 0.34], [0.66, 0.44]].forEach(([fx, fy]) => {
+        cx.beginPath(); cx.arc(x + an * fx, y + al * fy, 5, 0, Math.PI * 2); cx.stroke();
+      });
+      pEsfera(x + an * 0.2, y + al * 0.56);
+      pDicho('atravesalo: es una nota', x + an / 2, y + al * 0.14, C.impulsoRGB, 0.75);
+    } },
+    { c: 1, nom: 'Caño', ges: 'Caele encima. Tocá y lo cargás', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      pTecla(x + an * 0.03, y + al * 0.76, an * 0.16);
+      pTecla(x + an * 0.81, y + al * 0.76, an * 0.16);
+      pCanio(x + an / 2, y + al * 0.9, y + al * 0.42, an * 0.3);
+      pArco(x + an * 0.13, y + al * 0.76, x + an * 0.5, y + al * 0.42, al * 0.3);
+      pEsfera(x + an / 2, y + al * 0.42 - 12);
+      pDicho('la cabeza es plataforma', x + an / 2, y + al * 0.16, C.impulsoRGB, 0.75);
+    } },
+    { c: 1, nom: 'El rescate del caño', ges: 'Ninguno: te dispara de vuelta', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      pCanio(x + an * 0.56, y + al * 0.9, y + al * 0.36, an * 0.28);
+      cx.fillStyle = `rgba(${C.esferaRGB},0.4)`;
+      cx.beginPath(); cx.arc(x + an * 0.16, y + al * 0.9 - 6, 6, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = `rgba(${C.esferaRGB},0.7)`;
+      cx.beginPath(); cx.arc(x + an * 0.34, y + al * 0.9 - 6, 6, 0, Math.PI * 2); cx.fill();
+      cx.strokeStyle = C.impulso; cx.lineWidth = 1.8; cx.setLineDash([3, 3]);
+      cx.beginPath(); cx.moveTo(x + an * 0.56, y + al * 0.86); cx.lineTo(x + an * 0.56, y + al * 0.5);
+      cx.stroke(); cx.setLineDash([]);
+      cx.beginPath();
+      cx.moveTo(x + an * 0.52, y + al * 0.56); cx.lineTo(x + an * 0.56, y + al * 0.46);
+      cx.lineTo(x + an * 0.6, y + al * 0.56); cx.stroke();
+      pDicho('venís rodando: te levanta', x + an / 2, y + al * 0.2, C.impulsoRGB, 0.7);
+    } },
+    { c: 1, nom: 'Techo', ges: 'Ninguno. Tocar acá te mata', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      cx.fillStyle = 'rgba(232,230,224,0.1)';
+      cx.fillRect(x + an * 0.2, y + al * 0.18, an * 0.6, al * 0.3);
+      cx.strokeStyle = C.peligro; cx.lineWidth = 2.5;
+      cx.beginPath(); cx.moveTo(x + an * 0.2, y + al * 0.48); cx.lineTo(x + an * 0.8, y + al * 0.48); cx.stroke();
+      pTecla(x + an * 0.02, y + al * 0.74, an * 0.16);
+      pTecla(x + an * 0.82, y + al * 0.74, an * 0.16);
+      pEsfera(x + an / 2, y + al * 0.76);
+      pDicho('no toques acá', x + an / 2, y + al * 0.12, '232,230,224', 0.8);
+    } },
+
+    // ---- el piso -----------------------------------------------------------
+    { c: 2, nom: 'La red', ges: 'Tocá: te relanza', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.66, an);
+      cx.strokeStyle = 'rgba(232,230,224,0.08)'; cx.lineWidth = 1;
+      cx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        cx.moveTo(x + an * (0.08 + i * 0.16), y + al * 0.66);
+        cx.lineTo(x + an * (0.13 + i * 0.16), y + al * 0.94);
+      }
+      cx.stroke();
+      cx.fillStyle = `rgba(${C.esferaRGB},0.45)`;
+      cx.beginPath(); cx.arc(x + an * 0.24, y + al * 0.66 - 6, 6, 0, Math.PI * 2); cx.fill();
+      pEsfera(x + an * 0.46, y + al * 0.66 - 6);
+      pArco(x + an * 0.58, y + al * 0.58, x + an * 0.86, y + al * 0.5, al * 0.22, C.impulsoRGB, 0.8);
+      pDicho('caerte cuesta la nota, no el tramo', x + an / 2, y + al * 0.2, C.impulsoRGB, 0.7);
+    } },
+    { c: 2, nom: 'Abismo', ges: 'No sueltes', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.7, an * 0.28);
+      pRed(x + an * 0.72, y + al * 0.7, an * 0.28);
+      cx.strokeStyle = `rgba(255,107,107,0.45)`; cx.lineWidth = 2;
+      cx.beginPath();
+      cx.moveTo(x + an * 0.28, y + al * 0.7); cx.lineTo(x + an * 0.32, y + al * 0.96);
+      cx.moveTo(x + an * 0.72, y + al * 0.7); cx.lineTo(x + an * 0.68, y + al * 0.96);
+      cx.stroke();
+      cx.strokeStyle = `rgba(${C.teclaRGB},0.8)`; cx.lineWidth = 5; cx.lineCap = 'round';
+      cx.beginPath(); cx.moveTo(x + an * 0.18, y + al * 0.4); cx.lineTo(x + an * 0.82, y + al * 0.4);
+      cx.stroke(); cx.lineCap = 'butt';
+      pEsfera(x + an / 2, y + al * 0.4 - 7);
+      pDicho('sin red', x + an / 2, y + al * 0.86, '255,107,107', 0.8);
+    } },
+    { c: 2, nom: 'Parche', ges: 'Ninguno: pica solo, SIN botón', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.86, an);
+      cx.strokeStyle = `rgba(${C.impulsoRGB},0.7)`; cx.fillStyle = `rgba(${C.impulsoRGB},0.3)`;
+      cx.lineWidth = 1.6;
+      [0.22, 0.5, 0.78].forEach(fx => {
+        cx.beginPath(); cx.ellipse(x + an * fx, y + al * 0.84, an * 0.09, 4.5, 0, 0, Math.PI * 2);
+        cx.fill(); cx.stroke();
+      });
+      pArco(x + an * 0.22, y + al * 0.78, x + an * 0.5, y + al * 0.78, al * 0.34);
+      pArco(x + an * 0.5, y + al * 0.78, x + an * 0.78, y + al * 0.78, al * 0.34);
+      pEsfera(x + an * 0.36, y + al * 0.42);
+      pDicho('la esfera driblea sola', x + an / 2, y + al * 0.16, C.impulsoRGB, 0.8);
+    } },
+    { c: 2, nom: 'Tramo de rodar', ges: 'Ninguno: está escrito', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.72, an);
+      cx.fillStyle = `rgba(${C.impulsoRGB},0.1)`;
+      cx.fillRect(x + an * 0.24, y + al * 0.62, an * 0.52, al * 0.2);
+      cx.strokeStyle = `rgba(${C.impulsoRGB},0.5)`; cx.lineWidth = 2;
+      cx.beginPath();
+      cx.moveTo(x + an * 0.24, y + al * 0.62); cx.lineTo(x + an * 0.24, y + al * 0.82);
+      cx.moveTo(x + an * 0.76, y + al * 0.62); cx.lineTo(x + an * 0.76, y + al * 0.82);
+      cx.stroke();
+      pEsfera(x + an / 2, y + al * 0.72 - 6);
+      pDicho('acá la canción manda rodar', x + an / 2, y + al * 0.36, C.impulsoRGB, 0.7);
+    } },
+
+    // ---- zonas -------------------------------------------------------------
+    { c: 3, nom: 'Viento', ges: 'El de siempre: llegás más lejos', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      cx.strokeStyle = `rgba(${C.impulsoRGB},0.45)`; cx.lineWidth = 1.8;
+      [0.3, 0.5, 0.7].forEach((fy, i) => {
+        cx.beginPath();
+        cx.moveTo(x + an * (0.1 + i * 0.05), y + al * fy);
+        cx.quadraticCurveTo(x + an * 0.4, y + al * (fy - 0.08), x + an * 0.7, y + al * fy);
+        cx.stroke();
+      });
+      pArco(x + an * 0.1, y + al * 0.84, x + an * 0.92, y + al * 0.66, al * 0.6);
+      pEsfera(x + an * 0.52, y + al * 0.24);
+      pDicho('baja la gravedad', x + an / 2, y + al * 0.1, C.impulsoRGB, 0.7);
+    } },
+    { c: 3, nom: 'Túnel', ges: 'El de siempre: cambia cómo se oye', dib: (x, y, an, al) => {
+      cx.fillStyle = 'rgba(8,8,12,0.75)';
+      cx.fillRect(x + an * 0.18, y + al * 0.16, an * 0.64, al * 0.74);
+      cx.fillStyle = 'rgba(232,230,224,0.28)';
+      cx.fillRect(x + an * 0.18, y + al * 0.16, an * 0.64, 2);
+      pRed(x, y + al * 0.9, an);
+      cx.strokeStyle = `rgba(${C.teclaRGB},0.7)`; cx.lineWidth = 2.2;
+      [0.18, 0.82].forEach(fx => {
+        cx.beginPath();
+        cx.ellipse(x + an * fx, y + al * 0.53, an * 0.035, al * 0.34, 0, 0, Math.PI * 2); cx.stroke();
+      });
+      pEsfera(x + an / 2, y + al * 0.62);
+      pDicho('adentro el sonido se ahoga', x + an / 2, y + al * 0.1);
+    } },
+    { c: 3, nom: 'Agua', ges: 'El de siempre', dib: (x, y, an, al) => {
+      cx.fillStyle = `rgba(${C.teclaRGB},0.08)`;
+      cx.fillRect(x, y + al * 0.66, an, al * 0.3);
+      cx.strokeStyle = `rgba(${C.teclaRGB},0.55)`; cx.lineWidth = 2;
+      cx.beginPath();
+      for (let i = 0; i <= 8; i++) {
+        const px = x + an * (i / 8), py = y + al * (0.66 + (i % 2 ? 0.03 : -0.02));
+        i ? cx.lineTo(px, py) : cx.moveTo(px, py);
+      }
+      cx.stroke();
+      pEsfera(x + an / 2, y + al * 0.58);
+      cx.strokeStyle = `rgba(${C.teclaRGB},0.45)`; cx.lineWidth = 1.4;
+      cx.beginPath(); cx.ellipse(x + an / 2, y + al * 0.68, an * 0.11, 4, 0, 0, Math.PI * 2); cx.stroke();
+      pDicho('la red es superficie', x + an / 2, y + al * 0.24);
+    } },
+    { c: 3, nom: 'Zona de arpegio', ges: 'Piques encadenados, cosechando', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      [0.06, 0.4, 0.74].forEach(fx => pTecla(x + an * fx, y + al * 0.72, an * 0.2));
+      cx.strokeStyle = C.impulso; cx.lineWidth = 1.8;
+      [[0.3, 0.46], [0.5, 0.34], [0.7, 0.46]].forEach(([fx, fy]) => {
+        cx.beginPath(); cx.arc(x + an * fx, y + al * fy, 4.5, 0, Math.PI * 2); cx.stroke();
+      });
+      pArco(x + an * 0.16, y + al * 0.72, x + an * 0.84, y + al * 0.72, al * 0.42, C.esferaRGB, 0.2);
+      pEsfera(x + an * 0.5, y + al * 0.34);
+      pDicho('acá driblea la esfera', x + an / 2, y + al * 0.12, C.impulsoRGB, 0.7);
+    } },
+    { c: 3, nom: 'Zona de caños', ges: 'Encadená: todos = cierre', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      pCanio(x + an * 0.22, y + al * 0.9, y + al * 0.56, an * 0.2);
+      pCanio(x + an * 0.5, y + al * 0.9, y + al * 0.4, an * 0.2);
+      pCanio(x + an * 0.78, y + al * 0.9, y + al * 0.62, an * 0.2);
+      pDicho('el build lo abrís vos', x + an / 2, y + al * 0.2, C.impulsoRGB, 0.75);
+    } },
+    { c: 3, nom: 'Voz, octava y bajo', ges: 'Ninguno: lo manda la partitura', dib: (x, y, an, al) => {
+      cx.strokeStyle = 'rgba(232,230,224,0.18)'; cx.lineWidth = 2;
+      cx.beginPath(); cx.moveTo(x + an * 0.06, y + al * 0.66); cx.lineTo(x + an * 0.94, y + al * 0.66); cx.stroke();
+      const zs = [[0.08, C.teclaRGB, 'voz'], [0.37, C.impulsoRGB, 'octava'], [0.66, C.suciaRGB, 'bajo']];
+      zs.forEach(([fx, rgb, txt]) => {
+        cx.fillStyle = `rgba(${rgb},0.2)`;
+        cx.fillRect(x + an * fx, y + al * 0.42, an * 0.26, al * 0.2);
+        cx.strokeStyle = `rgba(${rgb},0.55)`; cx.lineWidth = 1.4;
+        cx.strokeRect(x + an * fx, y + al * 0.42, an * 0.26, al * 0.2);
+        pDicho(txt, x + an * (fx + 0.13), y + al * 0.86, rgb, 0.8);
+      });
+    } },
+
+    // ---- el fondo ----------------------------------------------------------
+    { c: 4, nom: 'Biomas', ges: 'Ninguno: dicen dónde estás', dib: (x, y, an, al) => {
+      const cols = ['#182a20', '#1a1e2c', '#241f26', '#2a2118'];
+      cols.forEach((col, i) => { cx.fillStyle = col; cx.fillRect(x + an * i / 4, y, an / 4, al * 0.9); });
+      cx.fillStyle = '#3a6a4c';
+      cx.beginPath();
+      cx.moveTo(x + an * 0.05, y + al * 0.86); cx.lineTo(x + an * 0.1, y + al * 0.56);
+      cx.lineTo(x + an * 0.15, y + al * 0.86); cx.fill();
+      cx.fillStyle = '#3c4763';
+      cx.fillRect(x + an * 0.3, y + al * 0.6, an * 0.05, al * 0.26);
+      cx.fillRect(x + an * 0.38, y + al * 0.5, an * 0.05, al * 0.36);
+      cx.fillStyle = '#4a4152';
+      cx.beginPath();
+      cx.moveTo(x + an * 0.54, y + al * 0.86); cx.lineTo(x + an * 0.64, y + al * 0.46);
+      cx.lineTo(x + an * 0.72, y + al * 0.86); cx.fill();
+      cx.strokeStyle = '#7a5f3c'; cx.lineWidth = 6;
+      cx.beginPath();
+      cx.moveTo(x + an * 0.76, y + al * 0.84);
+      cx.quadraticCurveTo(x + an * 0.88, y + al * 0.72, x + an, y + al * 0.84); cx.stroke();
+      pRed(x, y + al * 0.9, an);
+    } },
+    { c: 4, nom: 'Cielo y sierras', ges: 'Ninguno: cuatro velocidades', dib: (x, y, an, al) => {
+      cx.fillStyle = 'rgba(201,138,75,0.5)';
+      cx.beginPath(); cx.arc(x + an * 0.68, y + al * 0.4, al * 0.24, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = 'rgba(232,230,224,0.5)';
+      [[0.12, 0.16], [0.3, 0.28], [0.46, 0.12], [0.84, 0.2], [0.94, 0.34]].forEach(([fx, fy]) => {
+        cx.beginPath(); cx.arc(x + an * fx, y + al * fy, 1.2, 0, Math.PI * 2); cx.fill();
+      });
+      cx.fillStyle = '#2b2a38';
+      cx.beginPath(); cx.moveTo(x, y + al * 0.72);
+      cx.lineTo(x + an * 0.18, y + al * 0.5); cx.lineTo(x + an * 0.36, y + al * 0.72);
+      cx.lineTo(x + an * 0.56, y + al * 0.54); cx.lineTo(x + an * 0.76, y + al * 0.72);
+      cx.lineTo(x + an, y + al * 0.58); cx.lineTo(x + an, y + al * 0.9);
+      cx.lineTo(x, y + al * 0.9); cx.fill();
+      pRed(x, y + al * 0.9, an);
+    } },
+    { c: 4, nom: 'El cañón', ges: 'Ninguno: es la cortina', dib: (x, y, an, al) => {
+      pRed(x, y + al * 0.9, an);
+      cx.fillStyle = `rgba(${C.suciaRGB},0.5)`;
+      cx.fillRect(x + an * 0.5, y + al * 0.74, an * 0.5, 5);
+      cx.save();
+      cx.translate(x + an * 0.18, y + al * 0.72); cx.rotate(-0.55);
+      cx.fillStyle = '#3a3f47'; cx.fillRect(-an * 0.1, -7, an * 0.26, 14);
+      cx.fillStyle = '#575d67'; cx.fillRect(an * 0.14, -8, an * 0.04, 16);
+      cx.restore();
+      cx.fillStyle = '#2b2f36';
+      cx.beginPath(); cx.arc(x + an * 0.11, y + al * 0.86, 7, 0, Math.PI * 2); cx.fill();
+      pArco(x + an * 0.32, y + al * 0.5, x + an * 0.7, y + al * 0.7, al * 0.34, C.esferaRGB, 0.4);
+      pEsfera(x + an * 0.7, y + al * 0.7 - 6);
+      pDicho('clavado en el tiempo 1', x + an * 0.62, y + al * 0.24);
+    } },
+  ];
+
+  function dibujarPiezas (w, h) {
+    velo(w, h);
+    const chico = h < 600 || w < 560;
+    titulo('LAS PIEZAS', w / 2, h * (chico ? 0.09 : 0.11), chico ? 16 : 19, C.peligro, 2.6);
+    ayuda('Cómo se llama cada cosa, y qué hacés vos con ella',
+      w / 2, h * (chico ? 0.09 : 0.11) + 18, C.tenue, chico ? 10.5 : 11.5);
+
+    // LAS SOLAPAS. Veintidos piezas de un saque son una lista que nadie lee;
+    // agrupadas por donde viven, cada grupo entra de un vistazo y el jugador
+    // busca por donde vio la cosa, que es como se acuerda de ella.
+    const yTab = h * (chico ? 0.19 : 0.2);
+    const anT = Math.min(w * 0.9, 520) / PIEZA_CATS.length;
+    PIEZA_CATS.forEach((nom, i) => {
+      btn(nom, w / 2 + (i - (PIEZA_CATS.length - 1) / 2) * anT, yTab,
+        () => { piezaCat = i; },
+        { activo: i === piezaCat, ancho: anT - 5, alto: 26, margen: 6,
+          fuente: `${chico ? 9 : 10}px system-ui`, rgb: C.teclaRGB });
+    });
+
+    const lote = PIEZAS.filter(p => p.c === piezaCat);
+    // DOS COLUMNAS YA EN EL TELEFONO. Con una sola, la solapa de siete fichas
+    // repartia 550 px entre siete filas y a la lamina le quedaban 38: el dibujo
+    // salia aplastado y el nombre le pisaba la red. Dos columnas parten las
+    // filas a la mitad y cada ficha recupera el alto que necesita para que el
+    // dibujo --que es todo el punto de esta pantalla-- se lea.
+    const cols = w < 380 ? 1 : w < 900 ? 2 : 3;
+    const filas = Math.ceil(lote.length / cols);
+    const arriba = yTab + 26;
+    const dispo = h - arriba - (chico ? 44 : 56);
+    const anC = Math.min((w * 0.92) / cols, 300) - 10;
+    const alC = Math.min(dispo / filas - 10, chico ? 96 : 132);
+    // EL BLOQUE VA CENTRADO EN LO QUE SOBRA. Anclado arriba, una solapa de
+    // cuatro fichas dejaba media pantalla vacia abajo y la de siete llegaba
+    // hasta el borde: dos composiciones distintas para la misma pantalla, y la
+    // vacia se leia como si faltara algo.
+    const alTotal = filas * (alC + 10) - 10;
+    const y0 = arriba + Math.max(0, (dispo - alTotal) / 2);
+    const xIni = w / 2 - (cols * (anC + 10) - 10) / 2;
+
+    lote.forEach((p, i) => {
+      const cxx = xIni + (i % cols) * (anC + 10);
+      const cyy = y0 + Math.floor(i / cols) * (alC + 10);
+      // la ficha: marco tenue, y adentro la lamina arriba y las palabras abajo
+      caja(cxx, cyy, anC, alC, 8);
+      cx.fillStyle = 'rgba(232,230,224,0.035)'; cx.fill();
+      cx.strokeStyle = 'rgba(232,230,224,0.1)'; cx.lineWidth = 1; cx.stroke();
+      const alLam = alC * 0.56;
+      cx.save();
+      cx.beginPath(); cx.rect(cxx + 1, cyy + 1, anC - 2, alLam); cx.clip();
+      p.dib(cxx + 8, cyy + 4, anC - 16, alLam - 6);
+      cx.restore();
+      cx.strokeStyle = 'rgba(232,230,224,0.08)';
+      cx.beginPath(); cx.moveTo(cxx + 1, cyy + alLam); cx.lineTo(cxx + anC - 1, cyy + alLam); cx.stroke();
+      cx.textAlign = 'left';
+      cx.fillStyle = C.peligro; cx.font = `bold ${chico ? 11.5 : 12.5}px system-ui`;
+      cx.fillText(p.nom, cxx + 10, cyy + alLam + (chico ? 16 : 18));
+      // EL GESTO, que es el dato que no se deduce mirando: la mitad de las
+      // piezas del mapa no se tocan, y eso hay que decirlo con todas las letras
+      cx.fillStyle = p.ges.startsWith('Ninguno') ? 'rgba(232,230,224,0.34)' : `rgba(${C.impulsoRGB},0.8)`;
+      cx.font = `${chico ? 9.5 : 10.5}px system-ui`;
+      cx.fillText(p.ges, cxx + 10, cyy + alLam + (chico ? 30 : 34));
+      cx.textAlign = 'center';
+    });
+
+    btn('◀  Volver', w / 2, h - (chico ? 20 : 26), () => { pantalla = 'inicio'; },
+      { rgb: C.impulsoRGB, fuente: '12px system-ui', alto: 26 });
+  }
+
   function dibujarConfig (w, h) {
     velo(w, h);
     const chico = h < 600;
@@ -6183,10 +6634,11 @@ function arrancarNavegador () {
       if (tz.x1 < s.x - 3 || tz.x0 > s.x + 7) continue;
       const a0 = Math.max(-40, px(tz.x0)), a1 = Math.min(w + 40, px(tz.x1));
       const techoY = py(0.72), pisoY = py(0) + 6;
-      // la penumbra: adentro el mundo se oscurece, igual que el sonido
+      // la penumbra: adentro el mundo se oscurece, igual que el sonido.
+      // Mas cerrada que antes: la luz ahora la pones VOS con cada pique.
       const pen = cx.createLinearGradient(0, techoY, 0, pisoY);
-      pen.addColorStop(0, 'rgba(8,8,12,0.68)');
-      pen.addColorStop(1, 'rgba(8,8,12,0.12)');
+      pen.addColorStop(0, 'rgba(8,8,12,0.80)');
+      pen.addColorStop(1, 'rgba(8,8,12,0.28)');
       cx.fillStyle = pen;
       cx.fillRect(a0, techoY, a1 - a0, pisoY - techoY);
       // el lomo: una losa con filo de luz -- esto pasa POR ARRIBA tuyo
@@ -6216,10 +6668,54 @@ function arrancarNavegador () {
         const borde = Math.min(1, Math.min(s.x - tz.x0, tz.x1 - s.x) / 1.2);
         const vin = cx.createRadialGradient(px(s.x), py(s.y), esc * 0.6, px(s.x), py(s.y), Math.max(w, h) * 0.85);
         vin.addColorStop(0, 'rgba(8,8,12,0)');
-        vin.addColorStop(1, `rgba(8,8,12,${0.55 * borde})`);
+        vin.addColorStop(1, `rgba(8,8,12,${0.72 * borde})`);
         cx.fillStyle = vin;
         cx.fillRect(0, 0, w, h);
+        // ...pero adentro no estas ciego: la LINTERNA PROPIA es un halo
+        // minimo pegado a la esfera -- tu instrumento viaja con vos, y tu
+        // luz tambien. Lo demas lo revelan los piques (el sonar, abajo).
+        cx.save();
+        cx.globalCompositeOperation = 'lighter';
+        const gl = cx.createRadialGradient(px(s.x), py(s.y), 0, px(s.x), py(s.y), esc * 1.5);
+        gl.addColorStop(0, 'rgba(255,240,200,0.16)');
+        gl.addColorStop(1, 'rgba(255,240,200,0)');
+        cx.fillStyle = gl;
+        cx.fillRect(px(s.x) - esc * 1.5, py(s.y) - esc * 1.5, esc * 3, esc * 3);
+        // LA LUZ AL FINAL: la boca de salida es un disco calido que crece a
+        // medida que te acercas -- volar a oscuras hacia la luz, y el crash
+        // de DESPEGUE II te recibe del otro lado
+        const prog = (s.x - tz.x0) / (tz.x1 - tz.x0);
+        const mx = px(tz.x1), my = (techoY + pisoY) / 2;
+        const rl = esc * (0.6 + 3.2 * prog * prog);
+        const gs = cx.createRadialGradient(mx, my, 0, mx, my, rl);
+        gs.addColorStop(0, `rgba(255,236,190,${0.20 + 0.55 * prog * prog})`);
+        gs.addColorStop(0.55, `rgba(255,220,160,${0.10 + 0.30 * prog * prog})`);
+        gs.addColorStop(1, 'rgba(255,220,160,0)');
+        cx.fillStyle = gs;
+        cx.fillRect(mx - rl, my - rl, rl * 2, rl * 2);
+        cx.restore();
       }
+    }
+
+    // EL SONAR SE VE: cada pique adentro del tunel deja un anillo de luz que
+    // se expande y se apaga -- revela costillas y teclas a su paso. El pique
+    // limpio brilla mas: la misma nota que entreabre el filtro.
+    if (sonarTunel.length) {
+      cx.save();
+      cx.globalCompositeOperation = 'lighter';
+      for (let i = sonarTunel.length - 1; i >= 0; i--) {
+        const a = sonarTunel[i], e = (performance.now() - a.t) / 700;
+        if (e > 1) { sonarTunel.splice(i, 1); continue; }
+        const r = (0.4 + e * 3.4) * esc;
+        const al = 0.45 * (1 - e) * (1 - a.suc * 0.6);
+        const g = cx.createRadialGradient(px(a.x), py(a.y), r * 0.55, px(a.x), py(a.y), r);
+        g.addColorStop(0, 'rgba(255,240,200,0)');
+        g.addColorStop(0.8, `rgba(255,240,200,${al})`);
+        g.addColorStop(1, 'rgba(255,240,200,0)');
+        cx.fillStyle = g;
+        cx.beginPath(); cx.arc(px(a.x), py(a.y), r, 0, Math.PI * 2); cx.fill();
+      }
+      cx.restore();
     }
 
     // techos del silencio
@@ -6948,6 +7444,7 @@ function arrancarNavegador () {
       cx.textAlign = 'center';
       if (pantalla === 'mapa') dibujarNiveles(w, h);
       else if (pantalla === 'config') dibujarConfig(w, h);
+      else if (pantalla === 'piezas') dibujarPiezas(w, h);
       else dibujarInicio(w, h);
     } else {
       cx.textAlign = 'left';
