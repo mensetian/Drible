@@ -13,7 +13,7 @@ import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
   CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, ZONAS_PISTON, Y_GRAVE, HOLGURA,
   TRAMOS_RODAR, mandaRodar, RANGOS, rango, UMBRAL, AFINADO, PERFECTO, ROCE,
-  auditar, codigoDe, primeraNotaDe, SECCIONES
+  auditar, codigoDe, primeraNotaDe, SECCIONES, CARGA
 } from './juego.js';
 
 // de milisegundos a tiempos: las manos hablan en ms, la simulacion en beats
@@ -205,6 +205,21 @@ function correr (id) {
         s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
   };
 
+  // LA MANO QUE CARGA: juega perfecto y ademas gasta un toque en cada caño,
+  // desplazado `dev` respecto del paso del caño en la grilla. Con dev 0 es el
+  // gesto ideal; con +-CARGA, el borde exacto de la ventana.
+  const cargadora = dev => {
+    const pend = PISTONES.map(p => p.x + dev);
+    let j = 0;
+    return (s, b) => {
+      if (rescata(s, b)) return;
+      const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
+      s.sostiene = !!(k && k.riel);
+      if (k && !k.riel && !k.silencio && s.x >= k.xm && !s.tocadas.has(k.i)) tocar(s, b);
+      while (j < pend.length && s.x >= pend[j]) { tocar(s, b); j++; }
+    };
+  };
+
   // LA VENTANA DEL CAÑO. Se toca la tecla anfitriona corrida justo lo que el
   // juego todavia llama CLAVADA, para los dos lados, y se exige que la esfera
   // igual le caiga encima al caño. Si el caño pidiera mas precision que una
@@ -250,6 +265,11 @@ function correr (id) {
   const rBajo = jugar(atacaElBajo);
   const rz = jugar(tropieza);
   const rPiso = R.pistones ? jugar(porElPiso) : null;
+  // el gesto ideal, los dos bordes de la ventana, y justo afuera
+  const rCarga = R.pistones ? jugar(cargadora(0)) : null;
+  const rCargaAnt = R.pistones ? jugar(cargadora(-CARGA * 0.95)) : null;
+  const rCargaAtr = R.pistones ? jugar(cargadora(CARGA * 0.95)) : null;
+  const rCargaLejos = R.pistones ? jugar(cargadora(CARGA * 1.8)) : null;
   const rSpam = jugar(martillo(0.04));
   const rSpam2 = jugar(martillo(0.12));
   const rPrep = jugar(prepara);
@@ -518,6 +538,89 @@ function correr (id) {
     // el caño suena un golpe REAL del arreglo, como los orbes: sin eso es
     // decorado, que es de donde veniamos
     ['todo piston reclama un golpe de la bateria', PISTONES.every(p => p.instr), ''],
+    // PISARLO TIENE QUE PAGAR. Era el unico acierto del juego que no movia
+    // ningun numero: rozarlo costaba la racha y clavarlo no daba nada, asi que
+    // la contabilidad del caño solo castigaba. Ahora suma racha como una nota
+    // limpia -- y por eso la perfecta, que los pisa todos, termina con una
+    // mejor racha MAYOR que la cantidad de notas.
+    ['pisar un caño suma racha: acertarle mueve un numero',
+      !R.pistones || rp.mejorRacha > TOTAL_NOTAS,
+      R.pistones ? `mejor racha ${rp.mejorRacha} con ${TOTAL_NOTAS} notas + ${PISTONES.length} caños` : 'no aplica'],
+    // LA CADENA. Pisotones seguidos sin dejar escapar ninguno: escala el
+    // excedente musical de cada golpe. La perfecta no se saltea ninguno, asi
+    // que su cadena tiene que llegar al total de caños.
+    ['la cadena de caños cuenta los pisotones seguidos',
+      !R.pistones || Math.max(0, ...rp.eventos.filter(e => e.tipo === 'piston' && e.modo === 'encima')
+        .map(e => e.cadena || 0)) === PISTONES.length,
+      R.pistones ? `cadena maxima ${Math.max(0, ...rp.eventos.filter(e => e.tipo === 'piston' && e.modo === 'encima').map(e => e.cadena || 0))} de ${PISTONES.length}` : 'no aplica'],
+    // EL PLENO DE ZONA paga el cierre (fill + crash). Pisando todos, cada zona
+    // declarada tiene que cerrar exactamente una vez: si ninguna cierra, el
+    // premio grande es inalcanzable y la promesa del build es letra muerta.
+    ['pisar todos los caños de una zona cierra el build, una vez por zona',
+      !R.pistones || rp.eventos.filter(e => e.tipo === 'piston' && e.completa).length ===
+        new Set(PISTONES.map(p => p.zona)).size,
+      R.pistones ? `${rp.eventos.filter(e => e.tipo === 'piston' && e.completa).length} cierres · ${new Set(PISTONES.map(p => p.zona)).size} zonas con caños` : 'no aplica'],
+    // ...y NO se regala: al que se saltea uno de la zona, esa zona no le cierra
+    ['el que deja escapar un caño no cobra el cierre de esa zona',
+      !R.pistones || rAt.eventos.filter(e => e.tipo === 'piston' && e.completa).length <
+        new Set(PISTONES.map(p => p.zona)).size,
+      R.pistones ? `atrasada: ${rAt.pistonazos}/${PISTONES.length} caños · ${rAt.eventos.filter(e => e.tipo === 'piston' && e.completa).length} cierres` : 'no aplica'],
+    // CARGAR EL CAÑO: el toque de siempre dado sobre la cabeza. Tiene que
+    // entrar en TODOS -- si el gesto solo funciona en algunos caños, el
+    // jugador aprende que "a veces anda" y deja de intentarlo.
+    ['cargar el caño entra en todos: es el toque de siempre sobre la cabeza',
+      !R.pistones || rCarga.cargas === PISTONES.length,
+      R.pistones ? `${rCarga.cargas}/${PISTONES.length} cargados` : 'no aplica'],
+    // LA VENTANA ES SIMETRICA. Se mide contra p.x --donde el caño vive en la
+    // grilla-- y no contra el contacto, que cae unas centesimas despues:
+    // midiendo desde el contacto la ventana salia de -54 a +91 ms, o sea que
+    // adelantarse castigaba mas que atrasarse sin que nada lo dijera.
+    ['la ventana de carga vale igual adelantado que atrasado',
+      !R.pistones || (rCargaAnt.cargas === PISTONES.length && rCargaAtr.cargas === PISTONES.length),
+      R.pistones ? `adelantado ${rCargaAnt.cargas} · atrasado ${rCargaAtr.cargas} · ventana ±${(CARGA * SPB * 1000).toFixed(0)} ms` : 'no aplica'],
+    // ...y fuera de la ventana NO se regala: si cargara igual, no seria un
+    // premio por precision, seria un premio por apretar cerca
+    ['fuera de la ventana el caño no se carga',
+      !R.pistones || rCargaLejos.cargas === 0,
+      R.pistones ? `${rCargaLejos.cargas} cargas a ±${(CARGA * 1.8 * SPB * 1000).toFixed(0)} ms` : 'no aplica'],
+    // EL PREMIO NO PUEDE COSTAR UNA NOTA. Cargar gasta un toque de verdad, y
+    // un toque gastado de mas es una nota que se cobra contra la tecla
+    // equivocada. Si intentar el premio ensuciara la melodia, el juego estaria
+    // castigando al que se anima -- que es lo contrario de lo que promete el
+    // caño ("premio por precision, no trampa").
+    ['cargar no cuesta ninguna nota: el premio no se paga con la melodia',
+      !R.pistones || (rCarga.limpias.size === rp.limpias.size && rCarga.meta &&
+        rCargaAnt.limpias.size === rp.limpias.size && rCargaAtr.limpias.size === rp.limpias.size),
+      R.pistones ? `sin cargar ${rp.limpias.size} · cargando ${rCarga.limpias.size} · ant ${rCargaAnt.limpias.size} · atr ${rCargaAtr.limpias.size}` : 'no aplica'],
+    // ...NI puede moverte de lugar. Cargar no toca la trayectoria a proposito:
+    // la altura no se puede comprar (tres decimas de vuelo hasta la tecla
+    // siguiente, y mas abajo), asi que falsearla seria correr el aterrizaje --
+    // descolocar al jugador por haber acertado, que es justo lo que el caño
+    // promete que nunca hace.
+    ['cargar no cambia por donde vas: mismo aterrizaje que el pisoton simple',
+      !R.pistones || (Math.abs(rCarga.x - rp.x) < 1e-6 && rCarga.pistonazos === rp.pistonazos),
+      R.pistones ? `x ${rCarga.x.toFixed(3)} vs ${rp.x.toFixed(3)} · ${rCarga.pistonazos} vs ${rp.pistonazos} caños` : 'no aplica'],
+    // EL PLENO CARGADO es el cierre grande, y hay que ir a buscarlo caño por
+    // caño: pisarlos todos ya paga `completa`, cargarlos todos paga `plena`.
+    // Si la zona cerrara plena sin cargar, el gesto no valdria nada.
+    ['la zona cargada entera paga el cierre grande, y no se regala al que solo pisa',
+      !R.pistones || (rCarga.eventos.filter(e => e.tipo === 'piston' && e.plena).length ===
+        new Set(PISTONES.map(p => p.zona)).size &&
+        rp.eventos.filter(e => e.tipo === 'piston' && e.plena).length === 0),
+      R.pistones ? `cargando ${rCarga.eventos.filter(e => e.tipo === 'piston' && e.plena).length} plenas · solo pisando ${rp.eventos.filter(e => e.tipo === 'piston' && e.plena).length}` : 'no aplica'],
+    // CARGAR NO ES PUNTAJE. El premio del caño cargado es que la cancion se
+    // abra, y nada mas: el rango sigue subiendo por limpias, clavadas y orbes.
+    // Tiene que ser asi porque la ventana de carga cae en la grilla de
+    // semicorcheas, o sea que un tapping parejo y ciego pesca varias sin mirar
+    // el ritmo (medido: tocando cada medio tiempo, 8 de 10 caños, con la
+    // melodia hecha pedazos en 100/276). Mientras la carga no toque el
+    // puntaje, ese jugador se cambio 176 notas por un platillo -- mal negocio,
+    // y el juego no necesita defenderse de el.
+    ['cargar no mueve el puntaje: el premio es que la cancion se abra',
+      !R.pistones || (rCarga.perfectas.size === rp.perfectas.size &&
+        rango(rCarga.limpias.size, TOTAL_NOTAS, rCarga.orbes, ORBES.length, rCarga.perfectas.size) ===
+        rango(rp.limpias.size, TOTAL_NOTAS, rp.orbes, ORBES.length, rp.perfectas.size)),
+      R.pistones ? `${rango(rp.limpias.size, TOTAL_NOTAS, rp.orbes, ORBES.length, rp.perfectas.size)} con y sin cargar · ${rCarga.perfectas.size} clavadas` : 'no aplica'],
     // El caño no puede pedir MAS precision que la que el juego premia: si
     // clavaste la nota, lo pisas. Con la cabeza puesta sobre el arco del toque
     // exacto, cualquier desvio levantaba el arco y la esfera pasaba por

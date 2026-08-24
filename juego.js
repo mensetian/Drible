@@ -924,13 +924,24 @@ export const ROCE = 0.13;          // debajo de esto vas rasante: te agarra el v
 // ATRASADO usa la misma gracia que el coyote: el gesto fue el correcto y el
 // reloj humano no es exacto, asi que el caño queda cargable un instante mas.
 export const CARGA = 0.18;
-// ...y cuanto PESA el aire del vuelo cargado. La altura de un arco es el
-// tiempo de vuelo al cuadrado por la gravedad, y el tiempo aca NO se puede
-// tocar: x ES el tiempo, asi que estirar el vuelo es llegar tarde a la nota
-// que sigue. Queda la gravedad. El caño te lanza con mas fuerza y el aire de
-// ESE vuelo pesa el doble y medio, asi que la esfera sube mucho mas y vuelve
-// a caer en la MISMA tecla y en el MISMO instante: la cancion no se entera.
-export const CARGA_G = 2.6;
+// QUE COMPRA LA CARGA, y por que no compra otra cosa. Se midieron dos premios
+// antes de elegir este, y los dos estaban vacios:
+//
+//   ALTURA -- despues del caño quedan tres decimas de tiempo hasta la tecla
+//   siguiente, que ademas esta mas abajo: la esfera aterriza apenas alcanza esa
+//   altura. Subir la gravedad del vuelo cargado a SEIS veces gana 0.4 esferas.
+//   No hay altura que comprar ahi, y falsearla corriendo el aterrizaje seria
+//   descolocar al jugador por haber acertado.
+//
+//   ORBES -- los orbes viven en el arpegio (35.9-51.5) y los caños en los
+//   builds (121-234). Solo 3 de los 10 caños tienen un orbe en su vuelo: un
+//   premio que aparece una de cada tres veces se lee como una falla, no como
+//   un premio.
+//
+// Queda lo unico que esta en los diez: la MUSICA. El caño ya reclama un golpe
+// del arreglo; cargarlo lo ABRE --el golpe suena acentuado-- y una zona
+// cargada entera paga el cierre grande. El premio es que la cancion se abra,
+// que es la moneda de este juego.
 // El caño elige su golpe con JERARQUIA, no por cercania: el golpe entero
 // ('x' = bombo+caja+clap) manda sobre la caja, la caja sobre el clap, y el hat
 // es el ultimo recurso.
@@ -1568,7 +1579,7 @@ export function crearSim (opts = {}) {
     cadenaPiston: 0, pistonesZona: {},
     // el PISOTON CARGADO: los que ademas se pagaron con un toque. `cargaViva`
     // es la gracia del toque atrasado, igual que el coyote de una tecla.
-    cargas: 0, cargaViva: null,
+    cargas: 0, cargaViva: null, cargasZona: {},
     eventos: []
   };
 }
@@ -1867,6 +1878,7 @@ export function paso (s, dt) {
   // en la proxima rodada, a compases de distancia de donde vivian
   for (const tb of TAMBORES)
     if (!tb.piso && !s.tamboresHechos.has(tb.i) && s.x > tb.x + 0.4) s.tamboresHechos.add(tb.i);
+  if (s.cargaViva && s.x > s.cargaViva.hasta) s.cargaViva = null;
   for (const p of PISTONES) {
     if (s.pistones.has(p.x) || s.x <= p.x1 + 0.02) continue;
     s.pistones.add(p.x);
@@ -1897,39 +1909,20 @@ function haciaLaProxima (s, minimo = 1.1) {
   return Math.min(1.9, (sig.y - s.y) / T + G * T / 2);
 }
 
-// EL ARCO CARGADO. Mismo destino y mismo instante de llegada que el pisoton
-// simple --la nota que sigue no se entera-- pero el vuelo se hace ALTO: el
-// caño te lanza con mucha mas fuerza y el aire de ese vuelo pesa CARGA_G
-// veces mas, asi que la esfera sube al doble y vuelve a caer justo a tiempo.
-// Devuelve null si no hay arco que comprar: ahi no se cobra el toque tampoco.
-function arcoCargado (s) {
-  const g0 = gravedadEn(s.x);
-  const sig = NOTAS.find(n => !n.silencio && !s.tocadas.has(n.i) &&
-    n.x0 + MIRA - s.x >= vueloMinimo(n.y - s.y));
-  if (!sig) return null;
-  const T = Math.max(0.25, sig.x0 + MIRA - s.x);
-  // El impulso tiene tope (el mismo 1.9 de siempre: mas arriba el arco se va
-  // de la pantalla). Si el aire cargado pidiera mas de lo que la esfera puede
-  // empujar, se carga SOLO lo que entre -- un arco mas bajo es mejor que uno
-  // que se pasa de largo y no llega a la tecla.
-  const dy = sig.y - s.y;
-  const g = Math.min(g0 * CARGA_G, Math.max(g0, (1.88 - dy / T) * 2 / T));
-  if (g <= g0 * 1.15) return null;         // no alcanza para que se note: no es carga
-  const vy = dy / T + g * T / 2;
-  // ...y ningun techo puede quedar debajo de la cima. El premio no puede
-  // matarte: esa es la misma regla por la que fallar un caño no castiga.
-  const cima = s.y + vy * vy / (2 * g);
-  if (TECHOS.some(t => t.x1 > s.x && t.x0 < s.x + T && cima + 2 * R > t.y)) return null;
-  return { g, vy };
-}
-
 // El toque que CARGA el caño. Es el toque de siempre --no hay gesto nuevo--
 // dado en el unico lugar del mapa donde no hay tecla que lo cobre. Si llego
 // adelantado ya esta esperando en la cola de anticipos: se saca de ahi, porque
-// un toque se gasta UNA vez. Se acepta solo el que cayo cerca del contacto: el
-// que se dio mucho antes es para la tecla que viene y no se le puede robar.
-function cobrarCarga (s) {
-  const i = s.anticipos.findIndex(xt => s.x - xt <= CARGA);
+// un toque se gasta UNA vez.
+//
+// Se mide contra `p.x`, que es donde el caño VIVE en la grilla, no contra el
+// punto de contacto. No es lo mismo: la esfera toca la cabeza unas centesimas
+// despues de p.x, y midiendo desde ahi la ventana salia torcida --medido, de
+// -54 a +91 ms en vez de +-96--, o sea que adelantarse castigaba mas que
+// atrasarse sin que nada en el juego lo dijera. p.x es ademas el paso de
+// semicorchea del golpe que el caño reclama: la ventana queda centrada en el
+// instante musical, que es contra el que el jugador esta tocando.
+function cobrarCarga (s, p) {
+  const i = s.anticipos.findIndex(xt => Math.abs(p.x - xt) <= CARGA);
   if (i < 0) return false;
   s.anticipos.splice(i, 1);
   return true;
@@ -1952,25 +1945,23 @@ function pisarPiston (s, yAntes) {
     s.cadenaPiston++;
     s.pistonesZona[p.zona] = (s.pistonesZona[p.zona] || 0) + 1;
     s.y = p.y;
-    // ¿lo CARGASTE? Solo se cobra el toque si hay arco que comprar: gastarlo
-    // por nada seria robarle un toque a la tecla que viene.
-    const arco = arcoCargado(s);
-    const carga = !!arco && cobrarCarga(s);
-    if (carga) {
-      s.cargas++;
-      s.gAire = arco.g; s.vy = arco.vy;
-      s.cargaViva = null;
-    } else {
-      // te deja EXACTAMENTE en la linea de vuelo hacia la proxima tecla: si
-      // acertarle te descolocara, acertarle seria un castigo
-      s.vy = haciaLaProxima(s, s.vy);
-      // ...y el caño queda CARGABLE un instante mas, por si el toque viene un
-      // pelo tarde. Es la misma gracia que el coyote: el gesto fue el correcto
-      // y el reloj de una mano no es exacto.
-      s.cargaViva = arco ? { hasta: s.x + CARGA, y: p.y, instr: p.instr, paso: p.paso } : null;
-    }
+    // te deja EXACTAMENTE en la linea de vuelo hacia la proxima tecla: si
+    // acertarle te descolocara, acertarle seria un castigo. La carga NO toca
+    // esto: por donde vas no depende de si cobraste el premio.
+    s.vy = haciaLaProxima(s, s.vy);
+    // ¿lo CARGASTE? El toque adelantado ya esta esperando en la cola.
+    const carga = cobrarCarga(s, p);
+    if (carga) { s.cargas++; s.cargasZona[p.zona] = (s.cargasZona[p.zona] || 0) + 1; s.cargaViva = null; }
+    // ...y si no, el caño queda CARGABLE un instante mas, por si el toque
+    // viene un pelo tarde. Es la misma gracia que el coyote: el gesto fue el
+    // correcto y el reloj de una mano no es exacto.
+    else s.cargaViva = { hasta: p.x + CARGA, y: p.y, instr: p.instr, paso: p.paso,
+      zona: p.zona, deZona: p.deZona };
     s.eventos.push({ tipo: 'piston', modo: 'encima', x: s.x, y: p.y, instr: p.instr, paso: p.paso,
-      cadena: s.cadenaPiston, completa: s.pistonesZona[p.zona] === p.deZona, cargado: carga });
+      cadena: s.cadenaPiston, completa: s.pistonesZona[p.zona] === p.deZona, cargado: carga,
+      // el pleno CARGADO: la zona entera pisada Y abierta. Es el cierre grande,
+      // y hay que ganarselo caño por caño -- no alcanza con no fallar.
+      plena: s.cargasZona[p.zona] === p.deZona });
     return;
   }
 }
@@ -2002,12 +1993,11 @@ function rozarPiston (s) {
 // impulso y no como una correccion.
 function cargarTarde (s) {
   if (!s.cargaViva || s.x > s.cargaViva.hasta || s.estado !== 'aire') return false;
-  const arco = arcoCargado(s);
-  if (!arco) { s.cargaViva = null; return false; }
   const c = s.cargaViva; s.cargaViva = null;
   s.cargas++;
-  s.gAire = arco.g; s.vy = arco.vy;
-  s.eventos.push({ tipo: 'piston', modo: 'carga', x: s.x, y: c.y, instr: c.instr, paso: c.paso });
+  s.cargasZona[c.zona] = (s.cargasZona[c.zona] || 0) + 1;
+  s.eventos.push({ tipo: 'piston', modo: 'carga', x: s.x, y: c.y, instr: c.instr, paso: c.paso,
+    plena: s.cargasZona[c.zona] === c.deZona });
   return true;
 }
 
@@ -2385,6 +2375,15 @@ function arrancarNavegador () {
   // tope que evita saltos la dejaba prendida a medio apagar. Guardando CUANDO
   // empezo, la cuenta sale igual venga como venga el reloj, y en reposo vale
   // exactamente cero. Es el mismo trato que ya tienen los destellos y la fugaz.
+  // LA ENTRADA. La esfera aparecia ya puesta en la plataforma, quieta, y medio
+  // segundo despues el mundo arrancaba: la cancion empezaba sin que nada
+  // hubiera empezado. Ahora CAE -- entra desde arriba de la pantalla, con su
+  // estela, y toca la salida exactamente en el tiempo 1. El primer golpe de la
+  // cancion es el suyo, y desde ese golpe todo lo demas es consecuencia.
+  // `T` son los tiempos de caida (los que dura el preambulo, que ya existia
+  // como espera muerta); `aterrizo` es el latigazo, una sola vez.
+  let entrada = null;
+  const ALTO_ENTRADA = 2.4;           // desde donde cae: bien fuera de cuadro, arriba
   let sacudidaT = 0;                  // cuando empezo el temblor de camara
   let derivaViento = 0;               // lo que el viento lleva corrido al cielo
   const SACUDIDA = 420;               // cuanto dura, en ms
@@ -2530,6 +2529,10 @@ function arrancarNavegador () {
       // `pistonazos` cuenta tambien los rescates por abajo; `encima` son los
       // pisotones de verdad, que es lo que hay que mirar para saber si cobro
       pistonazos: s.pistonazos, cadena: s.cadenaPiston,
+      // los CARGADOS: pisotones que ademas se pagaron con un toque
+      cargas: s.cargas,
+      plenas: [...new Set(PISTONES.map(p => p.zona))]
+        .filter(z => (s.cargasZona[z] || 0) === PISTONES.filter(p => p.zona === z).length).length,
       encima: Object.values(s.pistonesZona).reduce((a, b) => a + b, 0),
       // los cierres se derivan del estado, no de los eventos: la cola se vacia
       // cada cuadro, asi que contarlos ahi devolvia 0 salvo por casualidad
@@ -2688,9 +2691,17 @@ function arrancarNavegador () {
     const d = buf.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
     const src2 = ac.createBufferSource(); src2.buffer = buf; src2.loop = true;
-    const bq = ac.createBiquadFilter(); bq.type = 'bandpass'; bq.frequency.value = 1200; bq.Q.value = 0.8;
+    // EL ROCE NO ES ESTATICA. Un pasabanda ancho sobre ruido blanco deja pasar
+    // todo el agudo, y ruido blanco sostenido es, literalmente, el sonido de un
+    // televisor sin señal: se oia al arrancar (la esfera quieta en la salida) y
+    // sobre todo en las notas SOSTENIDAS, que es donde la esfera apoya durante
+    // cuatro tiempos y el siseo tiene tiempo de hacerse notar. Lo que suena a
+    // superficie es lo grave del roce, no el brillo: el pasabanda se cierra
+    // (Q 1.8) y encima va un pasabajos que corta el sibilante de una vez.
+    const bq = ac.createBiquadFilter(); bq.type = 'bandpass'; bq.frequency.value = 1200; bq.Q.value = 1.8;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.5;
     const g = ac.createGain(); g.gain.value = 0.0001;
-    src2.connect(bq).connect(g).connect(master);
+    src2.connect(bq).connect(lp).connect(g).connect(master);
     src2.start();
     rodada = { bq, g };
   }
@@ -2700,7 +2711,10 @@ function arrancarNavegador () {
     vaiven += 0.017;
     const k = s.estado === 'apoyada' && s.tecla >= 0 ? NOTAS[s.tecla] : null;
     const sonando = corriendo && s.viva && !s.meta && s.estado === 'apoyada';
-    const obj = !sonando ? 0.0001 : k ? (k.riel ? 0.05 : 0.035) : 0.018;
+    // ...y el sostenido ya no es el que MAS roza. Era al reves --0.05 contra
+    // 0.035-- o sea que el caso mas largo era ademas el mas fuerte: cuatro
+    // tiempos de siseo creciendo sobre la nota que se esta tocando.
+    const obj = !sonando ? 0.0001 : k ? (k.riel ? 0.026 : 0.03) : 0.016;
     rodada.g.gain.setTargetAtTime(obj, ac.currentTime, 0.035);
     // el roce respira: una superficie real no da un tono fijo. Y el agua es
     // OTRA superficie: rodar por el mar del vuelo suena hondo y gorgoteante,
@@ -2710,6 +2724,42 @@ function arrancarNavegador () {
     rodada.bq.frequency.setTargetAtTime(
       (k ? Math.min(3800, 650 + (k.y - Y_GRAVE) * 5600) : agua ? 320 : 700) *
       (agua ? vv * (1 + 0.2 * Math.sin(vaiven * 5.3)) : vv), ac.currentTime, 0.06);
+  }
+
+  // Abre la caida: corre el compas 1 los tiempos que dure, agenda el silbido y
+  // pone la esfera en el aire. Solo desde la SALIDA -- reanudar en mitad de la
+  // cancion no es una entrada, es seguir.
+  const ENTRADA_T = 2;                // tiempos que dura la caida
+  function abrirEntrada () {
+    if (!ac || !PISO || s.x > 0.001 || !s.viva) { entrada = null; return; }
+    const dur = ENTRADA_T * SPB;
+    t0 += dur;
+    entrada = { T: ENTRADA_T, aterrizo: false };
+    s.estado = 'aire'; s.tecla = -1; s.vy = 0;
+    s.y = PISO.y + ALTO_ENTRADA;
+    estela.length = 0;
+    sonarEntrada(t0 - dur, dur);
+  }
+  // La caida se dibuja sola: mientras el compas 1 no llego, `b` es negativo y
+  // ESE es el reloj de la caida. Cae con aceleracion constante --altura
+  // proporcional al cuadrado de lo que falta-- asi que llega al piso rapido y
+  // el ojo lee peso, no un descenso de ascensor.
+  function seguirEntrada (b) {
+    if (!entrada) return;
+    const u = Math.max(0, Math.min(1, -b / entrada.T));
+    s.y = PISO.y + ALTO_ENTRADA * u * u;
+    s.vy = -2 * ALTO_ENTRADA * (1 - u) / entrada.T;
+    if (u > 0) return;
+    // TOCO. El aterrizaje es el mismo gesto que cualquier otro del juego:
+    // se aplasta, la camara acusa el golpe y salta la tierra.
+    entrada = null;
+    s.estado = 'apoyada'; s.tecla = PISO.i; s.y = PISO.y; s.vy = 0;
+    s.anticipos.length = 0;           // lo que se toco cayendo no cuenta
+    squash = 1; retencion = 0.06; asientoV = -2.6;
+    sacudidaT = performance.now();
+    flash = 0.5; flashRGB = C.esferaRGB;
+    chispas(0, PISO.y, 16, false, C.esferaRGB);
+    estela.length = 0;
   }
 
   // EL MATIZ SE TOCA. La queja real era "la nota a veces empieza muy seca":
@@ -2914,6 +2964,29 @@ function arrancarNavegador () {
         o.connect(filtro); o.start(t); o.stop(t + durCompas);
       }
     }
+  }
+  // EL SILBIDO DE LA CAIDA y el GOLPE de llegada. Baja en vez de subir --un
+  // riser anuncia lo que viene, esto anuncia lo que LLEGA-- y termina justo
+  // cuando la esfera toca: el aire se corta con el impacto, no despues.
+  function sonarEntrada (tCae, dur) {
+    const n = Math.max(1, ac.sampleRate * dur | 0), buf = ac.createBuffer(1, n, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2.2;
+    f.frequency.setValueAtTime(2600, tCae);
+    f.frequency.exponentialRampToValueAtTime(240, tCae + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, tCae);
+    g.gain.exponentialRampToValueAtTime(0.11, tCae + dur * 0.75);
+    g.gain.exponentialRampToValueAtTime(0.0001, tCae + dur);
+    src.connect(f).connect(g).connect(master);
+    src.start(tCae); src.stop(tCae + dur + 0.02);
+    // el impacto: el bombo del tiempo 1 con cuerpo de tierra debajo
+    const t = tCae + dur;
+    kick(t);
+    ruido(t, 0.09, 0.10, 'lowpass', 700, 1);
+    golpe(t, 92, 0.16, 0.09, 'triangle');
   }
   function eRiser (t, dur) {
     const n = Math.max(1, ac.sampleRate * (dur + 0.1) | 0), buf = ac.createBuffer(1, n, ac.sampleRate);
@@ -3515,6 +3588,16 @@ function arrancarNavegador () {
             const gs = ac.createGain(); gs.gain.value = 0.18; gs.connect(solo);
             eTambor('h', enGrilla(0.25), gs); eTambor('h', enGrilla(1.25), gs);
           }
+          // CARGADO: ademas de pisarlo, gastaste un toque en la cabeza, y el
+          // arreglo se ABRE. El caño ya reclamaba un golpe; cargarlo lo
+          // acentua con un hat abierto EN EL GOLPE, que es como un baterista
+          // marca un acento de verdad: no otro sonido al lado, el mismo golpe
+          // dicho mas fuerte. Es el unico premio que los diez caños pueden
+          // pagar -- la altura y los orbes no estan ahi, la musica si.
+          if (e.cargado) {
+            const ga = ac.createGain(); ga.gain.value = 0.34; ga.connect(solo);
+            eTambor('H', ac.currentTime, ga);
+          }
           // EL PLENO DE LA ZONA: pisaste TODOS los caños del build. Fill de
           // toms subiendo al tiempo siguiente y crash en el tiempo -- el
           // mismo crash del drop, con su flash y su estrella fugaz: el juego
@@ -3527,7 +3610,13 @@ function arrancarNavegador () {
             eTambor('u', enGrilla(0.75), gf);
             const tCrash = enGrilla(1);
             eCrash(tCrash); crashVista.push(tCrash);
-            avisos.push({ x: e.x, y: e.y + 0.12, t: performance.now(), chueca: false, suc: 0, txt: 'TODOS LOS CAÑOS' });
+            // ...y si ademas los CARGASTE a todos, el cierre es el grande: el
+            // crash se dobla en el contratiempo. Pisarlos es no fallar;
+            // cargarlos hay que ir a buscarlo caño por caño, y esa diferencia
+            // tiene que oirse, no solo contarse.
+            if (e.plena) { const t2 = enGrilla(1.5); eCrash(t2); crashVista.push(t2); }
+            avisos.push({ x: e.x, y: e.y + 0.12, t: performance.now(), chueca: false, suc: 0,
+              txt: e.plena ? 'CAÑOS CARGADOS' : 'TODOS LOS CAÑOS' });
           }
           // SIN FOLEY ENCIMA. Habia un siseo agudo (ruido pasa-altos a 2.4k) y
           // un bombazo de 90 Hz pegados al golpe: dos sonidos que no son de la
@@ -3538,16 +3627,28 @@ function arrancarNavegador () {
           // que no desafinan nada.
           ruido(ac.currentTime, 0.025, 0.05, 'lowpass', 800);
           // el cuerpo entero lo siente: hit-stop, anillo, el mundo pisado
-          retencion = e.completa ? 0.13 : 0.09;
+          retencion = e.completa ? 0.13 : e.cargado ? 0.11 : 0.09;
           aros.push({ x: e.x, y: e.y, t: performance.now() });
           destellos.push({ x: e.x, y: e.y, t: performance.now(), suc: 0 });
           // las chispas crecen con la cadena: el tercer pisoton seguido SE VE
           // mas grande que el primero, no solo se oye
-          const nCh = 8 + 3 * Math.min(4, (e.cadena || 1) - 1);
+          const nCh = (8 + 3 * Math.min(4, (e.cadena || 1) - 1)) * (e.cargado ? 1.6 : 1) | 0;
           chispas(e.x, e.y, nCh, true, C.esferaRGB);
           chispas(e.x, e.y, nCh, true, C.impulsoRGB);
           pump = 1; pisada = 1;
-          cabezas.set(e.paso, { t: performance.now(), modo: 'encima' });
+          cabezas.set(e.paso, { t: performance.now(), modo: 'encima', cargado: !!e.cargado });
+        } else if (e.modo === 'carga') {
+          // LA CARGA QUE LLEGO TARDE. El golpe del caño ya sono en el contacto
+          // --no se repite, seria un flam-- asi que esto es solo el acento que
+          // se le suma encima, y la cabeza que termina de hundirse.
+          const ga = ac.createGain(); ga.gain.value = 0.34; ga.connect(solo);
+          eTambor('H', ac.currentTime, ga);
+          aros.push({ x: e.x, y: e.y, t: performance.now() });
+          chispas(e.x, e.y, 12, true, C.impulsoRGB);
+          pump = 1;
+          if (e.plena) { const t2 = ac.currentTime + 0.02; eCrash(t2); crashVista.push(t2); }
+          const prev = cabezas.get(e.paso);
+          cabezas.set(e.paso, { t: prev ? prev.t : performance.now(), modo: 'encima', cargado: true });
         } else {
           // el rescate desde abajo: el vastago te dispara de vuelta
           if (e.instr) golpeDeLaEsfera(golpeDelCanio(e.instr, e.alto), ac.currentTime);
@@ -3705,9 +3806,10 @@ function arrancarNavegador () {
     avisoMuerte = null;
     try { ac.resume(); } catch (_) {}
     bandaVuelve();
-    t0 = ac.currentTime + 1.0;      // el respiro justo antes del compas 1
+    t0 = ac.currentTime + 0.4;      // el respiro justo antes de la caida
     relojSuave = null;
     proxBeat = 0;
+    abrirEntrada();                 // volver a empezar tambien es CAER a la salida
   }
   function morirOReiniciar () {
     // Cuanto de la cancion tocaste, contra tu propio techo. El porcentaje es
@@ -3797,6 +3899,7 @@ function arrancarNavegador () {
     rotos.length = 0; rastroEco.length = 0;
     corriendo = true;
     arrancarAudio();
+    abrirEntrada();
   }
 
   // CALIBRAR. Suenan 16 golpes y vos tocas encima. Lo que se mide no es tu
@@ -3904,6 +4007,13 @@ function arrancarNavegador () {
     // retiraba el cartel justo al que los estaba fallando todos
     if (PISTONES.length) L.push({ id: 'piston', x: PISTONES[0].x, y: PISTONES[0].y,
       txt: 'CAELE ENCIMA: suena y te empuja', ok: st => st.pistonazos > 0 });
+    // ...y recien DESPUES, el gesto. Cargar no se descubre solo: la cabeza
+    // hundida se ve igual pisada que cargada, asi que sin cartel el jugador no
+    // tiene como enterarse de que ahi habia un toque que dar. Va en el SEGUNDO
+    // caño a proposito: el primero enseña a caerle encima, y pedir las dos
+    // cosas juntas es pedir que falle las dos.
+    if (PISTONES.length > 1) L.push({ id: 'carga', x: PISTONES[1].x, y: PISTONES[1].y,
+      txt: 'TOCÁ al pisarlo: el caño se abre', ok: st => st.cargas > 0 });
     if (HUECOS.length) L.push({ id: 'abismo', x: HUECOS[0].x0, y: 0,
       txt: 'Sobre el vacío NO sueltes', ok: st => st.viva });
     lecciones = L.filter(l => !aprendidas.has(l.id)).sort((a, b) => a.x - b.x);
@@ -4070,6 +4180,9 @@ function arrancarNavegador () {
     // la marca no puede desembocar en el menu. Al menu se sale con ESC (o
     // tocando la franja de abajo, para el telefono).
     if (s.meta) { empezar(CANCION_ID); return; }
+    // mientras la esfera CAE a la salida el boton no existe: la cancion todavia
+    // no empezo, y un toque ahi solo servia para llegar sordo al compas 1
+    if (entrada) return;
     s.sostiene = true;
     tocar(s, ahora());
     // el sonido sale AHORA, no en el proximo cuadro: la bateria va con
@@ -4248,6 +4361,7 @@ function arrancarNavegador () {
     agendarMusica();
     rodadaSeguir();
     const b = ahora();
+    seguirEntrada(b);
     if (b < 0) { dibujar(dtSeg); return; }
 
     // EL MUNDO SE ATA AL RELOJ DEL AUDIO, no al de los cuadros. Integrar dtSeg
@@ -5942,6 +6056,23 @@ function arrancarNavegador () {
       cx.fillStyle = pisado && edad < 0.06 ? 'rgb(255,252,240)'
         : pisado ? C.esfera : gastado ? 'rgba(150,140,130,0.5)' : C.impulso;
       cx.fillRect(a0, yTope - 4, an, 8);                        // la plataforma
+      // EL CARGADO SE VE. Pisar y cargar terminan los dos con la cabeza
+      // hundida, asi que sin esto los dos premios se veian igual y el jugador
+      // no tenia como saber si el toque entro. El cargado deja un anillo que
+      // se abre desde la cabeza --el mismo gesto que el aro de una clavada--
+      // y un rescoldo verde, del color que en este juego significa impulso.
+      if (pisado && reg.cargado) {
+        const ab = Math.min(1, edad / 0.45);
+        if (ab < 1) {
+          cx.strokeStyle = `rgba(${C.impulsoRGB},${0.7 * (1 - ab)})`;
+          cx.lineWidth = 3 * (1 - ab) + 1;
+          cx.beginPath();
+          cx.arc(a0 + an / 2, yTope, 8 + 34 * ab, 0, Math.PI * 2);
+          cx.stroke();
+        }
+        cx.fillStyle = `rgba(${C.impulsoRGB},0.55)`;
+        cx.fillRect(a0, yTope - 5, an, 2.5);
+      }
       if (listo) {                                              // el filo que la ilumina
         cx.fillStyle = 'rgba(255,255,255,0.75)';
         cx.fillRect(a0, yTope - 4, an, 2);
