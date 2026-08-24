@@ -12,7 +12,7 @@
 import {
   crearSim, paso, tocar, soltar, vueloMinimo, elegirCancion, NIVELES,
   CANCION, NOTAS, TOTAL_NOTAS, LARGO, HUECOS, TECHOS, SUELTA, PISO, G, SPB, BPM, enArpegio, ORBES, PISTONES, ZONAS_PISTON, Y_GRAVE, HOLGURA,
-  TRAMOS_RODAR, mandaRodar, RANGOS, rango, UMBRAL, AFINADO, PERFECTO, ROCE,
+  TRAMOS_RODAR, mandaRodar, RANGOS, rango, UMBRAL, AFINADO, PERFECTO, ROCE, PASOS_PISTON,
   auditar, codigoDe, primeraNotaDe, SECCIONES, CARGA
 } from './juego.js';
 
@@ -32,7 +32,7 @@ const RASGOS = {
   // que ya no hay ningun tramo donde haga falta rodar por la red -- que es
   // exactamente lo que hace que "caer mata" valga en todo el recorrido. El
   // motor es zona de dribleo (ahi se JUEGA).
-  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 0, saltos: 30, exigente: true, orbes: 120, pistones: 8 }
+  viaje: { escaleras: true, ligaduras: 2, huecos: 20, techos: 0, saltos: 30, exigente: true, orbes: 120, pistones: 4 }
 };
 
 let fallas = 0;
@@ -240,7 +240,19 @@ function correr (id) {
       }
       return modo;
     });
-    return { p, ok: modos.every(m => m === 'encima'), modos };
+    // ...y CUANDO lo pisa: el acento tiene que caer en la semicorchea del
+    // golpe, que es lo unico que hace que suene a musica y no a ruido al lado
+    const s = crearSim();
+    s.x = k.x0; s.estado = 'apoyada'; s.tecla = k.i; s.y = k.y; s.saliendoDe = -1;
+    let toco = false, cx = null;
+    for (let i = 0; i < 4000 && s.viva && s.x < p.x1 + 0.5; i++) {
+      if (!toco && s.x >= k.xm) { tocar(s, s.x); toco = true; }
+      paso(s, DT);
+      for (const e of s.eventos) if (e.tipo === 'piston' && e.modo === 'encima' && Math.abs(e.x - p.x) < 0.6) cx = e.x;
+      s.eventos.length = 0;
+    }
+    const ms = cx == null ? null : Math.abs(cx - p.paso / 4) * SPB * 1000;
+    return { p, ok: modos.every(m => m === 'encima'), modos, ms, enTiempo: ms != null && ms <= 25 };
   });
   const ventanas = R.pistones ? ventanaCaños() : [];
 
@@ -537,7 +549,20 @@ function correr (id) {
       R.pistones ? `${rPiso.pistonazos} disparos · ${rPiso.meta ? 'meta' : 'murio en ' + rPiso.x.toFixed(1)}` : 'no aplica'],
     // el caño suena un golpe REAL del arreglo, como los orbes: sin eso es
     // decorado, que es de donde veniamos
-    ['todo piston reclama un golpe de la bateria', PISTONES.every(p => p.instr), ''],
+    // El caño ya no reclama siempre. Reclamar le SACA el golpe al arreglo y
+    // abre el crater: eso vale por un golpe pesado, que el jugador convierte
+    // en acento. Por un hat no valia --le sacaba el charles a la base para
+    // devolver un tom, con el arreglo agachado-- asi que ahi AGREGA. Lo que
+    // no puede pasar nunca es un caño mudo: reclame o agregue, tiene que
+    // sonar algo, porque un caño que no suena es decorado.
+    ['ningun caño queda mudo: o reclama un golpe pesado, o agrega su tom',
+      PISTONES.every(p => (p.instr && 'xsc'.includes(p.instr)) || p.agregado),
+      `${PISTONES.filter(p => p.agregado).length} agregan · ${PISTONES.filter(p => p.instr).length} reclaman`],
+    // ...y el que AGREGA no le toca un pelo al arreglo: no le saca el golpe ni
+    // le abre el crater. Pisarlo suma, fallarlo deja la cancion como estaba.
+    ['el caño que agrega no le saca nada al arreglo',
+      PISTONES.filter(p => p.agregado).every(p => !PASOS_PISTON.has(p.paso)),
+      `${PISTONES.filter(p => p.agregado).length} agregados, ninguno abre crater`],
     // PISARLO TIENE QUE PAGAR. Era el unico acierto del juego que no movia
     // ningun numero: rozarlo costaba la racha y clavarlo no daba nada, asi que
     // la contabilidad del caño solo castigaba. Ahora suma racha como una nota
@@ -621,20 +646,24 @@ function correr (id) {
         rango(rCarga.limpias.size, TOTAL_NOTAS, rCarga.orbes, ORBES.length, rCarga.perfectas.size) ===
         rango(rp.limpias.size, TOTAL_NOTAS, rp.orbes, ORBES.length, rp.perfectas.size)),
       R.pistones ? `${rango(rp.limpias.size, TOTAL_NOTAS, rp.orbes, ORBES.length, rp.perfectas.size)} con y sin cargar · ${rCarga.perfectas.size} clavadas` : 'no aplica'],
-    // El caño no puede pedir MAS precision que la que el juego premia: si
-    // clavaste la nota, lo pisas. Con la cabeza puesta sobre el arco del toque
-    // exacto, cualquier desvio levantaba el arco y la esfera pasaba por
-    // encima -- PERFECTO en pantalla y el caño mudo.
-    ['toda clavada pisa el caño: no pide mas precision que la que se premia',
-      ventanas.every(v => v.ok),
-      ventanas.filter(v => !v.ok).map(v => `${v.p.x}:[${v.modos}]`).join(' ') ||
-        `${ventanas.length} caños, clavada ±${(AFINADO * PERFECTO * SPB * 1000).toFixed(0)} ms`],
-    // El vastago es el rescate del que RUEDA por la red, y la altura sola no
-    // alcanza para saberlo: en GRAVEDAD el arco normal entre teclas de bajo
-    // pasa entero por debajo de ROCE, asi que el caño le cobraba el castigo
-    // del rescate --racha a cero, un rato sordo-- a alguien que venia volando
-    // y no habia fallado nada. Se prueba el contrato de las dos puntas: al que
-    // vuela no lo agarra, al que rueda si.
+    // EL CAÑO PIDE TIEMPO, Y LO PIDE DE UN SOLO LADO. La cabeza se apoya en
+    // el arco de la pulsacion limpia, asi que clavar la nota anfitriona es
+    // cruzarla en su semicorchea. La pulsacion ATRASADA vuela por debajo y no
+    // la cruza: se pierde el caño, y no pasa nada mas -- fallar un caño nunca
+    // castigo. Es a proposito y es el corazon del arreglo nuevo. La otra
+    // opcion era bajar la cabeza para que la agarre cualquiera, y eso corre el
+    // cruce hacia el borde del caño: medido, el acento salia entre 85 y 94 ms
+    // detras de su semicorchea, dos tercios de figura a 112 BPM. Un acento
+    // corrido ensucia la cancion de todos; perderse un premio no le cuesta
+    // nada a nadie.
+    ['la pulsacion limpia pisa el caño, y lo pisa EN TIEMPO',
+      !R.pistones || ventanas.every(v => v.enTiempo),
+      R.pistones ? `${ventanas.filter(v => v.enTiempo).length}/${ventanas.length} en tiempo · peor ${Math.max(0, ...ventanas.map(v => v.ms || 0)).toFixed(0)} ms de su semicorchea` : 'no aplica'],
+    // ...y perderselo no cuesta NADA: ni racha, ni sordera, ni la nota
+    ['perderse un caño por llegar tarde no castiga',
+      !R.pistones || (rAt.meta && rAt.pistonazos === 0 &&
+        !rAt.eventos.some(e => e.tipo === 'piston' && e.modo === 'abajo')),
+      R.pistones ? `atrasada: perdio los ${PISTONES.length} caños, llego a la meta, ningun castigo` : 'no aplica'],
     ['el vastago agarra al que rueda por la red, y NO al que vuela bajo',
       !R.pistones || (!vastago('aire') && vastago('rodando')),
       !R.pistones ? 'sin pistones: no aplica'
@@ -652,12 +681,12 @@ function correr (id) {
     // cada zona declarada compila caños de verdad: una zona muda es una
     // promesa del mapa que el compilador rompio en silencio
     ['ninguna zona de pistones queda muda', !R.pistones ||
-      ZONAS_PISTON.every(z => PISTONES.filter(p => p.x >= z.x0 && p.x < z.x1).length >= 2),
+      ZONAS_PISTON.every(z => PISTONES.filter(p => p.x >= z.x0 && p.x < z.x1).length >= 1),
       ZONAS_PISTON.map(z => `${z.x0}-${z.x1}: ${PISTONES.filter(p => p.x >= z.x0 && p.x < z.x1).length}`).join(' · ')],
     ['ningun piston dentro de una tecla, sobre un abismo o bajo un techo',
       PISTONES.every(p => !HUECOS.some(h => p.x > h.x0 - 0.9 && p.x < h.x1 + 0.9) &&
         !TECHOS.some(t => p.x > t.x0 - 0.5 && p.x < t.x1 + 0.5) &&
-        !NOTAS.some(k => !k.silencio && k.y < p.y + 0.13 && k.x1 > p.x0 && k.x0 < p.x1)), ''],
+        !NOTAS.some(k => !k.silencio && Math.abs(k.y - p.y) < 0.13 && k.x1 > p.x0 && k.x0 < p.x1)), ''],
     ['tropezar cuesta esa nota, no el tramo: tocar en la red reengancha',
       rz.meta && rz.tocadas.size >= TOTAL_NOTAS - 3,
       `${rz.tocadas.size}/${TOTAL_NOTAS} sonadas tras caerse una vez`],

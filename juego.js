@@ -913,6 +913,18 @@ export let ZONAS_PISTON = [];      // las zonas declaradas por la cancion
 // es parte de la cancion, no una opcion de render.
 export let ZONAS_VOZ = [];
 export const vozEn = x => (ZONAS_VOZ.find(z => x >= z.x0 && x < z.x1) || {}).tipo || null;
+// EL CAÑO ES ANGOSTO. Medio tiempo de ancho (+-0.15) parecia inofensivo y era
+// lo que no dejaba pararlo en la grilla: con las teclas cada ~0.5 y anchas,
+// SIEMPRE habia una solapada a la altura de la cabeza, y 122 de los 148 pasos
+// candidatos del viaje morian por eso. Angosto entra donde tiene que entrar.
+//
+// `LARGA` es cuanto se estira la ventana del lado TARDE. La cabeza se apoya en
+// el arco de la pulsacion clavada, asi que el que llega tarde vuela un pelo
+// mas arriba y cruza mas adelante: sin este margen el caño le quedaba
+// impisable justo al que clavo la nota por el otro lado. Estirar en X no mueve
+// el reloj --el acento sale donde la esfera toca-- asi que se estira ahi.
+export const ANCHO = 0.09;
+export const LARGA = 0.15;
 export const ROCE = 0.13;          // debajo de esto vas rasante: te agarra el vastago
 // EL PISOTON CARGADO: cuanto margen tiene el toque alrededor del contacto con
 // la cabeza. Es la ventana afinada de siempre, para los dos lados -- cargar un
@@ -1278,21 +1290,59 @@ function pistones () {
       // lo que tiene que pasar en un juego de ritmo. La tolerancia no se
       // perdio: la sigue dando el ancho de la ventana [x0,x1], que es donde
       // corresponde, porque ensanchar en X no mueve el reloj.
-      const topeJusto = dt => +(alturaEn(dt, 0) - 0.004).toFixed(3);
+      // LA CABEZA VA EN EL ARCO DE LA PULSACION LIMPIA, y esto es una decision
+      // de diseño, no un ajuste. La cabeza solo puede cruzarse DENTRO de su
+      // propio ancho, asi que bajarla para que la agarre cualquiera corre el
+      // cruce hacia la derecha y el golpe sale tarde. Medido en el viaje: con
+      // la cabeza tolerante de antes el acento caia entre 85 y 94 ms detras de
+      // su semicorchea -- dos tercios de figura a 112 BPM. Eso no es un
+      // baterista laid-back, esta fuera de tiempo, y era lo que hacia que el
+      // caño sonara a ruido pegado a la cancion en vez de a cancion.
+      //
+      // Las dos cosas no se pueden tener: para que la pulsacion atrasada cruce
+      // la cabeza hay que bajarla mas de lo que el caño mide de ancho. Se
+      // elige el TIEMPO. Fallar un caño no cuesta nada --nunca costo-- pero un
+      // acento corrido ensucia la cancion de todos, y el caño ya prometia ser
+      // "premio por precision, no trampa". Ahora lo es de verdad: clavar la
+      // nota anfitriona cruza la cabeza en su semicorchea, y llegar corrido
+      // corre el acento lo mismo que te corriste vos, que es lo que tiene que
+      // pasar en un juego de ritmo.
+      const topeJusto = dt => +(alturaEn(dt, 0) - 0.003).toFixed(4);
       const cabe = (x, tope) => {
         if (tope < 2 * R + 0.06) return false;    // tan bajo que ya es la red
-        const x0 = x - 0.15, x1 = x + 0.15;
+        // el choque con teclas se mide contra el caño FISICO, no contra la
+        // cola tarde de la ventana: por ahi ya no hay caño que estorbe
+        const x0 = x - ANCHO, x1 = x + ANCHO;
         if (HUECOS.some(h => x > h.x0 - 0.9 && x < h.x1 + 0.9)) return false;
         if (TECHOS.some(t => x > t.x0 - 0.5 && x < t.x1 + 0.5)) return false;
-        // ninguna tecla puede quedar dentro del caño: parado ahi te dispararia
-        return !NOTAS.some(k2 => !k2.silencio && k2.y < tope + 2 * R + 0.02 &&
+        // NINGUNA TECLA A LA ALTURA DE LA CABEZA dentro del caño: ahi caer en
+        // una o en la otra es la misma parabola y el juego no podria decidir.
+        // Antes se rechazaba toda tecla mas BAJA que la cabeza, y esa regla
+        // --demasiado ancha-- volteaba los 60 candidatos en grilla del viaje:
+        // por eso el caño terminaba siempre en la rama fuera de grilla, que es
+        // de donde salia el desfase de ~90 ms. Una tecla que pasa bien por
+        // debajo no estorba: el caño es una cabeza flotante, y volarle por
+        // encima para caer despues en una tecla mas baja es el arco normal.
+        return !NOTAS.some(k2 => !k2.silencio && Math.abs(k2.y - tope) < 2 * R + 0.02 &&
           k2.x1 > x0 - 0.02 && k2.x0 < x1 + 0.02);
       };
+      // EL CAÑO NO LE ROBA UN CHARLES A NADIE. Reclamar un golpe se lo SACA al
+      // arreglo, y encima abre el crater que hunde la cancion medio segundo:
+      // eso vale la pena por un golpe pesado --bombo, caja, clap-- que el
+      // jugador convierte en acento. Por un hat NO vale: los cinco caños del
+      // viaje reclamaban 'h', o sea le sacaban el charles a la base para
+      // devolver un tom, con el arreglo agachado en el medio. Neto, pisarlo
+      // dejaba la cancion PEOR que no pisarlo -- y eso es exactamente lo que
+      // se sentia al pisarlos.
+      //
+      // Ahora el hat no cuenta como golpe reclamable: ahi el caño AGREGA. El
+      // charles sigue sonando, el arreglo no se agacha, y el tom del caño se
+      // suma encima. Pisarlo suma; fallarlo deja la cancion como estaba.
       const golpeEn = p => {
         if (PASOS_BATERIA.has(p)) return null;
         const pl = spec(Math.floor(p / 16)); if (!pl) return null;
         const bat = E_BATERIA[pl.drums];
-        return bat && 'xscHh'.includes(bat[p % 16]) ? bat[p % 16] : null;
+        return bat && 'xsc'.includes(bat[p % 16]) ? bat[p % 16] : null;
       };
       let mr = null;
       // EL CAÑO SE PARA SIEMPRE EN LA GRILLA, sin excepcion. Antes habia una
@@ -1311,8 +1361,8 @@ function pistones () {
       // cruzar la cabeza justo en su semicorchea, y llegar corrido corre el
       // acento lo mismo que te corriste vos: en un juego de ritmo ese es el
       // resultado correcto, no un error a corregir.
-      const p0 = Math.ceil((k.xm + Math.max(0.15, vy / G + 0.015)) * 4);
-      const p1 = Math.ceil((k.xm + T - 0.08) * 4) - 1;
+      const p0 = Math.ceil((k.xm + Math.max(0.12, vy / G + 0.005)) * 4);
+      const p1 = Math.floor((k.xm + T - 0.04) * 4);
       for (let p = p0; p <= p1; p++) {
         const dt = p / 4 - k.xm;
         const tope = topeJusto(dt);
@@ -1338,9 +1388,19 @@ function pistones () {
       // cabe-- y DESPEGUE II se quedaba sin martillos aunque sus negras los
       // tenian servidos.
       if (++n % (z.cada || 1)) continue;
-      PASOS_BATERIA.add(mr.p);
-      PASOS_PISTON.add(mr.p);
-      r.push({ x: mr.x, x0: +(mr.x - 0.15).toFixed(3), x1: +(mr.x + 0.15).toFixed(3), y: mr.tope, instr: mr.golpe, paso: mr.p, zona: zi });
+      // solo el caño que RECLAMA un golpe se lo saca a la bateria. El que lo
+      // AGREGA no toca el arreglo: la cancion escrita sigue entera, y lo que
+      // el jugador suma es suma de verdad.
+      if (!mr.agregado) { PASOS_BATERIA.add(mr.p); PASOS_PISTON.add(mr.p); }
+      // LA VENTANA ES MAS LARGA DEL LADO TARDE. Con la cabeza apoyada en el
+      // arco de la pulsacion clavada, la que llega tarde vuela un pelo mas
+      // arriba y cruza la cabeza mas ADELANTE: con la ventana simetrica de
+      // antes se pasaba de largo y el caño le quedaba impisable justo al que
+      // clavo la nota por el otro lado. Ensanchar en X no mueve el reloj --el
+      // acento sigue saliendo donde la esfera toca-- asi que se ensancha ahi,
+      // que es donde no cuesta nada.
+      r.push({ x: mr.x, x0: +(mr.x - ANCHO).toFixed(3), x1: +(mr.x + LARGA).toFixed(3),
+        y: mr.tope, instr: mr.golpe, paso: mr.p, zona: zi, agregado: !!mr.agregado });
     }
   }
   // cada caño sabe cuantos son en su zona: el que completa el pleno paga el
@@ -1970,6 +2030,7 @@ function pisarPiston (s, yAntes) {
       zona: p.zona, deZona: p.deZona };
     s.eventos.push({ tipo: 'piston', modo: 'encima', x: s.x, y: p.y, instr: p.instr, paso: p.paso,
       cadena: s.cadenaPiston, completa: s.pistonesZona[p.zona] === p.deZona, cargado: carga,
+      agregado: !!p.agregado,
       // el pleno CARGADO: la zona entera pisada Y abierta. Es el cierre grande,
       // y hay que ganarselo caño por caño -- no alcanza con no fallar.
       plena: s.cargasZona[p.zona] === p.deZona });
@@ -3135,7 +3196,11 @@ function arrancarNavegador () {
   // redoble que sube y baja CON EL MAPA. Los golpes pesados del arreglo
   // --bombo, caja, clap-- se respetan tal cual: esos ya son la cancion.
   const tomDelCanio = y => (y < 0.30 ? 't' : y < 0.55 ? 'T' : 'u');
-  const golpeDelCanio = (c, y) => (c === 'h' || c === 'H' ? tomDelCanio(y || 0) : c);
+  // ...y el caño que AGREGA (no reclamo ningun golpe del arreglo) tambien
+  // suena: su instrumento ES el tom afinado por la altura de la cabeza. Sin
+  // esto, el caño agregado se quedaba mudo -- que es de donde venia "no tocan
+  // ningun instrumento".
+  const golpeDelCanio = (c, y) => (!c || c === 'h' || c === 'H' ? tomDelCanio(y || 0) : c);
   const golpeDeLaEsfera = (c, t) => {
     eTambor(c === 'h' ? 'H' : c, t, solo);
     agachar(t);
@@ -3669,7 +3734,21 @@ function arrancarNavegador () {
           // hat, suena el TOM de esa altura: el hat no acentua nada, el tom si.
           const instr = golpeDelCanio(e.instr, e.y);
           if (instr) {
+            // EL ACENTO. El tom solo era un seno grave en un bus con realce de
+            // agudos: cuerpo sin ataque, o sea un "tup" que no cortaba nada y
+            // se perdia debajo del arreglo. Ahora lleva el palo adelante --un
+            // transitorio corto y brillante-- que es lo que hace que un golpe
+            // se OIGA como golpe y no como un bulto grave.
             eTambor(instr, ac.currentTime, solo);
+            golpe(ac.currentTime, 1250, 0.035, 0.05, 'triangle');
+            // ...y el arreglo se corre para dejarlo pasar. El caño que RECLAMA
+            // ya tiene el crater del arreglo haciendo ese trabajo; el que
+            // AGREGA no abre crater a proposito --no le saca nada a la
+            // cancion-- asi que el agache se lo tiene que poner el golpe. Sin
+            // esto el acento agregado entraba con la base entera encima y no
+            // se distinguia: sonaba, pero no destacaba, que para el que juega
+            // es lo mismo que no sonar.
+            if (e.agregado) agachar(ac.currentTime, 0.72, 0.15);
             // EL ECO VA A LA GRILLA, no al contacto. Colgado de ac.currentTime
             // arrastraba tu error: pisar 40 ms tarde ponia la repeticion 40 ms
             // tarde, y una corchea con puntillo corrida se oye como un tropiezo.
