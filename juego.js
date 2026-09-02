@@ -988,6 +988,16 @@ const TIERRA = {
     dibujo (cx, e) {
       const paso = 0.15 * e.P.paso;
       const i0 = Math.floor(e.a / paso) - 2, i1 = Math.ceil(e.b / paso) + 2;
+      // TODO EL BOSQUE EN UN CAMINO. Eran tres rellenos por arbol --una falda
+      // cada uno-- por cien arboles por tres planos de paralaje: trescientos
+      // fill() por cuadro, el 60% de todo lo que dibuja el juego, y pasaba
+      // igual en el menu. El color del plano es uno solo y es opaco, asi que
+      // un relleno de la union pinta exactamente los mismos pixeles --y de
+      // paso se van las costuras que el antialias dejaba en los bordes
+      // compartidos de las faldas--. Trescientos pasan a ser tres.
+      const filos = [];
+      cx.fillStyle = `rgba(${e.col},1)`;
+      cx.beginPath();
       for (let i = i0; i <= i1; i++) {
         // el paso es una guia, no una grilla: cada arbol se corre de su lugar
         const xw = (i + 0.55 * (e.azar(i * 7 + e.k) - 0.5)) * paso;
@@ -997,23 +1007,25 @@ const TIERRA = {
         const hh = e.techo(Y, e.alto * (0.26 + 0.44 * r) *
           (e.azar(i * 17) > 0.94 ? 1.5 : 1));
         const an = hh * 0.30;
-        cx.fillStyle = `rgba(${e.col},1)`;
         // un abeto no es un triangulo: son tres faldas montadas, y esa silueta
         // escalonada es lo que lo hace leer como arbol y no como cono
         for (let f = 0; f < 3; f++) {
           const q = f / 3, hq = hh * (1 - q * 0.62), aq = an * (1 - q * 0.45);
           const yb = Y - hh * q * 0.52;
-          cx.beginPath();
           cx.moveTo(X, yb - hq); cx.lineTo(X - aq, yb); cx.lineTo(X + aq, yb);
-          cx.closePath(); cx.fill();
+          cx.closePath();
         }
-        if (e.k < 2 || hh < e.alto * 0.3) continue;
         // el sol pega desde la derecha: solo el plano cercano se entera
-        cx.strokeStyle = `rgba(${e.filo},0.30)`;
-        cx.lineWidth = 1.1;
-        cx.beginPath(); cx.moveTo(X + 0.5, Y - hh + 2); cx.lineTo(X + an * 0.9, Y);
-        cx.stroke();
+        if (e.k >= 2 && hh >= e.alto * 0.3)
+          filos.push([X + 0.5, Y - hh + 2, X + an * 0.9, Y]);
       }
+      cx.fill();
+      if (!filos.length) return;
+      cx.strokeStyle = `rgba(${e.filo},0.30)`;
+      cx.lineWidth = 1.1;
+      cx.beginPath();
+      for (const [x0, y0, x1, y1] of filos) { cx.moveTo(x0, y0); cx.lineTo(x1, y1); }
+      cx.stroke();
     }
   },
   ciudad: {
@@ -2235,6 +2247,11 @@ function arrancarNavegador () {
   // degrades planos: no hay ni texto chico ni fotos que pidan la tercera capa.
   let techoDpr = 2;
   let lentos = 0;                     // cuadros seguidos que no llegaron
+  // LO QUE NO PUEDO MEDIR DESDE ACA. Cuantos cuadros da TU aparato no viaja en
+  // ningun dato que el navegador me cuente, y "va lento" no se puede arreglar.
+  // Se guardan los cuadros de la ultima corrida y se dicen en ajustes: asi el
+  // reporte deja de ser un adjetivo y pasa a ser un numero.
+  const cuadrosCorrida = [];
   // en vertical el juego no se juega: se avisa y se para (ver el velo al final
   // de dibujar). Se pregunta en dos lugares, asi que vive en uno.
   const vertical = () => tactil && cv.clientHeight > cv.clientWidth * 1.08;
@@ -2326,6 +2343,19 @@ function arrancarNavegador () {
   try { modoFacil = localStorage.getItem('drible:facil') === '1'; } catch (_) {}
   const guardarFacil = () => {
     try { localStorage.setItem('drible:facil', modoFacil ? '1' : '0'); } catch (_) {}
+  };
+  // CUANTOS TIEMPOS ENTRAN A LO ANCHO. Ver lejos y ver grande son la misma
+  // pantalla repartida distinto, y cual conviene depende del aparato: por eso
+  // el que arranca elegido no es el mismo en un monitor que en un telefono.
+  const ZOOMS = [6.4, 5.4, 4.6];
+  const ZOOM_NOM = ['Lejos', 'Normal', 'Cerca'];
+  let zoom = tactil ? 2 : 0;
+  try {
+    const z = localStorage.getItem('drible:zoom');
+    if (z !== null && ZOOMS[+z] !== undefined) zoom = +z;
+  } catch (_) {}
+  const guardarZoom = () => {
+    try { localStorage.setItem('drible:zoom', String(zoom)); } catch (_) {}
   };
 
   let s = crearSim();
@@ -5639,13 +5669,28 @@ function arrancarNavegador () {
   function dibujarConfig (w, h) {
     velo(w, h);
     const chico = h < 600;
-    titulo('AJUSTES', w / 2, h * (chico ? 0.11 : 0.13), chico ? 17 : 19, C.peligro, 2.6);
+    const yT = h * (chico ? 0.11 : 0.13);
+    titulo('AJUSTES', w / 2, yT, chico ? 17 : 19, C.peligro, 2.6);
+    // Cuantos cuadros da ESTE aparato. Va arriba y no abajo porque no es una
+    // opcion que se toca: es el estado con el que hay que decidir las de abajo.
+    if (cuadrosCorrida.length > 30) {
+      const o = [...cuadrosCorrida].sort((a, b) => a - b);
+      const p50 = o[o.length >> 1], p90 = o[Math.floor(o.length * 0.9)];
+      const nit = Math.min(devicePixelRatio || 1, techoDpr);
+      ayuda(`Última corrida: ${(1 / p50).toFixed(0)} cuadros por segundo` +
+        (p90 > 0.028 ? `, ${(1 / p90).toFixed(0)} en los peores` : '') +
+        `  ·  nitidez ${nit.toFixed(nit % 1 ? 1 : 0)}×`,
+        w / 2, yT + 18, p50 > 0.028 ? C.sucia : C.tenue, 10.5);
+    }
     // los rotulos arrancan donde arranca el boton que explican: un rotulo
     // corrido treinta pixeles del control que nombra no agrupa nada
     const anB = Math.min(330, w * 0.84);
     const xB = w / 2 - anB / 2;
 
-    let y = h * (chico ? 0.24 : 0.26);
+    // cuatro bloques en un monitor; en un telefono apaisado no entran, y el que
+    // sobra es el de las teclas: ahi no hay teclado que valga.
+    const filas = chico ? [0.22, 0.47, 0.72] : [0.20, 0.41, 0.62, 0.82];
+    let y = h * filas[0];
     rotulo('DIFICULTAD', xB, y, 'left');
     btn(modoFacil ? 'RED DE SEGURIDAD — PUESTA' : 'RED DE SEGURIDAD — SIN RED',
       w / 2, y + 30, () => { modoFacil = !modoFacil; guardarFacil(); },
@@ -5658,19 +5703,38 @@ function arrancarNavegador () {
     // En un telefono el sonido sale tarde y el juego se siente roto sin que sea
     // culpa tuya. Este boton es la diferencia entre "no me sale" y "no estaba
     // calibrado", y por eso es un boton y no una tecla: en el telefono no hay C.
-    y = h * (chico ? 0.52 : 0.53);
+    y = h * filas[1];
     rotulo('SONIDO', xB, y, 'left');
     btn(desfase ? `CALIBRAR EL SONIDO — ${Math.round(desfase * 1000)} ms` : 'CALIBRAR EL SONIDO',
       w / 2, y + 30, () => calibrar(),
       { rgb: C.impulsoRGB, ancho: anB, alto: 36, fuente: 'bold 13px system-ui' });
     ayuda('Si tu pantalla o tus auriculares llegan tarde.  ·  Tecla C', w / 2, y + 62);
 
-    y = h * (chico ? 0.78 : 0.79);
-    rotulo('EN EL JUEGO', xB, y, 'left');
-    ayuda('ESC pausa  ·  ◀ ▶ saltan de sección  ·  M vuelve al menú',
-      w / 2, y + 20, C.tenue);
-    ayuda('F2 muestra secciones y códigos de nota  ·  Ctrl+C copia el de acá',
-      w / 2, y + 36, C.tenue);
+    // La unica opcion que no se puede decidir desde afuera: cuanto se ve depende
+    // del tamaño REAL de la pantalla que tenes en la mano, y eso no viaja en
+    // ningun dato que el navegador me cuente.
+    y = h * filas[2];
+    rotulo('IMAGEN', xB, y, 'left');
+    const anZ = (anB - 16) / 3;
+    ZOOM_NOM.forEach((nom, i) => {
+      btn(nom, xB + anZ / 2 + i * (anZ + 8), y + 30,
+        () => { zoom = i; guardarZoom(); },
+        { activo: zoom === i, rgb: C.teclaRGB, ancho: anZ, alto: 34,
+          fuente: `${zoom === i ? 'bold ' : ''}13px system-ui`, margen: 12 });
+    });
+    ayuda(`Cuánto mundo entra a lo ancho: ${ZOOMS[zoom]} tiempos.  ` +
+      (zoom === 2 ? 'Se ve grande, y se ve menos por delante.'
+        : zoom === 0 ? 'Se ve lejos, y se ve todo más chico.' : 'El punto medio.'),
+      w / 2, y + 62);
+
+    if (!chico) {
+      y = h * filas[3];
+      rotulo('EN EL JUEGO', xB, y, 'left');
+      ayuda('ESC pausa  ·  ◀ ▶ saltan de sección  ·  M vuelve al menú',
+        w / 2, y + 20, C.tenue);
+      ayuda('F2 muestra secciones y códigos de nota  ·  Ctrl+C copia el de acá',
+        w / 2, y + 36, C.tenue);
+    }
     btn('◀  Volver', w / 2, h - 26, () => { pantalla = 'inicio'; },
       { rgb: '232,230,224', fuente: '12px system-ui', alto: 26 });
   }
@@ -5970,6 +6034,10 @@ function arrancarNavegador () {
     // y el gesto deja de caer donde uno lo puso. Dos segundos seguidos sin llegar
     // a 36 fps y baja un escalon. No vuelve a subir nunca: oscilar entre dos
     // resoluciones se ve mucho peor que quedarse en la baja.
+    if (corriendo && dtP > 0) {
+      cuadrosCorrida.push(dtP);
+      if (cuadrosCorrida.length > 900) cuadrosCorrida.shift();
+    }
     if (corriendo && dtP > 0.028) lentos++; else lentos = Math.max(0, lentos - 2);
     if (lentos > 60 && techoDpr > 1) { techoDpr = techoDpr > 1.5 ? 1.5 : 1; lentos = 0; }
     const vientoAqui = fuerzaViento(s.x);
@@ -5987,18 +6055,35 @@ function arrancarNavegador () {
     cx.setTransform(dpr, 0, 0, dpr, sacX * dpr, sacY * dpr);
     cx.fillStyle = C.fondo; cx.fillRect(0, 0, w, h);
 
-    // EL ZOOM. Nueve tiempos a lo ancho dejaban todo chico y la mitad de arriba
-    // vacia. Ahora entran siete --28% mas grande-- y el alto pone su techo, para
-    // que en una pantalla apaisada y baja el mundo no se salga por arriba. No mas
-    // que esto porque lo que se gana en tamaño se paga en anticipacion: quedan
-    // 4.5 tiempos de cancion por delante, y el anillo que anuncia la proxima
-    // nota abre a 2.2. Achicando la ventana, el mapa deja de avisar a tiempo.
-    const esc = Math.min(w / 6.4, h / 3.0);
+    // EL ZOOM, en dos cifras: cuantos tiempos entran a lo ancho y cuanto mundo
+    // entra a lo alto. Manda la mas chica de las dos.
+    //
+    // EL ALTO ERA 3.0 Y NADIE LO HABIA MEDIDO. Corriendo la mano perfecta con
+    // la fisica del juego sobre las dos canciones, la esfera NUNCA pasa de
+    // y=1.14 (ESFERA) ni de y=1.03 (EL VIAJE); las teclas viven entre 0.07 y
+    // 0.67 y el orbe mas alto esta en 0.67. O sea que el mundo reservaba casi
+    // tres veces el alto que usa, y en una pantalla apaisada y baja --un
+    // telefono-- el alto es justamente el que manda: todo se dibujaba a un
+    // tercio de lo que podia. 1.7 deja mas del 50% de aire sobre la esfera mas
+    // alta de las dos canciones, que es donde vive el aro y el cartel que sube.
+    //
+    // EL ANCHO SE ELIGE, porque ahi si hay un precio. Lo que se gana en tamaño
+    // se paga en anticipacion: la esfera va a 3 decimos del borde izquierdo, y
+    // el anillo que anuncia la proxima nota abre a 2.2 tiempos. Con 4.6 quedan
+    // 3.2 tiempos por delante --el anillo sigue entrando entero-- y con 6.4
+    // quedan 4.5. En un monitor se lee todo el ancho de un vistazo y conviene
+    // ver lejos; en un telefono de 6.7 pulgadas no, y ahi conviene ver GRANDE.
+    // Por eso arranca en CERCA si el puntero es grueso y en LEJOS si no, y por
+    // eso es una opcion y no una constante: esto se decide mirando la pantalla
+    // que uno tiene en la mano, no la que tengo yo.
+    const vent = ZOOMS[zoom];
+    const esc = Math.min(w / vent, h / 1.7);
     // el pisoton hunde la pantalla entera unos pixeles -- solo vertical, para
     // no romper la lectura de la partitura -- y vuelve con resorte
     pisada = Math.max(0, pisada - dtSeg * 8);
     const y0 = h * 0.86 + pisada * pisada * 5;
-    const px = wx => (wx - s.x + 1.9) * esc;
+    const atras = vent * 0.296875;       // la esfera, a 3 decimos del borde (1.9 de 6.4)
+    const px = wx => (wx - s.x + atras) * esc;
     const py = wy => y0 - wy * esc;
 
     // Respirar. Los golpes se agendaron con el audio, asi que la imagen late
@@ -6166,11 +6251,11 @@ function arrancarNavegador () {
       // irse. NEBULOSA y el mar no dibujan nada: ahi el horizonte es abierto,
       // y ese vacio tambien cuenta el lugar.
       const fH = 0.10;
-      const pxH = wx => ((wx - s.x) * fH + 1.9) * esc;
+      const pxH = wx => ((wx - s.x) * fH + atras) * esc;
       const yHor = y0 - alza + 2;
       const rgbH = tinte.map(v => Math.round(v * 0.66 + 10)).join(',');
       const vH0 = s.x - (1.9 + 60 / esc) / fH;
-      const vH1 = s.x + ((w + 60) / esc - 1.9) / fH;
+      const vH1 = s.x + ((w + 60) / esc - atras) / fH;
       for (const z of TERRENOS) {
         const a = Math.max(z.x0, vH0), b = Math.min(z.x1, vH1);
         if (b <= a) continue;
@@ -6256,7 +6341,7 @@ function arrancarNavegador () {
         for (let i = 0; i < NOTAS.length; i += c.salto) {
           const nn = NOTAS[i];
           if (nn.silencio) continue;
-          const X = ((nn.xm - s.x) * c.f + 1.9) * esc;
+          const X = ((nn.xm - s.x) * c.f + atras) * esc;
           // la ALTURA viene de otro tramo de la cancion: misma partitura, otro
           // pasaje, asi que las cuatro siluetas no riman entre si
           const nh = NOTAS[(i + c.giro) % NOTAS.length];
@@ -6452,7 +6537,7 @@ function arrancarNavegador () {
       for (let k = 0; k < PLANOS.length; k++) {
         const P = PLANOS[k];
         // la camara de este plano: misma formula que las sierras del cielo
-        const pxP = wx => ((wx - s.x) * P.f + 1.9) * esc;
+        const pxP = wx => ((wx - s.x) * P.f + atras) * esc;
         // la ventana visible en coordenadas de mundo -- con paralaje chico es
         // mucho mas ancha que la de la camara, y por eso se ve venir lejos
         const v0 = s.x - (1.9 + 100 / esc) / P.f;
