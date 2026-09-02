@@ -1688,7 +1688,7 @@ export function rango (limpias, total, orbes, totalOrbes, perfectas = 0) {
 }
 
 function despegar (s, dejando = null) {
-  s.estado = 'aire'; s.tecla = -1; gDespegue(s);
+  s.estado = 'aire'; s.tecla = -1; gDespegue(s, dejando);
   // sin esto, soltar un riel por el medio vuelve a posarse en el mismo riel
   if (dejando) s.saliendoDe = dejando.i;
   s.coyote = dejando && !dejando.riel && !dejando.silencio && !s.tocadas.has(dejando.i)
@@ -1698,11 +1698,21 @@ function despegar (s, dejando = null) {
 // la gravedad que va a regir el vuelo que arranca aca. Se congela al despegar
 // y no cambia hasta tocar suelo: media parabola con un aire y media con otro
 // aterriza donde nadie prometio.
-const gDespegue = s => (s.gAire = gravedadEn(s.x));
+// EL AIRE LO DECIDE LA PARTITURA, NO TU DEDO. Se lee en el PULSO de la tecla
+// que se deja, no en el punto exacto donde salio el toque: la tabla empieza
+// antes del pulso y puede arrancar afuera de la columna de aire (la de
+// SUPERNOVA sopla desde 209.4 y la tecla que lanza empieza en 209.325). Tocar
+// 50 ms antes despegaba con el aire de afuera, el arco ya no cruzaba el
+// silencio --que compilar() marco como VOLADO justamente por el viento-- y la
+// esfera caia a una red que SIN RED no puso ahi: el mismo gesto, corrido 50 ms,
+// era el gran vuelo o la muerte. Ademas es el aire que compilar() ya usa para
+// decidir que silencios se vuelan, asi que mapa y vuelo dicen lo mismo.
+const gDespegue = (s, k = null) =>
+  (s.gAire = gravedadEn(k ? (k.riel ? k.x1 : k.xm) : s.x));
 function lanzar (s, desde) {
   const sig = NOTAS[desde.i + 1];
   s.estado = 'aire'; s.tecla = -1; s.saliendoDe = desde.i;
-  const G = gDespegue(s);      // el aire de ESTE vuelo, de punta a punta
+  const G = gDespegue(s, desde);   // el aire de ESTE vuelo, de punta a punta
   // si saltaste sin haber sonado esta tecla, todavia la podes cobrar un ratito
   s.coyote = !desde.riel && !desde.silencio && !s.tocadas.has(desde.i)
     ? { i: desde.i, hasta: s.x + COYOTE } : null;

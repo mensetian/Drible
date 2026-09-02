@@ -273,6 +273,7 @@ function correr (id) {
   const rp = jugar(perfecta);
   const rSinRed = jugar(perfecta, { sinRed: true });     // el concierto sin red
   const rMuertaSR = jugar(muerta, { sinRed: true });     // ...y el que no toca
+  const rAdSR = jugar(corrida(-150), { sinRed: true });  // ...y el que se adelanta
   const rBorde = jugar(alBorde);
   const rBajo = jugar(atacaElBajo);
   const rz = jugar(tropieza);
@@ -711,6 +712,17 @@ function correr (id) {
     ['...y con red, el que no toca nada rueda largo y no muere por la red',
       rm.causa !== 'red' && rm.x > rMuertaSR.x * 3,
       `con red llego a ${rm.x.toFixed(1)} (${rm.causa || 'vivo'}) contra ${rMuertaSR.x.toFixed(1)} sin red`],
+    // ADELANTARSE NO PUEDE MATAR. El punto de despegue se mueve con el dedo, y
+    // la tabla de una tecla puede empezar AFUERA de la columna de aire que la
+    // rodea (la de SUPERNOVA sopla desde 209.4 y la tecla que lanza empieza en
+    // 209.325). Con la gravedad leida en el punto exacto del toque, tocar 50 ms
+    // antes despegaba con OTRO aire que el que el mapa uso para marcar ese
+    // silencio como volado: el arco se quedaba corto y la esfera caia a una red
+    // que este modo no puso ahi. Mismo gesto, corrido 50 ms, el gran vuelo o la
+    // muerte -- y nada en pantalla decia donde estaba el filo.
+    ['SIN RED: adelantarse no mata — el aire de un vuelo lo fija el pulso, no tu dedo',
+      rAdSR.meta && rAdSR.tocadas.size === TOTAL_NOTAS,
+      `${rAdSR.meta ? 'meta' : 'murio en ' + rAdSR.x.toFixed(1) + ' (' + rAdSR.causa + ')'} · ${rAdSR.tocadas.size}/${TOTAL_NOTAS}`],
     // El techo EXIGE rodar: no puede matar por hacer lo que el mismo ordena.
     ['SIN RED: todo techo cae dentro de un tramo donde se manda rodar',
       TECHOS.every(t => mandaRodar(t.x0) && mandaRodar(t.x1)),
