@@ -985,6 +985,29 @@ export const terrenoEn = x => (TERRENOS.find(z => x >= z.x0 && x < z.x1) || {}).
 const TIERRA = {
   bosque: {
     cuerpo: [24, 54, 40], filo: [130, 190, 150],
+    // LA TECLA TAMBIEN ES DE ACA. Teñirla del color del lugar no alcanzaba:
+    // una barra teñida sigue siendo una barra. Cada tierra le presta a la
+    // plataforma UNA pieza de su propio vocabulario --la madera, el remache,
+    // la nieve, la arena-- y siempre en el CUERPO o COLGANDO por abajo: el
+    // lomo es donde se aterriza, y ahi no se dibuja nada que confunda la
+    // altura. Una pieza, no un adorno: dos llamadas por tecla como maximo, y
+    // solo en las tablas anchas -- en una corrida de semicorcheas no entra
+    // nada y meterlo la vuelve ruido.
+    tecla (cx, e) {
+      // tabla de madera: la veta adentro, y un gajo que le brota del canto
+      cx.fillStyle = 'rgba(0,0,0,0.26)';
+      cx.beginPath();
+      cx.rect(e.ax + e.an * 0.12, e.ay + e.grueso * 0.42, e.an * 0.5, 1);
+      cx.rect(e.ax + e.an * 0.55, e.ay + e.grueso * 0.68, e.an * 0.3, 1);
+      cx.fill();
+      const X = e.ax + e.an * (0.6 + 0.26 * e.azar(e.i * 3.3)), Y = e.ay + e.grueso;
+      cx.strokeStyle = `rgba(${e.filo},0.75)`; cx.lineWidth = 1.4;
+      cx.beginPath();
+      cx.moveTo(X, Y); cx.lineTo(X - 0.8, Y + 7);
+      cx.moveTo(X - 0.2, Y + 2.4); cx.lineTo(X + 4.2, Y + 1.4);
+      cx.moveTo(X - 0.6, Y + 4.6); cx.lineTo(X - 4.4, Y + 4);
+      cx.stroke();
+    },
     dibujo (cx, e) {
       const paso = 0.15 * e.P.paso;
       const i0 = Math.floor(e.a / paso) - 2, i1 = Math.ceil(e.b / paso) + 2;
@@ -1030,6 +1053,23 @@ const TIERRA = {
   },
   ciudad: {
     cuerpo: [30, 34, 54], filo: [120, 140, 190],
+    tecla (cx, e) {
+      // viga remachada, y a veces un farolito colgando: lo unico calido que
+      // tiene la ciudad son sus luces, y aca arriba tambien hay una
+      const n = Math.max(2, Math.min(4, Math.round(e.an / 18)));
+      cx.fillStyle = `rgba(${e.filo},0.7)`;
+      cx.beginPath();
+      for (let j = 0; j < n; j++)
+        cx.rect(e.ax + e.an * ((j + 0.5) / n) - 1.2, e.ay + e.grueso * 0.5 - 1.2, 2.4, 2.4);
+      cx.fill();
+      if (e.azar(e.i * 5.7) > 0.62) {
+        const X = e.ax + e.an * 0.8, Y = e.ay + e.grueso;
+        cx.strokeStyle = 'rgba(255,205,130,0.5)'; cx.lineWidth = 1;
+        cx.beginPath(); cx.moveTo(X, Y); cx.lineTo(X, Y + 4); cx.stroke();
+        cx.fillStyle = 'rgba(255,205,130,0.9)';
+        cx.fillRect(X - 1.5, Y + 4, 3, 3);
+      }
+    },
     dibujo (cx, e) {
       const paso = 0.26 * e.P.paso;
       const i0 = Math.floor(e.a / paso) - 2, i1 = Math.ceil(e.b / paso) + 2;
@@ -1075,6 +1115,23 @@ const TIERRA = {
   },
   montania: {
     cuerpo: [46, 54, 74], filo: [150, 170, 215],
+    tecla (cx, e) {
+      // repisa de piedra: la nieve se apila DENTRO del lomo --no encima, que
+      // moveria la altura donde se aterriza-- y del canto cuelga un carambano
+      cx.fillStyle = 'rgba(228,238,255,0.4)';
+      const n = Math.max(2, Math.min(5, Math.round(e.an / 12)));
+      cx.beginPath();
+      cx.moveTo(e.ax + 1.5, e.ay + 2.2);
+      for (let j = 0; j <= n; j++)
+        cx.lineTo(e.ax + 1.5 + (e.an - 3) * (j / n), e.ay + (j % 2 ? 0.6 : 2));
+      cx.lineTo(e.ax + e.an - 1.5, e.ay + 2.2);
+      cx.closePath(); cx.fill();
+      const X = e.ax + e.an * (0.6 + 0.26 * e.azar(e.i * 7.1)), Y = e.ay + e.grueso;
+      cx.fillStyle = 'rgba(228,238,255,0.6)';
+      cx.beginPath();
+      cx.moveTo(X - 2, Y); cx.lineTo(X + 2, Y); cx.lineTo(X, Y + 7);
+      cx.closePath(); cx.fill();
+    },
     dibujo (cx, e) {
       const paso = 0.24 * e.P.paso;
       const i0 = Math.floor(e.a / paso) - 2, i1 = Math.ceil(e.b / paso) + 2;
@@ -1131,6 +1188,20 @@ const TIERRA = {
   },
   desierto: {
     cuerpo: [74, 58, 38], filo: [225, 185, 125],
+    tecla (cx, e) {
+      // losa de arenisca: el estrato adentro, y la arena que el viento le saca
+      // por el canto. Cae despacio y vuelve a empezar, como cae de una duna.
+      cx.fillStyle = 'rgba(0,0,0,0.18)';
+      cx.fillRect(e.ax + e.an * 0.2, e.ay + e.grueso * 0.58, e.an * 0.6, 1);
+      cx.fillStyle = `rgba(${e.filo},0.5)`;
+      cx.beginPath();
+      for (let j = 0; j < 3; j++) {
+        const r = e.azar(e.i * 2.9 + j * 13);
+        cx.rect(e.ax + e.an * (0.22 + 0.56 * r), e.ay + e.grueso +
+          ((e.t / 1600 + r) % 1) * 8, 1.6, 1.6);
+      }
+      cx.fill();
+    },
     dibujo (cx, e) {
       // las dunas son una sola curva suave por plano: lo que las hace dunas es
       // la CRESTA iluminada, el filo donde el viento apila la arena
@@ -1181,6 +1252,14 @@ const TIERRA = {
   },
   tierra: {
     cuerpo: [58, 48, 36], filo: [190, 160, 115],
+    tecla (cx, e) {
+      // canto rodado: los mismos lomos gastados que las piedras de alla abajo
+      cx.fillStyle = `rgba(${e.filo},0.32)`;
+      cx.beginPath();
+      cx.ellipse(e.ax + e.an * 0.32, e.ay + 2, e.an * 0.15, 1.7, 0, Math.PI, 0);
+      cx.ellipse(e.ax + e.an * 0.7, e.ay + 2, e.an * 0.11, 1.4, 0, Math.PI, 0);
+      cx.fill();
+    },
     dibujo (cx, e) {
       if (e.k === 0) return;
       cx.fillStyle = `rgba(${e.col},1)`;
@@ -7260,6 +7339,16 @@ function arrancarNavegador () {
           // barra plana en algo con volumen, y cuesta una llamada.
           cx.fillStyle = limpia ? 'rgba(255,252,240,0.55)' : 'rgba(255,255,255,0.22)';
           cx.fillRect(ax + 1.5, ay + 0.5, Math.max(1, an - 3), 1.5);
+          // ...y la PIEZA DEL LUGAR encima de eso: la madera del bosque, el
+          // remache de la ciudad, la nieve de la montaña, la arena del
+          // desierto. Va sin el halo de la nota limpia --una sombra difusa por
+          // remache cuesta mas que todo el resto junto-- y solo en las tablas
+          // anchas, que son las unicas donde algo se llega a ver.
+          if (bio && bio.tecla && an >= 14) {
+            const halo = cx.shadowBlur; cx.shadowBlur = 0;
+            bio.tecla(cx, { ax, ay, an, grueso, filo: bio.filo.join(','), i: k.i, azar, t: ahoraP });
+            cx.shadowBlur = halo;
+          }
         }
         if (k.bajo) {                    // la patita del bajo
           cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
