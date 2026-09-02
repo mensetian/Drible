@@ -2218,6 +2218,27 @@ function arrancarNavegador () {
   const cx = cv.getContext('2d');
   const hud = document.getElementById('hud');
 
+  // EL TELEFONO. Un dedo grueso, una pantalla que se apaga sola, y --lo que
+  // manda-- un lienzo que cuesta POR PIXEL PINTADO. Se mide una vez: si el
+  // puntero es grueso, esto es un aparato tactil y las tres decisiones de abajo
+  // cambian (resolucion, pantalla completa, vertical).
+  const tactil = (() => {
+    try { return matchMedia('(pointer: coarse)').matches; } catch (_) { return false; }
+  })();
+  // LOS PIXELES SE PAGAN, Y EN EL TELEFONO SE PAGAN TRES VECES. Perfilado en
+  // Chrome jugando EL VIAJE, el 96% del tiempo de cuadro se va en RASTERIZAR:
+  // el javascript del juego --fisica, audio, partitura-- no llega al 4%. O sea
+  // que lo unico que mueve la aguja es cuantos pixeles se pintan, y eso es
+  // dpr^2. Un telefono de 852x393 con dpr 3 pinta 3.0 megapixeles por cuadro;
+  // el mismo cuadro a dpr 2 pinta 2.25 veces menos, y medido paso de 28 a 58
+  // fps. La diferencia NO se ve, porque lo que se dibuja son rectangulos y
+  // degrades planos: no hay ni texto chico ni fotos que pidan la tercera capa.
+  let techoDpr = 2;
+  let lentos = 0;                     // cuadros seguidos que no llegaron
+  // en vertical el juego no se juega: se avisa y se para (ver el velo al final
+  // de dibujar). Se pregunta en dos lugares, asi que vive en uno.
+  const vertical = () => tactil && cv.clientHeight > cv.clientWidth * 1.08;
+
   const C = {
     fondo: '#111214',
     red: 'rgba(232,230,224,0.20)',
@@ -4388,7 +4409,27 @@ function arrancarNavegador () {
   // En el juego, bajar es TOCAR. En las pantallas de entrada no hace falta que
   // adivine nada: el boton de teclado avanza la pantalla en la que estas, y el
   // dedo va directo al rectangulo que ve (eso lo resuelve pointerdown).
+  // EL TELEFONO SE QUEDA CON LA PANTALLA. La barra de direcciones se come el
+  // alto --y el alto es el que decide el zoom del mundo-- y un raspon desde el
+  // borde te saca del juego en medio de una corrida. Se pide DENTRO del toque
+  // que el usuario ya dio: fuera de un gesto el navegador lo niega, y pedirlo
+  // al cargar no sirve. En iPhone no existe: falla en silencio y todo sigue.
+  function aCompleta () {
+    if (!tactil || document.fullscreenElement) return;
+    try {
+      const pr = document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      if (pr && pr.then) pr.then(() => {
+        // el candado de orientacion no existe en iPhone ni en escritorio, y
+        // ahi RECHAZA: sin el catch queda un error no atendido en la consola
+        try { const l = screen.orientation.lock('landscape'); if (l && l.catch) l.catch(() => {}); }
+        catch (_) {}
+      }, () => {});
+    } catch (_) {}
+  }
+
   function bajar (nivel = null) {
+    if (vertical()) return;           // debajo del velo el boton no existe
+    if (!corriendo) aCompleta();      // el unico momento en que hay gesto y no hay juego
     if (esperando) { reanudarMuerte(); return; }   // tras morir, tocar es OTRA VEZ
     if (pausado) { alternarPausa(); return; }   // en pausa, tocar es seguir
     if (calib) { tocarCalib(); return; }
@@ -4499,6 +4540,7 @@ function arrancarNavegador () {
 
   cv.addEventListener('pointerdown', e => {
     e.preventDefault();
+    if (vertical()) return;      // debajo del velo no hay nada que tocar
     // Ctrl+clic copia la nota que estas señalando, sin tocarla. Va con Ctrl para
     // que el clic siga siendo el boton de tocar: un modo debug que te cambia el
     // clic no se puede tener prendido mientras jugas, y prenderlo solo cuando ya
@@ -5905,14 +5947,31 @@ function arrancarNavegador () {
   }
 
   function dibujar (dtSeg) {
-    const w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
-    if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+    const w = cv.clientWidth, h = cv.clientHeight;
+    // ...y ademas un presupuesto de pixeles, que es lo que el techo solo no
+    // cubre: una tablet de 1180x820 a dpr 2 pide 7.7 megapixeles, mas del doble
+    // que el telefono. El techo nunca baja de 1: por debajo el respaldo seria
+    // mas chico que la pantalla y eso SI se ve, en todo, todo el tiempo.
+    const dpr = Math.max(1, Math.min(devicePixelRatio || 1, techoDpr,
+      Math.sqrt(2.6e6 / Math.max(1, w * h))));
+    const bw = Math.round(w * dpr), bh = Math.round(h * dpr);
+    // se compara contra el entero REAL: con un dpr fraccionario, comparar
+    // contra w*dpr da distinto siempre y el lienzo se reasignaba cada cuadro
+    if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
     // la sacudida vive en la transformacion: tiembla el mundo entero, no un
     // dibujo, y se apaga con el reloj de PANTALLA -- por eso sigue muriendose
     // mientras el informe de muerte tiene el mundo entero congelado.
     const ahoraP = performance.now();
     const dtP = ultimoCuadro ? Math.min(0.05, (ahoraP - ultimoCuadro) / 1000) : 0;
     ultimoCuadro = ahoraP;
+    // Y SI AUN ASI NO LLEGA, SE BAJA SOLO. El mundo persigue al reloj del audio
+    // con un paso acotado por cuadro, asi que un aparato lento no se desincroniza:
+    // entra en CAMARA LENTA, que en un juego de ritmo es peor: la cancion espera
+    // y el gesto deja de caer donde uno lo puso. Dos segundos seguidos sin llegar
+    // a 36 fps y baja un escalon. No vuelve a subir nunca: oscilar entre dos
+    // resoluciones se ve mucho peor que quedarse en la baja.
+    if (corriendo && dtP > 0.028) lentos++; else lentos = Math.max(0, lentos - 2);
+    if (lentos > 60 && techoDpr > 1) { techoDpr = techoDpr > 1.5 ? 1.5 : 1; lentos = 0; }
     const vientoAqui = fuerzaViento(s.x);
     derivaViento += dtP * vientoAqui * 42;
     if (corriendo && vientoAqui > 0.12 && Math.random() < vientoAqui * 0.7)
@@ -7686,6 +7745,41 @@ function arrancarNavegador () {
     }
     // El calco va ULTIMO: encima de todo lo dibujado, y sin haber tocado nada.
     if (debug && corriendo) dibujarDebug(w, h, px, py, y0);
+    // GIRÁ EL TELÉFONO. La ventana del juego es de 6.4 tiempos de ancho por 3
+    // esferas de alto: en vertical el mundo entra en el quinto de abajo de la
+    // pantalla y arriba quedan setecientos pixeles de negro. No es "mas chico",
+    // es que la partitura deja de leerse -- y este juego se juega leyendo el
+    // mapa por delante. Asi que se dice, y se para: dejar que siga es dejar
+    // perder una corrida por una pantalla que no se puede leer. Solo en tactil;
+    // una ventana angosta en la computadora se arregla estirandola.
+    if (vertical()) {
+      if (corriendo && !pausado && !esperando && !s.meta) alternarPausa();
+      botones.length = 0;             // y ningun boton responde debajo del velo
+      velo(w, h, 0.94);
+      const uu = Math.min(w * 0.16, h * 0.075);
+      // el grupo va centrado como un bloque: la flecha abre 1.95 unidades
+      // arriba y el texto cierra 2.6 abajo, asi que el centro no es el medio
+      const cxp = w / 2, cyp = h / 2 - uu * 0.55;
+      cx.save();
+      cx.translate(cxp, cyp);
+      cx.rotate(-0.42 + 0.1 * Math.sin(performance.now() / 520));
+      cx.strokeStyle = `rgba(${C.esferaRGB},0.85)`; cx.lineWidth = 2.5;
+      caja(-uu * 0.62, -uu, uu * 1.24, uu * 2, uu * 0.22); cx.stroke();
+      cx.fillStyle = `rgba(${C.esferaRGB},0.35)`;
+      cx.fillRect(-uu * 0.14, -uu * 0.82, uu * 0.28, uu * 0.06);
+      cx.restore();
+      // la flecha del giro, que es lo que dice QUE hacer
+      cx.strokeStyle = `rgba(${C.teclaRGB},0.75)`; cx.lineWidth = 2.5;
+      cx.beginPath(); cx.arc(cxp, cyp, uu * 1.7, -2.5, -0.7); cx.stroke();
+      cx.beginPath();
+      cx.moveTo(cxp + uu * 1.7 * Math.cos(-0.7), cyp + uu * 1.7 * Math.sin(-0.7));
+      cx.lineTo(cxp + uu * 1.35 * Math.cos(-0.55), cyp + uu * 1.35 * Math.sin(-0.55));
+      cx.lineTo(cxp + uu * 1.95 * Math.cos(-0.5), cyp + uu * 1.95 * Math.sin(-0.5));
+      cx.closePath(); cx.fillStyle = `rgba(${C.teclaRGB},0.75)`; cx.fill();
+      titulo('GIRÁ EL TELÉFONO', cxp, cyp + uu * 2.6, Math.min(19, w * 0.055), C.peligro, 2.6);
+      ayuda('El mapa es la partitura, y se lee a lo ancho.',
+        cxp, cyp + uu * 2.6 + 22, C.tenue, Math.min(12.5, w * 0.036));
+    }
     hud.textContent = '';
   }
 }
