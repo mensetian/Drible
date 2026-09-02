@@ -4076,6 +4076,9 @@ function arrancarNavegador () {
     avisoMuerte = null;
     try { ac.resume(); } catch (_) {}
     bandaVuelve();
+    // RECIEN ACA vuelve la camara a la salida: la corrida nueva se arma en el
+    // cuadro en el que vos decidis seguir, no en el que te moriste
+    s = crearSim({ sinRed });
     t0 = ac.currentTime + 0.2;      // el respiro justo antes de que el cañon cargue
     relojSuave = null;
     proxBeat = 0;
@@ -4115,8 +4118,12 @@ function arrancarNavegador () {
     mejor = Math.max(mejor, s.limpias.size);
     intento++;
     ensayo = false;      // morir reinicia en x=0, y eso ya es empezar de cero
-    // la esfera ESTALLA donde estaba (coordenadas de pantalla: la camara ya se
-    // teletransporto a la salida cuando esto se dibuja) y el flash se tiñe
+    // LA ESFERA ESTALLA DONDE MORISTE. Aca se armaba ya mismo la simulacion
+    // nueva, y con ella s.x volvia a 0 -- pero la camara va pegada a s.x, asi
+    // que en el MISMO cuadro el mundo se teletransportaba a la salida y el
+    // estallido, el informe y el respiro entero se veian sobre el paisaje del
+    // compas 1, lejos de donde te habias caido. El mundo se queda quieto donde
+    // caiste; la corrida nueva la arma reanudarMuerte cuando vos seguis.
     muerteVista = {
       y: s.y, t: performance.now(),
       esquirlas: Array.from({ length: 18 }, () => ({
@@ -4125,8 +4132,7 @@ function arrancarNavegador () {
     };
     sacudidaT = performance.now();      // el golpe se siente en la camara
     flashRGB = '255,120,90';
-    s = crearSim({ sinRed });
-    // el mundo queda armado en la salida, pero quieto: el reloj del audio se
+    // el mundo queda congelado en el lugar de la caida: el reloj del audio se
     // suspende y con el cuelga todo, asi que al reanudar no hay nada corrido
     esperando = true;
     muerteEn = performance.now();
@@ -5811,8 +5817,8 @@ function arrancarNavegador () {
         .map(a => `${a.grave ? '‼ ' : '⚠ '}${a.tipo}   ${a.txt}`),
       `vecinas  ← ${prev ? codigoDe(prev) + ' ' + (prev.silencio ? '-' : prev.nombre) : '(inicio)'}` +
         `   → ${sig ? codigoDe(sig) + ' ' + (sig.silencio ? '-' : sig.nombre) : '(fin)'}`,
-      // muerto, `s` ya es una simulacion nueva parada en x=0: decir "esfera x 0"
-      // en el expediente de la nota que te mato es peor que no decir nada
+      // muerto, el renglon de la esfera no dice nada nuevo (el mundo esta
+      // congelado en el punto de la caida): dice la CAUSA, que es lo que falta
       esperando && avisoMuerte
         ? `muerte   x ${avisoMuerte.xm.toFixed(2)}  ${avisoMuerte.txt || '?'}` +
           `  ·  ${avisoMuerte.pct}%  ${modoFacil ? 'facil' : 'sin red'}`
@@ -6042,7 +6048,7 @@ function arrancarNavegador () {
     if (lentos > 60 && techoDpr > 1) { techoDpr = techoDpr > 1.5 ? 1.5 : 1; lentos = 0; }
     const vientoAqui = fuerzaViento(s.x);
     derivaViento += dtP * vientoAqui * 42;
-    if (corriendo && vientoAqui > 0.12 && Math.random() < vientoAqui * 0.7)
+    if (corriendo && !esperando && vientoAqui > 0.12 && Math.random() < vientoAqui * 0.7)
       particulas.push({ x: s.x - 3 + Math.random() * 10, y: -0.05 + Math.random() * 0.1,
         rgb: '190,228,255', vx: 0.1 + Math.random() * 0.2,
         vy: 0.5 + Math.random() * 1.1, g: -0.7, vida: 1 });
@@ -7438,11 +7444,13 @@ function arrancarNavegador () {
       : Math.atan2(-s.vy * (s.estado === 'aire' ? 1 : 0), 1);
     const rx = R * esc * (1 + k + estira), ry = R * esc * (1 - k - estira);
 
-    if (corriendo && s.estado === 'aire' && enViento(s.x) && Math.random() < 0.5)
+    if (corriendo && !esperando && s.estado === 'aire' && enViento(s.x) && Math.random() < 0.5)
       particulas.push({ x: s.x + (Math.random() - 0.5) * 0.5, y: s.y + R,
         rgb: '190,228,255', vx: 0.15, vy: 1.6 + Math.random(), vida: 1 });
     cx.save();
-    if (esperando && ahoraP - muerteEn < RESPIRO_MUERTE) cx.globalAlpha = 0;
+    // mientras dura la espera no hay esfera que dibujar: la que habia estallo y
+    // la de la corrida nueva todavia no existe (sale del cañon al reanudar)
+    if (esperando) cx.globalAlpha = 0;
     // LA SOMBRA. Dice a que altura vas y donde vas a caer, que era informacion
     // que solo estaba en la fisica. Ademas ancla la esfera al mundo: sin ella
     // flota, con ella pesa.
@@ -7536,14 +7544,14 @@ function arrancarNavegador () {
     }
     cx.restore();                       // ...y aca vuelve a existir la esfera
 
-    // EL CINE DE LA MUERTE, en pantalla (la camara ya volvio a la salida):
+    // EL CINE DE LA MUERTE, en pantalla (la camara sigue en el lugar de la caida):
     // la esfera fantasma sigue cayendo, estirada por la velocidad; la onda
     // expansiva dice DONDE; las esquirlas vuelan y caen con su gravedad.
     if (muerteVista) {
       const e = (performance.now() - muerteVista.t) / 900;
       if (e >= 1) muerteVista = null;
       else {
-        const ox = 1.9 * esc, oy = py(muerteVista.y + R);
+        const ox = atras * esc, oy = py(muerteVista.y + R);
         // la onda expansiva: un aro que crece y se apaga, rapido
         if (e < 0.5) {
           cx.strokeStyle = `rgba(255,160,120,${0.7 * (1 - e * 2)})`;
@@ -7623,8 +7631,8 @@ function arrancarNavegador () {
           botonesMuerte.length = 0;
           cx.save();
           cx.textAlign = 'center'; cx.globalAlpha = Math.min(1, 4 * (1 - dt));
-          // el velo: el diagnostico tiene que LEERSE, y atras esta el compas 1
-          // de la corrida nueva, armado y congelado esperando tu mano
+          // el velo: el diagnostico tiene que LEERSE, y atras esta el tramo
+          // donde caiste, congelado en el cuadro de la caida
           cx.fillStyle = esperando ? 'rgba(17,18,20,0.90)' : 'rgba(17,18,20,0.72)';
           cx.fillRect(0, 0, w, h);
           // EL PANEL. Antes eran seis renglones sueltos flotando sobre el mundo:
