@@ -1622,11 +1622,12 @@ elegirCancion('viaje');   // el default: la cancion entera
 
 export function crearSim (opts = {}) {
   return {
-    // SIN RED: el concierto del que ya se sabe la cancion. Caer a la red mata,
-    // salvo donde la partitura MANDA rodar (los silencios largos y la vuelta
-    // final). El juego base promete "el error cuesta la nota, nunca el tramo";
-    // aca el jugador cambia esa promesa, a sabiendas, por la de los abismos:
-    // 277 notas y ninguna red debajo.
+    // SIN RED: la promesa del juego, y ya no una opcion -- el juego se juega
+    // asi y punto. Caer a la red mata, salvo donde la partitura MANDA rodar
+    // (los silencios largos y la vuelta final): 277 notas y ninguna red debajo.
+    // La bandera sigue aca porque la regla contraria --caer cuesta la nota, no
+    // el tramo-- es lo que el motor tiene que poder demostrar que NO hace: las
+    // pruebas corren las dos y comparan. El juego siempre la pone en true.
     sinRed: !!opts.sinRed,
     x: 0, y: PISO ? PISO.y : 0, vy: 0,
     estado: 'apoyada',      // 'apoyada' | 'aire'
@@ -2344,16 +2345,13 @@ function arrancarNavegador () {
   }
   aplicarMira();
 
-  // MODO FACIL: la red. Caer y volver a subir es una muleta de aprendizaje, no
-  // el juego -- el juego es que la cancion no se puede pausar. Asi que la red
-  // es la excepcion y hay que ir a buscarla a configuracion; lo normal es que
-  // caer sea el final. Y adentro NO SE VE ninguna de las dos cosas: un cartel
-  // que te recuerda en que modo estas es un cartel que te saca de la cancion.
-  let modoFacil = false;
-  try { modoFacil = localStorage.getItem('drible:facil') === '1'; } catch (_) {}
-  const guardarFacil = () => {
-    try { localStorage.setItem('drible:facil', modoFacil ? '1' : '0'); } catch (_) {}
-  };
+  // NO HAY MODO FACIL. La red de seguridad existio como muleta de aprendizaje y
+  // se fue: un juego con dos dificultades es dos juegos, y el que importa es
+  // este --caer termina la corrida, salvo donde la partitura manda rodar. Lo
+  // que hacia falta de verdad no era perdonar la caida sino no cobrarla cara,
+  // y eso ya lo da ENSAYAR: saltar a una seccion cuesta una tecla, no cuenta
+  // el intento, y devuelve a la esfera al principio del tramo que se esta
+  // aprendiendo. Se repite barato; no se sobrevive gratis.
   // CUANTOS TIEMPOS ENTRAN A LO ANCHO. Ver lejos y ver grande son la misma
   // pantalla repartida distinto, y cual conviene depende del aparato: por eso
   // el que arranca elegido no es el mismo en un monitor que en un telefono.
@@ -2368,7 +2366,7 @@ function arrancarNavegador () {
     try { localStorage.setItem('drible:zoom', String(zoom)); } catch (_) {}
   };
 
-  let s = crearSim();
+  let s = crearSim({ sinRed: true });
   let intento = 1, mejor = 0;
 
   // LO QUE QUEDA ENTRE PARTIDAS. Morir sin un numero es morir dos veces: no
@@ -2392,7 +2390,6 @@ function arrancarNavegador () {
       perf: Math.max(d.perf || 0, r.perf || 0),
       racha: Math.max(d.racha || 0, r.racha || 0),
       orbes: Math.max(d.orbes || 0, r.orbes || 0),
-      sinRedPct: Math.max(d.sinRedPct || 0, r.sinRedPct || 0),
       rango: [d.rango, r.rango].filter(Boolean)
         .sort((a, b) => RANGOS.indexOf(b) - RANGOS.indexOf(a))[0] || null
     };
@@ -4088,7 +4085,7 @@ function arrancarNavegador () {
     bandaVuelve();
     // RECIEN ACA vuelve la camara a la salida: la corrida nueva se arma en el
     // cuadro en el que vos decidis seguir, no en el que te moriste
-    s = crearSim({ sinRed });
+    s = crearSim({ sinRed: true });
     t0 = ac.currentTime + 0.2;      // el respiro justo antes de que el cañon cargue
     relojSuave = null;
     proxBeat = 0;
@@ -4107,9 +4104,7 @@ function arrancarNavegador () {
     if (!ensayo) {
       guardarRecord(CANCION_ID, {
         pct, limpias: s.limpias.size, perf: s.perfectas.size,
-        racha: s.mejorRacha, orbes: s.orbes,
-        // el sin red lleva su propia marca: es otra promesa, otro record
-        sinRedPct: sinRed ? pct : 0
+        racha: s.mejorRacha, orbes: s.orbes
       });
       rachaRecord = Math.max(rachaRecord, s.mejorRacha); rachaAvisada = false;
     }
@@ -4170,7 +4165,6 @@ function arrancarNavegador () {
     armarLecciones();
     ensayo = false;                 // arrancar de cero es el unico concierto
     esperando = false;
-    sinRed = !modoFacil;            // el modo se elige en configuracion y dura la corrida
     golpesVista.length = 0; padsVista.length = 0;
     cabezas.clear(); pisada = 0;
     crashVista.length = 0; riserVista = null;
@@ -4181,7 +4175,7 @@ function arrancarNavegador () {
     rachaAvisada = false; rachaRota = null;
     metaRecord = null; avisoMuerte = null; ultSeccion = 0;
     metaEn = 0; muerteVista = null; leccionViva = null; vecesRed = 0;
-    s = crearSim({ sinRed });
+    s = crearSim({ sinRed: true });
     estela.length = 0; desvios.length = 0; marcas.length = 0; avisos.length = 0; aros.length = 0;
     sonarTunel.length = 0; tunelesCruzados.clear(); sonarT = -1e9;
     rotos.length = 0; rastroEco.length = 0;
@@ -4383,14 +4377,11 @@ function arrancarNavegador () {
   // no es un record: es una trampa contra uno mismo. Desde el primer salto la
   // corrida queda marcada como ENSAYO y no puntua hasta que se arranque de cero.
   let ensayo = false;
-  // SIN RED es el juego, no un extra: se juega asi salvo que en configuracion
-  // este puesto el modo facil. Dura toda la corrida, reintentos incluidos.
-  let sinRed = false;
   let avisoSeccion = null;
   function saltarA (bx) {
     rielCerrar(); eRielCerrar();
     const k = primeraNotaDe(bx);
-    s = crearSim({ sinRed });
+    s = crearSim({ sinRed: true });
     // se ATERRIZA en la tabla (que empieza antes del pulso): asi se entra
     // rodando y se golpea al cruzar la marca, igual que en el resto del juego
     s.x = Math.max(0, k.x0);
@@ -4447,9 +4438,9 @@ function arrancarNavegador () {
     leccionViva = null; rachaRota = null; avisoSeccion = null;
     metaEn = 0; muerteVista = null; leccionViva = null; avisoMuerte = null;
     sacudidaT = 0; flash = 0;     // al menu no se llega temblando
-    corriendo = false; finSonado = false; sinRed = false; esperando = false;
+    corriendo = false; finSonado = false; esperando = false;
     pantalla = 'mapa';        // se vuelve al mapa, que es de donde saliste
-    s = crearSim();
+    s = crearSim({ sinRed: true });
   }
 
   // En el juego, bajar es TOCAR. En las pantallas de entrada no hace falta que
@@ -4566,11 +4557,6 @@ function arrancarNavegador () {
     e.preventDefault();
     if (e.repeat) return;
     if (!corriendo && !calib && (e.key === 'c' || e.key === 'C')) { calibrar(); return; }
-    // el modo facil tiene tecla propia: el que juega con teclado no deberia
-    // tener que entrar a configuracion para poner o sacar la red
-    if (!corriendo && !calib && (e.key === 'f' || e.key === 'F')) {
-      modoFacil = !modoFacil; guardarFacil(); pantalla = 'config'; return;
-    }
     if (!corriendo && !calib && e.key >= '1' && e.key <= String(NIVELES.length)) { bajar(+e.key - 1); return; }
     bajar();
   }, { capture: true });
@@ -4747,7 +4733,7 @@ function arrancarNavegador () {
         };
         guardarRecord(CANCION_ID, {
           pct: 100, limpias: s.limpias.size, perf: s.perfectas.size,
-          racha: s.mejorRacha, orbes: s.orbes, sinRedPct: sinRed ? 100 : 0,
+          racha: s.mejorRacha, orbes: s.orbes,
           rango: rango(s.limpias.size, TOTAL_NOTAS, s.orbes, ORBES.length, s.perfectas.size)
         });
       } else metaRecord = null;
@@ -4948,12 +4934,11 @@ function arrancarNavegador () {
   // red, que es lo normal, y por eso su ausencia dice algo.
   function marcaNivel (id) {
     const r = leerRecord(id);
-    if (!r) return { hay: false, txt: 'Sin tocar', rango: null, sr: '', pct: 0, limpias: 0 };
+    if (!r) return { hay: false, txt: 'Sin tocar', rango: null, pct: 0, limpias: 0 };
     return {
       hay: true,
       rango: r.rango || null,
       txt: `♪ ${r.limpias || 0} de ${contarNotas(id)} limpias`,
-      sr: r.sinRedPct >= 100 ? '✦' : '',
       pct: r.pct || 0, limpias: r.limpias || 0
     };
   }
@@ -5165,8 +5150,7 @@ function arrancarNavegador () {
       'TOCÁ cada tecla justo al pisarla — es el único botón',
       'A TIEMPO suena afinada; corrida, se ensucia',
       'NO MARTILLES: el botón se queda sordo un instante',
-      modoFacil ? 'SI CAÉS a la red, tocá para volver arriba'
-        : 'SI CAÉS, se termina la corrida'
+      'SI CAÉS, se termina la corrida'
     ];
     const alR = 24 + REGLAS.length * 16 + 8;
     // la zanahoria concreta: que le falta a tu mejor cancion para el proximo
@@ -5229,7 +5213,7 @@ function arrancarNavegador () {
       // un record sin rango es de antes de que existieran los rangos: igual
       // tiene notas limpias, y esconderlas seria decirle 'Sin tocar' al que ya
       // toco
-      cx.fillText(m.rango ? `☆ ${m.rango} ${m.sr}` : m.hay ? m.txt : 'Sin tocar', tx, ty + 46);
+      cx.fillText(m.rango ? `☆ ${m.rango}` : m.hay ? m.txt : 'Sin tocar', tx, ty + 46);
       if (m.rango) {
         cx.fillStyle = 'rgba(232,230,224,0.38)'; cx.font = '10.5px system-ui';
         cx.fillText(m.txt, tx, ty + 60);
@@ -5703,23 +5687,16 @@ function arrancarNavegador () {
     const anB = Math.min(330, w * 0.84);
     const xB = w / 2 - anB / 2;
 
-    // cuatro bloques en un monitor; en un telefono apaisado no entran, y el que
-    // sobra es el de las teclas: ahi no hay teclado que valga.
-    const filas = chico ? [0.22, 0.47, 0.72] : [0.20, 0.41, 0.62, 0.82];
-    let y = h * filas[0];
-    rotulo('DIFICULTAD', xB, y, 'left');
-    btn(modoFacil ? 'RED DE SEGURIDAD — PUESTA' : 'RED DE SEGURIDAD — SIN RED',
-      w / 2, y + 30, () => { modoFacil = !modoFacil; guardarFacil(); },
-      { activo: modoFacil, ancho: anB, alto: 36, fuente: 'bold 13px system-ui' });
-    ayuda(modoFacil ? 'Caés a la red y volvés arriba: se pierden notas, no la corrida.'
-      : 'Caer termina la corrida, salvo donde la canción manda rodar.', w / 2, y + 62);
-    ayuda('La red sirve para aprender la canción. Después estorba.  ·  Tecla F',
-      w / 2, y + 79, C.tenue, 11);
+    // tres bloques en un monitor; en un telefono apaisado no entra el ultimo,
+    // el de las teclas: ahi no hay teclado que valga.
+    // Aca vivia DIFICULTAD, con el interruptor de la red de seguridad. Se fue
+    // con el modo: la dificultad no es una opcion, es la promesa del juego.
+    const filas = chico ? [0.30, 0.60] : [0.26, 0.50, 0.74];
 
     // En un telefono el sonido sale tarde y el juego se siente roto sin que sea
     // culpa tuya. Este boton es la diferencia entre "no me sale" y "no estaba
     // calibrado", y por eso es un boton y no una tecla: en el telefono no hay C.
-    y = h * filas[1];
+    let y = h * filas[0];
     rotulo('SONIDO', xB, y, 'left');
     btn(desfase ? `CALIBRAR EL SONIDO — ${Math.round(desfase * 1000)} ms` : 'CALIBRAR EL SONIDO',
       w / 2, y + 30, () => calibrar(),
@@ -5729,7 +5706,7 @@ function arrancarNavegador () {
     // La unica opcion que no se puede decidir desde afuera: cuanto se ve depende
     // del tamaño REAL de la pantalla que tenes en la mano, y eso no viaja en
     // ningun dato que el navegador me cuente.
-    y = h * filas[2];
+    y = h * filas[1];
     rotulo('IMAGEN', xB, y, 'left');
     const anZ = (anB - 16) / 3;
     ZOOM_NOM.forEach((nom, i) => {
@@ -5744,7 +5721,7 @@ function arrancarNavegador () {
       w / 2, y + 62);
 
     if (!chico) {
-      y = h * filas[3];
+      y = h * filas[2];
       rotulo('EN EL JUEGO', xB, y, 'left');
       ayuda('ESC pausa  ·  ◀ ▶ saltan de sección  ·  M vuelve al menú',
         w / 2, y + 20, C.tenue);
@@ -5831,9 +5808,9 @@ function arrancarNavegador () {
       // congelado en el punto de la caida): dice la CAUSA, que es lo que falta
       esperando && avisoMuerte
         ? `muerte   x ${avisoMuerte.xm.toFixed(2)}  ${avisoMuerte.txt || '?'}` +
-          `  ·  ${avisoMuerte.pct}%  ${modoFacil ? 'facil' : 'sin red'}`
+          `  ·  ${avisoMuerte.pct}%`
         : `esfera   x ${s.x.toFixed(2)}  y ${s.y.toFixed(2)}  vy ${s.vy.toFixed(2)}` +
-          `  racha ${s.racha}  ${modoFacil ? 'facil' : 'sin red'}`,
+          `  racha ${s.racha}`,
       'bug: '
     ].join('\n');
   };
@@ -6450,10 +6427,10 @@ function arrancarNavegador () {
     // se ve una linea que aguanta y abajo no hay nada. Asi que la red se dibuja
     // exactamente donde EXISTE --los tramos que la partitura manda rodar-- y el
     // resto se ve como lo que es: un abismo, con los mismos dientes y el mismo
-    // degradado que ya significaban muerte en los huecos. El modo no se dice en
-    // ninguna esquina; se ve en el piso, que es donde importa.
+    // degradado que ya significaban muerte en los huecos. No se dice en ninguna
+    // esquina; se ve en el piso, que es donde importa.
     const V0 = s.x - 3, V1 = s.x + 7;
-    let conRed = sinRed ? TRAMOS_RODAR.map(t => [t.x0, t.x1]) : [[-2, LARGO + 6]];
+    let conRed = TRAMOS_RODAR.map(t => [t.x0, t.x1]);
     for (const g of HUECOS) {
       const resto = [];
       for (const [a, b] of conRed) {
@@ -6463,16 +6440,23 @@ function arrancarNavegador () {
       }
       conRed = resto;
     }
-    conRed = conRed.map(([a, b]) => [Math.max(a, V0), Math.min(b, V1)])
-      .filter(([a, b]) => b > a).sort((p, q) => p[0] - q[0]);
-    // el vacio es el complemento, calculado dentro de la ventana visible
+    conRed.sort((p, q) => p[0] - q[0]);
+    // EL VACIO SE MIDE EN EL MUNDO, NO EN LA PANTALLA. El complemento se
+    // calculaba dentro de la ventana visible, asi que el LARGO de un abismo
+    // --lo unico que decide si lleva dientes-- dependia de donde estaba la
+    // camara: acercarse a un respiro partia el kilometro de vacio en un pedazo
+    // de cinco tiempos, y el zigzag amarillo aparecia de la nada por unos
+    // segundos, latiendo, justo donde no habia ningun peligro nuevo que avisar.
+    // Se recorta DESPUES, al dibujar, con el largo de verdad ya decidido.
     const vacios = [];
-    let corre = V0;
+    let corre = -2;
     for (const [a, b] of conRed) {
       if (a > corre) vacios.push([corre, a]);
       corre = Math.max(corre, b);
     }
-    if (corre < V1) vacios.push([corre, V1]);
+    if (corre < LARGO + 6) vacios.push([corre, LARGO + 6]);
+    conRed = conRed.map(([a, b]) => [Math.max(a, V0), Math.min(b, V1)])
+      .filter(([a, b]) => b > a);
     // EL TERRENO DE ALLA ABAJO, Y A SU VELOCIDAD. Antes los planos se movian
     // pegados a la camara: cambiaban de tamaño y de color pero viajaban
     // juntos, y tres dibujos que viajan juntos son UN dibujo -- el valle
@@ -7048,10 +7032,14 @@ function arrancarNavegador () {
     // espacian y se apagan un poco: lo que tiene que gritar es el BORDE --donde
     // la red se termina-- no el kilometro de vacio que viene despues.
     for (const [a, b] of vacios) {
-      const a0 = px(a), a1 = px(b), yy = py(0);
+      if (b < V0 || a > V1) continue;
+      // el largo es del abismo ENTERO; lo que se recorta es solo el dibujo
+      const largo = b - a > 6;
+      const va = Math.max(a, V0), vb = Math.min(b, V1);
+      const a0 = px(va), a1 = px(vb), yy = py(0);
       if (a1 - a0 < 2) continue;
       const franja = h - yy;
-      const hondo = Math.min(b - a > 6 ? 72 : 46, franja * (b - a > 6 ? 0.34 : 0.24));
+      const hondo = Math.min(largo ? 72 : 46, franja * (largo ? 0.34 : 0.24));
       const gr = cx.createLinearGradient(0, yy, 0, yy + hondo);
       gr.addColorStop(0, 'rgba(0,0,0,0.72)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
       cx.fillStyle = gr; cx.fillRect(a0, yy, a1 - a0, hondo);
@@ -7060,15 +7048,16 @@ function arrancarNavegador () {
       // agua, o como una textura. Lo que dice "aca no hay nada" es la ausencia:
       // oscuridad que se hunde, y nada mas. Los dientes quedan para el hueco
       // corto, donde son un aviso puntual dentro de una red que sigue.
-      const largo = b - a > 6;
       if (!largo) {
         cx.strokeStyle = `rgba(${C.esferaRGB},0.8)`; cx.lineWidth = 2;
         cx.beginPath();
-        const dientes = Math.max(3, Math.round((a1 - a0) / 9));
-        for (let i = 0; i <= dientes; i++) {
-          const xx = a0 + (a1 - a0) * i / dientes;
-          cx.lineTo(xx, yy + (i % 2 ? 7 : 1));
-        }
+        // ...y los dientes van clavados AL ABISMO, no a la pantalla: contarlos
+        // sobre el ancho en pixeles los rehacia cada cuadro y el zigzag
+        // caminaba solo, como si latiera. Mismo paso de siempre (9 px), pero
+        // medido desde el borde del hueco, que no se mueve.
+        const paso = Math.min(9 / esc, (b - a) / 3);
+        for (let i = Math.ceil((va - a) / paso), n = Math.floor((vb - a) / paso); i <= n; i++)
+          cx.lineTo(px(a + i * paso), yy + (i % 2 ? 7 : 1));
         cx.stroke();
       }
       // el borde: donde se acaba lo que te sostiene. Ese si, siempre fuerte.

@@ -692,10 +692,11 @@ function correr (id) {
       rz.meta && rz.tocadas.size >= TOTAL_NOTAS - 3,
       `${rz.tocadas.size}/${TOTAL_NOTAS} sonadas tras caerse una vez`],
 
-    // --- SIN RED: el concierto del que ya se sabe la cancion -------------------
-    // La prueba que decide si el modo es HONESTO: si la mano perfecta no puede
-    // ganarlo, el modo no existe -- seria castigar al jugador por geometria
-    // que el propio mapa fabrica, no por sus errores.
+    // --- SIN RED: el juego, ya sin la otra mitad -------------------------------
+    // Dejo de ser un modo: se saco el interruptor de la red y esto es lo unico
+    // que se juega. La prueba que decide si es HONESTO: si la mano perfecta no
+    // puede ganarlo, el juego no existe -- seria castigar al jugador por
+    // geometria que el propio mapa fabrica, no por sus errores.
     ['SIN RED: la mano perfecta llega a la meta, y entera',
       rSinRed.meta && rSinRed.limpias.size === TOTAL_NOTAS,
       `${rSinRed.meta ? 'meta' : 'murio en ' + rSinRed.x.toFixed(1) + ' ' + rSinRed.causa} · ${rSinRed.limpias.size}/${TOTAL_NOTAS}`],
@@ -728,7 +729,10 @@ function correr (id) {
       TECHOS.every(t => mandaRodar(t.x0) && mandaRodar(t.x1)),
       `${TECHOS.length} techos · ${TRAMOS_RODAR.length} tramos de rodar`],
     // y el modo no puede filtrarse al camino normal
-    ['...y el modo normal sigue perdonando la caida', rz.meta && rp.meta, ''],
+    // La regla contraria --caer cuesta la nota, no el tramo-- ya no se juega en
+    // ningun lado, pero el motor la sigue sosteniendo y las pruebas la corren:
+    // es contra ella que se mide que SIN RED castigue de verdad.
+    ['...y con red puesta la caida se sigue perdonando', rz.meta && rp.meta, ''],
 
     // El RANGO es funcion pura y con escalera completa: sin esto el record no
     // puede recordar maestria (guarda el maximo por indice en RANGOS).
