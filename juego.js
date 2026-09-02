@@ -7205,8 +7205,16 @@ function arrancarNavegador () {
       const aqui = s.tecla === k.i;               // estas parado en esta: toca YA
       const alto = k.riel ? 7 : 5;
       const hh = teclaHundida.get(k.i) || 0;      // cuanto la hundio la esfera
-      // las teclas de bajo son VERDES: otro instrumento, otro color
-      const cBase = k.bajo ? C.impulso : C.tecla;
+      // las teclas de bajo son VERDES: otro instrumento, otro color -- pero
+      // las dos familias se tiñen con la tierra de abajo (el mismo `filo` que
+      // usa el terreno para su propio borde de luz), asi la plataforma se ve
+      // hecha del lugar donde flota y no pegada encima como una capa aparte.
+      // Sobre el mar o NEBULOSA no hay tierra que preguntar: se queda con el
+      // color de siempre.
+      const bio = TIERRA[terrenoEn(k.xm)];
+      const cBase = bio
+        ? `rgba(${mezcla(k.bajo ? C.impulsoRGB : C.teclaRGB, bio.filo.join(','), 0.6)},${k.bajo ? 1 : 0.55})`
+        : (k.bajo ? C.impulso : C.tecla);
       cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
       if (limpia || aqui) { cx.shadowColor = limpia ? C.esfera : cBase; cx.shadowBlur = 12; }
       if (k.riel) {
