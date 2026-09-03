@@ -996,89 +996,164 @@ const TIERRA = {
     // misma silueta corrida-- y `detalle` lo que se le apoya encima, que sale
     // mas caro y va solo en las tablas anchas.
     forma (cx, e) {
-      // un tronco caido: la panza gorda al medio y los cantos SERRUCHADOS --
-      // afilarlos hasta la nada quedaba lindo y mentia el ancho, que es la
-      // ventana de tiempo: una punta que se desvanece se lee mas corta
-      const a = 1.2 + e.azar(e.i * 1.7) * 1.8, b = 1 + e.azar(e.i * 5.1) * 2.2;
-      const c = e.g * 0.6;
+      // UN TRONCO, NO UNA TABLA. La primera version era una barra con la panza
+      // curva: correcta y sosa. A un tronco lo hacen tres cosas que ninguna
+      // tabla tiene -- el lomo NO es parejo (la corteza sube y baja), la panza
+      // se hincha donde estaba la rama, y un canto quedo partido y el otro
+      // serruchado. Las tres pasan abajo o en los bordes: el plano de apoyo
+      // sigue siendo una recta de punta a punta.
+      const r1 = e.azar(e.i * 1.7), r2 = e.azar(e.i * 5.1), r3 = e.azar(e.i * 9.7);
+      // un tronco es REDONDO: su panza baja bastante mas que el alto de la
+      // tecla. Con la panza pegada al alto salia una tablita, y a 1x --que es
+      // como se juega, con la tecla midiendo cinco pixeles-- lo unico que se
+      // lee de un tronco es justamente ese bulto.
+      const c = e.g * 0.72, hinch = e.an * (0.28 + 0.35 * r3);
+      const panza = e.g + 3.4 + 2.6 * r2;
       cx.beginPath();
       cx.moveTo(e.ax, e.ay);
       cx.lineTo(e.ax + e.an, e.ay);
-      cx.lineTo(e.ax + e.an, e.ay + c);
-      cx.quadraticCurveTo(e.ax + e.an * 0.72, e.ay + e.g + a, e.ax + e.an * 0.44, e.ay + e.g + b);
-      cx.quadraticCurveTo(e.ax + e.an * 0.16, e.ay + e.g + a * 0.5, e.ax, e.ay + c);
+      // el canto derecho: la sierra lo dejo en escuadra, con su rebaba
+      cx.lineTo(e.ax + e.an, e.ay + c + 1);
+      cx.lineTo(e.ax + e.an - 2, e.ay + c + 2.4);
+      // la panza: se hincha en el nudo y afina hacia el otro lado
+      cx.quadraticCurveTo(e.ax + hinch + e.an * 0.24, e.ay + panza + 1.2 * r1,
+        e.ax + hinch, e.ay + panza);
+      cx.quadraticCurveTo(e.ax + e.an * 0.1, e.ay + panza - 1.4 + r1,
+        e.ax + 1.5, e.ay + c + 0.5);
+      // el canto izquierdo: este se partio, y se ve la astilla
+      cx.lineTo(e.ax - 2, e.ay + c * 0.5);
+      cx.lineTo(e.ax + 1, e.ay + c * 0.25);
       cx.closePath();
     },
-    // CADA TRONCO TIENE LO SUYO. La tierra no presta UNA pieza sino un
-    // VOCABULARIO --veta, nudo, musgo, hongos, gajo, hojas-- y cada tecla saca
-    // el suyo de su indice: la misma cuenta da siempre lo mismo, asi que un
-    // tronco es ESE tronco cuadro a cuadro, y dos vecinos no se parecen.
-    // Todo se junta por COLOR en tres trazos --lo oscuro, lo claro, lo que se
-    // cuelga-- porque diez adornos con diez fill() cuestan diez veces mas que
-    // los mismos diez adornos en tres.
+    // EL VOCABULARIO DEL BOSQUE. La tierra no presta UNA pieza sino un
+    // repertorio --anillos, corteza, musgo, hongos, gajo, luciernagas-- y cada
+    // tecla saca el suyo de su indice: la misma cuenta da siempre lo mismo,
+    // asi que un tronco es ESE tronco cuadro a cuadro, y dos vecinos no se
+    // parecen. Todo se junta por COLOR en cuatro trazos, porque diez adornos
+    // con diez fill() cuestan diez veces mas que los mismos diez en cuatro.
+    // EL RIEL TAMBIEN ES DEL LUGAR. Es la pieza mas larga que hay en pantalla
+    // --dos, tres compases de ancho-- y era la unica que seguia siendo la
+    // barra rayada de fabrica en todos lados: justo la que mas se ve.
+    riel (cx, e) {
+      // en el bosque el riel es una RAMA: la corteza le corre por el lomo y le
+      // brotan hojas a lo largo
+      e.linea(e.alto * 0.5);
+      cx.strokeStyle = 'rgba(0,0,0,0.25)'; cx.lineWidth = 1.4; cx.stroke();
+      cx.fillStyle = `rgba(${e.filo},0.65)`;
+      cx.beginPath();
+      for (let j = 0; j < e.n; j++) {
+        const f = (j + 0.5) / e.n, r = e.azar(e.i * 3.1 + j * 13), lado = j % 2 ? 1 : -1;
+        const P = e.pt(f), L = 2 + 1.4 * r;
+        cx.moveTo(P.X + L * 2, P.Y + lado * 3);
+        cx.ellipse(P.X + L, P.Y + lado * 3, L, L * 0.55, lado * 0.5, 0, Math.PI * 2);
+      }
+      cx.fill();
+    },
     detalle (cx, e) {
       const r1 = e.azar(e.i * 1.7), r2 = e.azar(e.i * 5.1), r3 = e.azar(e.i * 9.7);
       const r4 = e.azar(e.i * 13.3), r5 = e.azar(e.i * 21.1);
-      const a = 1.2 + r1 * 1.8, b = 1 + r2 * 2.2, ancho = e.an >= 26;
-      // 1. LA PANZA EN SOMBRA: la luz cae de arriba, como en todo el paisaje
-      cx.fillStyle = 'rgba(0,0,0,0.2)';
+      const ancho = e.an >= 26, hinch = e.an * (0.28 + 0.35 * r3);
+      const c = e.g * 0.72, panza = e.g + 3.4 + 2.6 * r2;
+      // 1. LA PANZA EN SOMBRA. La luz cae de arriba en todo el paisaje; sin
+      //    esto el tronco es una silueta recortada y no un cuerpo redondo.
+      cx.fillStyle = 'rgba(0,0,0,0.24)';
       cx.beginPath();
-      cx.moveTo(e.ax + 1, e.ay + e.g * 0.5);
-      cx.lineTo(e.ax + e.an - 1, e.ay + e.g * 0.5);
-      cx.quadraticCurveTo(e.ax + e.an * 0.72, e.ay + e.g + a, e.ax + e.an * 0.44, e.ay + e.g + b);
-      cx.quadraticCurveTo(e.ax + e.an * 0.16, e.ay + e.g + a * 0.5, e.ax + 1, e.ay + e.g * 0.5);
+      cx.moveTo(e.ax + 1, e.ay + e.g * 0.55);
+      cx.lineTo(e.ax + e.an - 1, e.ay + e.g * 0.55);
+      cx.lineTo(e.ax + e.an - 2, e.ay + c + 2.4);
+      cx.quadraticCurveTo(e.ax + hinch + e.an * 0.24, e.ay + panza + 1.2 * r1,
+        e.ax + hinch, e.ay + panza);
+      cx.quadraticCurveTo(e.ax + e.an * 0.1, e.ay + panza - 1.4 + r1,
+        e.ax + 1.5, e.ay + e.g * 0.55);
       cx.closePath(); cx.fill();
-      // 2. LO OSCURO: la veta, el nudo y las grietas de la corteza
-      cx.fillStyle = 'rgba(0,0,0,0.28)';
+      // 2. LA CORTEZA. Tiras verticales cortas, desparejas y agrupadas: la
+      //    veta de una tabla es horizontal, la corteza de un tronco NO -- ese
+      //    era el motivo de fondo de que pareciera madera aserrada.
+      cx.fillStyle = 'rgba(0,0,0,0.3)';
       cx.beginPath();
-      cx.rect(e.ax + e.an * 0.12, e.ay + e.g * 0.45, e.an * 0.44, 1);
-      cx.rect(e.ax + e.an * 0.58, e.ay + e.g * 0.72, e.an * 0.26, 1);
-      // ojo con los redondos: `ellipse` tira una recta desde donde quedo el
-      // trazo, asi que cada uno arranca con su moveTo o se sueldan en manchon
-      const nux = e.ax + e.an * (0.2 + 0.2 * r3), nuy = e.ay + e.g * 0.62;
-      cx.moveTo(nux + 2, nuy);
-      cx.ellipse(nux, nuy, 2, 1.5, 0, 0, Math.PI * 2);
-      if (ancho) {
-        cx.rect(e.ax + e.an * (0.3 + 0.3 * r4), e.ay + e.g * 0.28, 1, e.g * 0.4);
-        cx.rect(e.ax + e.an * (0.68 + 0.2 * r5), e.ay + e.g * 0.34, 1, e.g * 0.3);
+      const nt = ancho ? 7 : 4;
+      for (let j = 0; j < nt; j++) {
+        const rj = e.azar(e.i * 2.7 + j * 11);
+        const tx = e.ax + e.an * (0.06 + 0.88 * ((j + rj) / nt));
+        cx.rect(tx, e.ay + e.g * (0.22 + 0.3 * rj), 1, e.g * (0.3 + 0.4 * rj));
       }
       cx.fill();
-      // 3. LO VIVO: el musgo del lomo y los hongos que salen por abajo, que es
-      // donde salen de verdad en un tronco caido
-      cx.fillStyle = `rgba(${e.filo},0.45)`;
+      // 3. EL CANTO ASERRADO. Los anillos son la firma de un tronco cortado, y
+      //    lo que de lejos dice "esto se corto" en vez de "esto se dibujo".
+      cx.fillStyle = `rgba(${e.filo},0.35)`;
       cx.beginPath();
-      const mx = e.ax + e.an * (0.08 + 0.5 * r4);
-      for (let j = 0; j < 3; j++) {
-        const mjx = mx + j * 3, mjr = 1.6 - 0.3 * j;
-        cx.moveTo(mjx - mjr, e.ay + 2.2);
-        cx.ellipse(mjx, e.ay + 2.2, mjr, 1.5, 0, Math.PI, 0);
+      const fx = e.ax + e.an - 1.4, fy = e.ay + c * 0.55;
+      cx.moveTo(fx + 1.4, fy);
+      cx.ellipse(fx, fy, 1.4, c * 0.6, 0, 0, Math.PI * 2);
+      cx.fill();
+      cx.strokeStyle = `rgba(${e.filo},0.5)`; cx.lineWidth = 0.8;
+      cx.beginPath();
+      cx.moveTo(fx + 0.7, fy);
+      cx.ellipse(fx, fy, 0.7, c * 0.3, 0, 0, Math.PI * 2);
+      cx.stroke();
+      // 4. LO VIVO: el musgo en el lomo --en parche, nunca parejo-- y los
+      //    hongos, que en un tronco caido salen por ABAJO y en grupo.
+      cx.fillStyle = `rgba(${e.filo},0.5)`;
+      cx.beginPath();
+      // el musgo crece en MATA: tres bollos pegados que sobresalen del lomo,
+      // no una franja pareja --que es lo que hacia leer "reflejo" y no "musgo"
+      const mx = e.ax + e.an * (0.08 + 0.35 * r4), mw = e.an * (0.16 + 0.1 * r5);
+      const mb = ancho ? 4 : 3;
+      for (let j = 0; j < mb; j++) {
+        const rj = e.azar(e.i * 3.9 + j * 7);
+        const bx = mx + mw * (j / mb), br = mw / mb * (0.75 + 0.5 * rj);
+        cx.moveTo(bx - br, e.ay + 1.5);
+        cx.ellipse(bx, e.ay + 1.5, br, 1.6 + 1.4 * rj, 0, Math.PI, 0);
       }
-      if (ancho && r5 > 0.4) {
-        // los hongos salen por ABAJO, que es donde salen en un tronco caido
-        const hx = e.ax + e.an * (0.25 + 0.45 * r2), hy = e.ay + e.g + 1;
-        cx.moveTo(hx - 2.6, hy + 2);
-        cx.ellipse(hx, hy + 2, 2.6, 1.8, 0, 0, Math.PI);
-        cx.rect(hx - 0.6, hy, 1.2, 2.2);
-        cx.moveTo(hx + 4 - 1.8, hy + 1.6);
-        cx.ellipse(hx + 4, hy + 1.6, 1.8, 1.2, 0, 0, Math.PI);
-        cx.rect(hx + 3.5, hy, 1, 1.8);
+      if (ancho && r5 > 0.35) {
+        const hx = e.ax + e.an * (0.22 + 0.4 * r2), hy = e.ay + panza - 1;
+        for (let j = 0; j < 3; j++) {
+          const hjx = hx + j * 4, rr = 3 - 0.7 * j, alt = 2.8 - 0.6 * j;
+          cx.rect(hjx - 0.5, hy, 1, alt);
+          cx.moveTo(hjx - rr, hy + alt);
+          cx.ellipse(hjx, hy + alt, rr, 1.7, 0, 0, Math.PI);
+        }
       }
       cx.fill();
-      // 4. LO QUE CUELGA: el gajo con sus hojas, y a veces una enredadera
-      const X = e.ax + e.an * (0.6 + 0.26 * e.azar(e.i * 3.3)), Y = e.ay + e.g + 1;
-      cx.strokeStyle = `rgba(${e.filo},0.75)`; cx.lineWidth = 1.4;
+      // 5. EL GAJO CON HOJAS. Antes eran tres rayas que leian como una antena:
+      //    las hojas ahora tienen cuerpo, que es lo que las hace hojas.
+      const gx = e.ax + e.an * (0.6 + 0.24 * e.azar(e.i * 3.3));
+      const gy = e.ay + e.g + 1.5, vai = Math.sin(e.t / 1100 + e.i) * 1.6;
+      cx.strokeStyle = `rgba(${e.filo},0.8)`; cx.lineWidth = 1.3;
       cx.beginPath();
-      cx.moveTo(X, Y); cx.lineTo(X - 0.8, Y + 7);
-      cx.moveTo(X - 0.2, Y + 2.4); cx.lineTo(X + 4.2, Y + 1.4);
-      cx.moveTo(X - 0.6, Y + 4.6); cx.lineTo(X - 4.4, Y + 4);
-      if (ancho && r3 > 0.35) {
-        // la enredadera: se descuelga del otro canto y se enrosca al final
-        const vx = e.ax + e.an * (0.1 + 0.12 * r1);
-        cx.moveTo(vx, Y);
-        cx.quadraticCurveTo(vx - 3, Y + 5, vx + 1.5, Y + 9);
-        cx.moveTo(vx + 1.5, Y + 9); cx.lineTo(vx + 4, Y + 7.5);
+      cx.moveTo(gx, gy);
+      cx.quadraticCurveTo(gx + 2, gy + 5, gx - 0.5 + vai, gy + 9.5);
+      if (ancho && r3 > 0.35) {          // la enredadera del otro canto
+        const vx = e.ax + e.an * (0.06 + 0.1 * r1);
+        cx.moveTo(vx, gy - 1);
+        cx.quadraticCurveTo(vx - 4, gy + 5, vx + 2 + vai * 0.6, gy + 11);
+        cx.lineTo(vx + 5.5 + vai * 0.6, gy + 9);
       }
       cx.stroke();
+      // las hojas: cuerpo de verdad, y colgando del gajo. Tres rayas leian
+      // como una antena; una hoja se reconoce por su forma, no por su tamaño
+      cx.fillStyle = `rgba(${e.filo},0.75)`;
+      cx.beginPath();
+      cx.moveTo(gx + 6, gy + 2);
+      cx.ellipse(gx + 3.4, gy + 2, 2.6, 1.4, -0.5, 0, Math.PI * 2);
+      cx.moveTo(gx - 0.6, gy + 5.6);
+      cx.ellipse(gx - 3, gy + 5.4, 2.4, 1.3, 0.45, 0, Math.PI * 2);
+      cx.moveTo(gx + 4.4, gy + 7.4);
+      cx.ellipse(gx + 2.2, gy + 7.4, 2.2, 1.2, -0.35, 0, Math.PI * 2);
+      cx.fill();
+      if (!ancho) return;
+      // 6. LAS LUCIERNAGAS. Dos puntos que respiran y se corren despacio: es
+      //    de noche, hay aurora en el cielo, y el bosque tiene su propia luz.
+      const lat = 0.3 + 0.5 * (0.5 + 0.5 * Math.sin(e.t / 420 + e.i));
+      cx.fillStyle = `rgba(215,255,170,${lat})`;
+      cx.beginPath();
+      for (let j = 0; j < 2; j++) {
+        const rj = e.azar(e.i * 6.3 + j * 29);
+        const bx = e.ax + e.an * (0.15 + 0.7 * rj) + Math.sin(e.t / 900 + rj * 9) * 5;
+        const by = e.ay - 4 - 7 * rj + Math.cos(e.t / 700 + rj * 6) * 4;
+        cx.rect(bx, by, 2, 2);
+      }
+      cx.fill();
     },
     dibujo (cx, e) {
       const paso = 0.15 * e.P.paso;
@@ -1143,6 +1218,20 @@ const TIERRA = {
       cx.lineTo(e.ax + e.an * (0.14 + d), m);
       cx.lineTo(e.ax, m);
       cx.closePath();
+    },
+    riel (cx, e) {
+      // en la ciudad es un CABLE tendido: su alma brillante por el lomo y las
+      // grampas que lo sujetan cada tanto
+      e.linea(1);
+      cx.strokeStyle = `rgba(${e.filo},0.45)`; cx.lineWidth = 1; cx.stroke();
+      cx.strokeStyle = `rgba(${e.filo},0.6)`; cx.lineWidth = 1.2;
+      cx.beginPath();
+      for (let j = 0; j < e.n; j++) {
+        const P = e.pt((j + 0.5) / e.n);
+        cx.moveTo(P.X - 2.5, P.Y + e.alto); cx.lineTo(P.X + 2.5, P.Y + e.alto);
+        cx.moveTo(P.X, P.Y + e.alto); cx.lineTo(P.X, P.Y + e.alto + 3.5);
+      }
+      cx.stroke();
     },
     detalle (cx, e) {
       const r1 = e.azar(e.i * 6.1), r2 = e.azar(e.i * 5.7), r3 = e.azar(e.i * 11.3);
@@ -1246,6 +1335,24 @@ const TIERRA = {
       for (let j = n; j >= 0; j--)
         cx.lineTo(e.ax + e.an * (j / n), e.ay + e.g * (0.75 + 1.1 * e.azar(e.i * 3.1 + j * 7)));
       cx.closePath();
+    },
+    riel (cx, e) {
+      // en la montaña se le pego la NIEVE encima --una costra que corre entera
+      // por el lomo-- y de a tramos gotea un hielo
+      e.linea(0);
+      cx.strokeStyle = 'rgba(228,238,255,0.5)'; cx.lineWidth = 2; cx.stroke();
+      cx.fillStyle = 'rgba(228,238,255,0.5)';
+      cx.beginPath();
+      for (let j = 0; j < e.n; j++) {
+        const f = (j + 0.5) / e.n, r = e.azar(e.i * 5.3 + j * 11), P = e.pt(f);
+        cx.rect(P.X - 5 - 3 * r, P.Y - 1, 10 + 6 * r, 1.6);
+        if (r > 0.55) {
+          cx.moveTo(P.X - 1.6, P.Y + e.alto); cx.lineTo(P.X + 1.6, P.Y + e.alto);
+          cx.lineTo(P.X, P.Y + e.alto + 4 + 3 * r);
+          cx.closePath();
+        }
+      }
+      cx.fill();
     },
     detalle (cx, e) {
       const nf = Math.max(3, Math.min(6, Math.round(e.an / 14)));
@@ -1375,6 +1482,20 @@ const TIERRA = {
           e.ax + e.an * (j / n), m);
       cx.closePath();
     },
+    riel (cx, e) {
+      // en el desierto el riel junta ARENA: una cresta fina arriba, la misma
+      // que el viento apila en las dunas, y la va soltando por abajo
+      e.linea(-0.5);
+      cx.strokeStyle = `rgba(${e.filo},0.5)`; cx.lineWidth = 1.4; cx.stroke();
+      cx.fillStyle = `rgba(${e.filo},0.5)`;
+      cx.beginPath();
+      for (let j = 0; j < e.n; j++) {
+        const f = (j + 0.5) / e.n, r = e.azar(e.i * 4.7 + j * 19), P = e.pt(f);
+        cx.rect(P.X - 4 - 3 * r, P.Y - 0.5, 8 + 6 * r, 1.2);
+        cx.rect(P.X + 2 * r, P.Y + e.alto + ((e.t / 1500 + r) % 1) * 8, 1.4, 1.4);
+      }
+      cx.fill();
+    },
     detalle (cx, e) {
       const n = Math.max(2, Math.min(4, Math.round(e.an / 22)));
       const m = e.ay + e.g * 0.55, ancho = e.an >= 26;
@@ -1470,6 +1591,168 @@ const TIERRA = {
       cx.lineCap = 'butt';
     }
   },
+  // EL MAR Y NEBULOSA NO TIENEN SUELO -- Y TENIAN LAS TECLAS DE FABRICA. En
+  // los dos tramos el horizonte esta abierto a proposito: ahi no se dibuja
+  // terreno, y por eso `terrenoEn` no devuelve nada. Pero que no haya suelo no
+  // quiere decir que no haya LUGAR: sobre el agua la tecla es un madero que
+  // flota, y en el fantasma es un cristal. Sin esto quedaban dos secciones
+  // enteras --sesenta y cuatro tiempos-- con la barra pelada de siempre en
+  // medio de un juego donde todo lo demas pertenece a algun lado.
+  // Ninguna de las dos lleva `dibujo`: no hay TERRENOS que las nombre, asi que
+  // el que pinta el suelo no las va a buscar nunca.
+  mar: {
+    cuerpo: [30, 80, 130], filo: [150, 225, 255],
+    forma (cx, e) {
+      // un madero que flota: las puntas comidas por el agua y la linea de
+      // flotacion marcada, que es lo que dice "esto esta APOYADO en algo"
+      const r1 = e.azar(e.i * 3.7), r2 = e.azar(e.i * 8.9);
+      cx.beginPath();
+      cx.moveTo(e.ax, e.ay); cx.lineTo(e.ax + e.an, e.ay);
+      cx.quadraticCurveTo(e.ax + e.an + 2, e.ay + e.g * 0.6, e.ax + e.an - 1.5, e.ay + e.g + 1.5 * r1);
+      cx.quadraticCurveTo(e.ax + e.an * 0.6, e.ay + e.g + 2.5 + 2 * r2,
+        e.ax + e.an * 0.32, e.ay + e.g + 1 + 2 * r1);
+      cx.quadraticCurveTo(e.ax - 2, e.ay + e.g * 0.7, e.ax, e.ay);
+      cx.closePath();
+    },
+    riel (cx, e) {
+      // sobre el agua es una SOGA: mojada y brillante en el lomo, con sus
+      // nudos y la gota que cuelga de cada uno
+      e.linea(0.5);
+      cx.strokeStyle = `rgba(${e.filo},0.45)`; cx.lineWidth = 1.2; cx.stroke();
+      cx.fillStyle = `rgba(${e.filo},0.55)`;
+      cx.beginPath();
+      for (let j = 0; j < e.n; j++) {
+        const f = (j + 0.5) / e.n, r = e.azar(e.i * 6.1 + j * 23), P = e.pt(f);
+        cx.moveTo(P.X + 2.4, P.Y + e.alto * 0.5);
+        cx.ellipse(P.X, P.Y + e.alto * 0.5, 2.4, e.alto * 0.7, 0, 0, Math.PI * 2);
+        cx.rect(P.X - 0.6, P.Y + e.alto + ((e.t / 1000 + r) % 1) * 8, 1.3, 2);
+      }
+      cx.fill();
+    },
+    detalle (cx, e) {
+      const r1 = e.azar(e.i * 3.7), r2 = e.azar(e.i * 8.9), r3 = e.azar(e.i * 14.1);
+      const ancho = e.an >= 26;
+      // 1. la linea de flotacion y la veta mojada, que va mas oscura
+      cx.fillStyle = 'rgba(0,0,0,0.22)';
+      cx.beginPath();
+      cx.rect(e.ax + 1, e.ay + e.g * 0.62, e.an - 2, e.g * 0.5);
+      if (ancho) cx.rect(e.ax + e.an * 0.2, e.ay + e.g * 0.3, e.an * 0.5, 1);
+      cx.fill();
+      // 2. las sogas que lo atan --dos vueltas-- y los percebes pegados
+      cx.strokeStyle = `rgba(${e.filo},0.55)`; cx.lineWidth = 1.2;
+      cx.beginPath();
+      const sx = e.ax + e.an * (0.2 + 0.2 * r1);
+      cx.moveTo(sx - 1.5, e.ay - 0.5); cx.lineTo(sx + 1.5, e.ay + e.g + 1.5);
+      cx.moveTo(sx + 2, e.ay - 0.5); cx.lineTo(sx + 5, e.ay + e.g + 1.5);
+      if (ancho) {
+        const s2 = e.ax + e.an * (0.62 + 0.18 * r2);
+        cx.moveTo(s2 - 1.5, e.ay - 0.5); cx.lineTo(s2 + 1.5, e.ay + e.g + 1.5);
+      }
+      cx.stroke();
+      cx.fillStyle = `rgba(${e.filo},0.5)`;
+      cx.beginPath();
+      for (let j = 0; j < (ancho ? 3 : 2); j++) {
+        const rj = e.azar(e.i * 5.5 + j * 17);
+        const bx = e.ax + e.an * (0.35 + 0.55 * rj), by = e.ay + e.g * (0.75 + 0.4 * rj);
+        cx.moveTo(bx + 1.6, by);
+        cx.ellipse(bx, by, 1.6, 1.2, 0, 0, Math.PI * 2);
+      }
+      // 3. las gotas que chorrea: caen, se cortan y vuelven, como de un madero
+      //    que acaba de salir del agua
+      for (let j = 0; j < 2; j++) {
+        const rj = e.azar(e.i * 7.3 + j * 23);
+        cx.rect(e.ax + e.an * (0.25 + 0.5 * rj), e.ay + e.g + 2 + ((e.t / 900 + rj) % 1) * 9,
+          1.3, 2.2);
+      }
+      cx.fill();
+      if (!ancho) return;
+      // 4. el alga colgando de la punta, que es lo que lo hace del MAR y no
+      //    una tabla cualquiera mojada
+      cx.strokeStyle = `rgba(${e.filo},0.45)`; cx.lineWidth = 1.4;
+      cx.beginPath();
+      const ax2 = e.ax + e.an * (0.75 + 0.15 * r3), vai = Math.sin(e.t / 800 + e.i) * 2;
+      cx.moveTo(ax2, e.ay + e.g);
+      cx.quadraticCurveTo(ax2 + 3, e.ay + e.g + 5, ax2 - 1 + vai, e.ay + e.g + 10);
+      cx.stroke();
+    }
+  },
+  nebulosa: {
+    cuerpo: [60, 60, 120], filo: [175, 205, 255],
+    forma (cx, e) {
+      // un CRISTAL: el mismo material en el que se convierte la voz en esta
+      // seccion. Prisma alargado, cantos en bisel y una quilla abajo -- nada
+      // organico, que aca no hay tierra de la que salir.
+      const r1 = e.azar(e.i * 4.1), q = e.g * (1.1 + 0.7 * r1);
+      const b = Math.min(e.an * 0.18, 5);
+      cx.beginPath();
+      cx.moveTo(e.ax, e.ay); cx.lineTo(e.ax + e.an, e.ay);
+      cx.lineTo(e.ax + e.an - b * 0.4, e.ay + e.g * 0.55);
+      cx.lineTo(e.ax + e.an * 0.62, e.ay + e.g * 0.7);
+      cx.lineTo(e.ax + e.an * 0.5, e.ay + q);
+      cx.lineTo(e.ax + e.an * 0.34, e.ay + e.g * 0.7);
+      cx.lineTo(e.ax + b * 0.4, e.ay + e.g * 0.55);
+      cx.closePath();
+    },
+    riel (cx, e) {
+      // en el fantasma el riel es un HILO de luz con sus motas colgadas: la
+      // seccion entera flota, y esto tambien
+      // el hilo se enciende entero y le orbitan las motas: en el fantasma
+      // sostener es seguir un rastro de luz, no agarrarse de un fierro
+      const lat = 0.3 + 0.3 * (0.5 + 0.5 * Math.sin(e.t / 500 + e.i));
+      e.linea(0.5);
+      cx.strokeStyle = `rgba(190,235,255,${0.25 + lat * 0.35})`; cx.lineWidth = 1.4;
+      cx.stroke();
+      cx.fillStyle = `rgba(200,240,255,${0.45 + lat * 0.4})`;
+      cx.beginPath();
+      for (let j = 0; j < e.n; j++) {
+        const f = (j + 0.5) / e.n, r = e.azar(e.i * 8.7 + j * 29), P = e.pt(f);
+        const fa = e.t / 1400 + r * 6.3;
+        cx.rect(P.X + Math.cos(fa) * 5, P.Y + e.alto * 0.5 + Math.sin(fa * 1.2) * 6, 2.2, 2.2);
+      }
+      cx.fill();
+    },
+    detalle (cx, e) {
+      const r1 = e.azar(e.i * 4.1), r2 = e.azar(e.i * 9.3), ancho = e.an >= 26;
+      const q = e.g * (1.1 + 0.7 * r1);
+      // 1. la cara en sombra: un cristal sin dos caras es un rombo pintado
+      cx.fillStyle = 'rgba(0,0,0,0.22)';
+      cx.beginPath();
+      cx.moveTo(e.ax + e.an * 0.5, e.ay + e.g * 0.2);
+      cx.lineTo(e.ax + e.an * 0.62, e.ay + e.g * 0.7);
+      cx.lineTo(e.ax + e.an * 0.5, e.ay + q);
+      cx.closePath(); cx.fill();
+      // 2. las aristas: donde se quiebra la luz adentro
+      cx.strokeStyle = `rgba(${e.filo},0.5)`; cx.lineWidth = 1;
+      cx.beginPath();
+      cx.moveTo(e.ax + e.an * 0.34, e.ay + e.g * 0.7); cx.lineTo(e.ax + e.an * 0.5, e.ay + 1);
+      cx.lineTo(e.ax + e.an * 0.62, e.ay + e.g * 0.7);
+      cx.moveTo(e.ax + e.an * 0.5, e.ay + 1); cx.lineTo(e.ax + e.an * 0.5, e.ay + q);
+      if (ancho) {
+        cx.moveTo(e.ax + e.an * 0.16, e.ay + 1.5); cx.lineTo(e.ax + e.an * 0.22, e.ay + e.g * 0.6);
+        cx.moveTo(e.ax + e.an * 0.84, e.ay + 1.5); cx.lineTo(e.ax + e.an * 0.78, e.ay + e.g * 0.6);
+      }
+      cx.stroke();
+      // 3. LA MOTA QUE ORBITA. En NEBULOSA la cancion es el fantasma de si
+      //    misma: la tecla tampoco esta del todo quieta.
+      const lat = 0.3 + 0.35 * (0.5 + 0.5 * Math.sin(e.t / 500 + e.i * 1.7));
+      cx.fillStyle = `rgba(190,235,255,${lat})`;
+      cx.beginPath();
+      for (let j = 0; j < (ancho ? 3 : 2); j++) {
+        const rj = e.azar(e.i * 6.7 + j * 31), fa = e.t / 1500 + rj * 6.3;
+        cx.rect(e.ax + e.an * (0.15 + 0.7 * rj) + Math.cos(fa) * 5,
+          e.ay + e.g * 0.4 + Math.sin(fa * 1.3) * 6, 1.6, 1.6);
+      }
+      cx.fill();
+      if (!ancho) return;
+      // 4. el eco: la silueta repetida un pelo mas abajo, como la nota que
+      //    vuelve. Es la seccion del eco, y se ve.
+      cx.strokeStyle = `rgba(150,130,255,${0.16 + 0.1 * r2})`; cx.lineWidth = 1;
+      cx.beginPath();
+      cx.moveTo(e.ax + 2, e.ay + 3); cx.lineTo(e.ax + e.an - 2, e.ay + 3);
+      cx.lineTo(e.ax + e.an * 0.5, e.ay + q + 2);
+      cx.closePath(); cx.stroke();
+    }
+  },
   tierra: {
     cuerpo: [58, 48, 36], filo: [190, 160, 115],
     forma (cx, e) {
@@ -1480,6 +1763,16 @@ const TIERRA = {
         e.ax + e.an * 0.5, e.ay + e.g * (1.3 + 0.6 * e.azar(e.i * 4.4)));
       cx.quadraticCurveTo(e.ax - e.an * 0.03, e.ay + e.g * 1.4, e.ax, e.ay);
       cx.closePath();
+    },
+    riel (cx, e) {
+      // en tierra pelada el riel junta polvo: una capa fina arriba y nada mas
+      cx.fillStyle = `rgba(${e.filo},0.35)`;
+      cx.beginPath();
+      for (let j = 0; j < e.n; j++) {
+        const P = e.pt((j + 0.5) / e.n), r = e.azar(e.i * 3.3 + j * 7);
+        cx.rect(P.X - 4 - 2 * r, P.Y - 0.5, 8 + 4 * r, 1.2);
+      }
+      cx.fill();
     },
     detalle (cx, e) {
       // los mismos lomos gastados que las piedras de alla abajo
@@ -7474,10 +7767,32 @@ function arrancarNavegador () {
     // atras-- porque no es escenografia: es el gesto de arranque, y una vez
     // que la cancion empezo no tiene nada mas que decir.
     if (PISO && (entrada || ahoraP - canionEco < 900)) dibujarCanion();
-    // la plataforma de salida: se empieza arriba, a la altura de la primera nota
+    // LA BOLSA DE LA PIEZA, una sola para todo el cuadro. Se reescribe pieza
+    // por pieza en vez de crearse: un objeto por tecla y por cuadro es basura
+    // que alguien tiene que juntar despues, y ese alguien junta justo mientras
+    // se esta tocando. La usan la salida, cada tecla y cada riel.
+    const pieza = { ax: 0, ay: 0, an: 0, g: 0, i: 0, azar, filo: '', t: 0,
+      alto: 0, n: 0, pt: null, linea: null };
+    // la plataforma de salida: se empieza arriba, a la altura de la primera
+    // nota. Y es del lugar donde empieza el viaje --el muelle de troncos del
+    // bosque-- porque es lo PRIMERO que se ve del juego: una tabla blanca ahi
+    // decia "esto todavia no esta terminado" antes de que sonara una nota.
     if (PISO && PISO.x1 > s.x - 3 && PISO.x0 < s.x + 7) {
-      cx.fillStyle = 'rgba(232,230,224,0.22)';
-      cx.fillRect(px(PISO.x0), py(PISO.y), (PISO.x1 - PISO.x0) * esc, 5);
+      const bioP = TIERRA[terrenoEn(PISO.xm)] ||
+        (enAgua(PISO.xm) ? TIERRA.mar : TIERRA.nebulosa);
+      pieza.ax = px(PISO.x0); pieza.ay = py(PISO.y);
+      pieza.an = (PISO.x1 - PISO.x0) * esc; pieza.g = 5; pieza.i = 0;
+      pieza.filo = bioP.filoTxt || (bioP.filoTxt = bioP.filo.join(','));
+      pieza.t = ahoraP;
+      cx.fillStyle = 'rgba(0,0,0,0.35)';
+      pieza.ay += 2; bioP.forma(cx, pieza); cx.fill(); pieza.ay -= 2;
+      // del color del lugar, no del gris de fabrica: es el primer objeto que
+      // se ve del juego y tiene que decir de donde sale el viaje
+      cx.fillStyle = `rgba(${pieza.filo},0.3)`;
+      bioP.forma(cx, pieza); cx.fill();
+      cx.fillStyle = 'rgba(255,255,255,0.18)';
+      cx.fillRect(pieza.ax + 1.5, pieza.ay + 0.5, Math.max(1, pieza.an - 3), 1.5);
+      bioP.detalle(cx, pieza);
       // los parches del conteo: lomos que respiran con el pulso hasta que la
       // esfera los pisa -- pisados quedan encendidos en tu color
       for (const tb of TAMBORES) if (tb.piso) dibujarParche(tb);
@@ -7508,7 +7823,6 @@ function arrancarNavegador () {
     cx.stroke();
 
     // las teclas: la partitura
-    const pieza = { ax: 0, ay: 0, an: 0, g: 0, i: 0, azar, filo: '', t: 0 };
     for (const k of NOTAS) {
       if (k.silencio || k.x1 < s.x - 3 || k.x0 > s.x + 7) continue;
       const sono = s.tocadas.has(k.i);
@@ -7520,9 +7834,10 @@ function arrancarNavegador () {
       // las dos familias se tiñen con la tierra de abajo (el mismo `filo` que
       // usa el terreno para su propio borde de luz), asi la plataforma se ve
       // hecha del lugar donde flota y no pegada encima como una capa aparte.
-      // Sobre el mar o NEBULOSA no hay tierra que preguntar: se queda con el
-      // color de siempre.
-      const bio = TIERRA[terrenoEn(k.xm)];
+      // Y NINGUN TRAMO SE QUEDA AFUERA: donde no hay terreno que preguntar
+      // --el mar y NEBULOSA, que tienen el horizonte abierto a proposito-- el
+      // lugar igual existe, y presta el madero o el cristal.
+      const bio = TIERRA[terrenoEn(k.xm)] || (enAgua(k.xm) ? TIERRA.mar : TIERRA.nebulosa);
       const cBase = bio
         ? `rgba(${mezcla(k.bajo ? C.impulsoRGB : C.teclaRGB, bio.filo.join(','), 0.6)},${k.bajo ? 1 : 0.55})`
         : (k.bajo ? C.impulso : C.tecla);
@@ -7619,6 +7934,35 @@ function arrancarNavegador () {
           cx.moveTo(xx, py(k.y + hh) + alto - 1); cx.lineTo(xx + 4, py(k.y + hh) + 1);
         }
         cx.stroke();
+        // ...y encima lo que el LUGAR le cuelga: hojas si es una rama, grampas
+        // si es un cable, nieve y hielo en la cornisa, arena, nudos de soga o
+        // motas de luz. Una marca cada 40 px --no una por pixel-- y todas en
+        // un solo trazo: el riel es lo mas ancho que hay en pantalla y es
+        // justo donde un adorno por cuadro se paga caro.
+        if (bio && bio.riel) {
+          const halo = cx.shadowBlur; cx.shadowBlur = 0;
+          pieza.i = k.i;
+          pieza.filo = bio.filoTxt || (bio.filoTxt = bio.filo.join(','));
+          pieza.t = ahoraP;
+          pieza.alto = alto;
+          pieza.n = Math.max(2, Math.min(8, Math.round((a1 - a0) / 40)));
+          pieza.pt = f => {
+            const xx = k.x0 + (k.x1 - k.x0) * f;
+            return { X: px(xx), Y: py(k.y + hh + subidaRiel(k, xx)) };
+          };
+          // ...y el trazo entero, para el que quiera pintarle el lomo: la
+          // rampa se curva al final y una recta se despegaria de la tabla
+          pieza.linea = dy => {
+            cx.beginPath();
+            for (let j = 0; j <= 10; j++) {
+              const xx = k.x0 + (k.x1 - k.x0) * (j / 10);
+              const Y = py(k.y + hh + subidaRiel(k, xx)) + dy;
+              if (j) cx.lineTo(px(xx), Y); else cx.moveTo(px(xx), Y);
+            }
+          };
+          bio.riel(cx, pieza);
+          cx.shadowBlur = halo;
+        }
         // SIN FLECHA EN LA PUNTA. Habia dos --la de la rampa y la del
         // lanzamiento-- apuntando casi al mismo lugar, y juntas leian como un
         // error de dibujo antes que como una indicacion. La tabla ya se curva
