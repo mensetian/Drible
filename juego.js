@@ -985,27 +985,99 @@ export const terrenoEn = x => (TERRENOS.find(z => x >= z.x0 && x < z.x1) || {}).
 const TIERRA = {
   bosque: {
     cuerpo: [24, 54, 40], filo: [130, 190, 150],
-    // LA TECLA TAMBIEN ES DE ACA. Teñirla del color del lugar no alcanzaba:
-    // una barra teñida sigue siendo una barra. Cada tierra le presta a la
-    // plataforma UNA pieza de su propio vocabulario --la madera, el remache,
-    // la nieve, la arena-- y siempre en el CUERPO o COLGANDO por abajo: el
-    // lomo es donde se aterriza, y ahi no se dibuja nada que confunda la
-    // altura. Una pieza, no un adorno: dos llamadas por tecla como maximo, y
-    // solo en las tablas anchas -- en una corrida de semicorcheas no entra
-    // nada y meterlo la vuelve ruido.
-    tecla (cx, e) {
-      // tabla de madera: la veta adentro, y un gajo que le brota del canto
-      cx.fillStyle = 'rgba(0,0,0,0.26)';
+    // LA TECLA ES DE ACA, Y NO SOLO DE COLOR. Una barra igual en todos lados
+    // era una barra flotando: la misma pieza sobre el bosque, la ciudad o la
+    // nieve, teñida y nada mas. Ahora cada tierra traza SU silueta --y cada
+    // tecla la suya, sorteada con su indice, que dos troncos iguales no
+    // existen-- con una sola ley: el LOMO va plano y entero de punta a punta,
+    // porque ahi se aterriza y ahi la forma no puede mentir. Todo lo que da
+    // caracter pasa en la PANZA y en los cantos, que no los pisa nadie.
+    // `forma` es solo el trazo --la usan el cuerpo y su sombra, que es la
+    // misma silueta corrida-- y `detalle` lo que se le apoya encima, que sale
+    // mas caro y va solo en las tablas anchas.
+    forma (cx, e) {
+      // un tronco caido: la panza gorda al medio y los cantos SERRUCHADOS --
+      // afilarlos hasta la nada quedaba lindo y mentia el ancho, que es la
+      // ventana de tiempo: una punta que se desvanece se lee mas corta
+      const a = 1.2 + e.azar(e.i * 1.7) * 1.8, b = 1 + e.azar(e.i * 5.1) * 2.2;
+      const c = e.g * 0.6;
       cx.beginPath();
-      cx.rect(e.ax + e.an * 0.12, e.ay + e.grueso * 0.42, e.an * 0.5, 1);
-      cx.rect(e.ax + e.an * 0.55, e.ay + e.grueso * 0.68, e.an * 0.3, 1);
+      cx.moveTo(e.ax, e.ay);
+      cx.lineTo(e.ax + e.an, e.ay);
+      cx.lineTo(e.ax + e.an, e.ay + c);
+      cx.quadraticCurveTo(e.ax + e.an * 0.72, e.ay + e.g + a, e.ax + e.an * 0.44, e.ay + e.g + b);
+      cx.quadraticCurveTo(e.ax + e.an * 0.16, e.ay + e.g + a * 0.5, e.ax, e.ay + c);
+      cx.closePath();
+    },
+    // CADA TRONCO TIENE LO SUYO. La tierra no presta UNA pieza sino un
+    // VOCABULARIO --veta, nudo, musgo, hongos, gajo, hojas-- y cada tecla saca
+    // el suyo de su indice: la misma cuenta da siempre lo mismo, asi que un
+    // tronco es ESE tronco cuadro a cuadro, y dos vecinos no se parecen.
+    // Todo se junta por COLOR en tres trazos --lo oscuro, lo claro, lo que se
+    // cuelga-- porque diez adornos con diez fill() cuestan diez veces mas que
+    // los mismos diez adornos en tres.
+    detalle (cx, e) {
+      const r1 = e.azar(e.i * 1.7), r2 = e.azar(e.i * 5.1), r3 = e.azar(e.i * 9.7);
+      const r4 = e.azar(e.i * 13.3), r5 = e.azar(e.i * 21.1);
+      const a = 1.2 + r1 * 1.8, b = 1 + r2 * 2.2, ancho = e.an >= 26;
+      // 1. LA PANZA EN SOMBRA: la luz cae de arriba, como en todo el paisaje
+      cx.fillStyle = 'rgba(0,0,0,0.2)';
+      cx.beginPath();
+      cx.moveTo(e.ax + 1, e.ay + e.g * 0.5);
+      cx.lineTo(e.ax + e.an - 1, e.ay + e.g * 0.5);
+      cx.quadraticCurveTo(e.ax + e.an * 0.72, e.ay + e.g + a, e.ax + e.an * 0.44, e.ay + e.g + b);
+      cx.quadraticCurveTo(e.ax + e.an * 0.16, e.ay + e.g + a * 0.5, e.ax + 1, e.ay + e.g * 0.5);
+      cx.closePath(); cx.fill();
+      // 2. LO OSCURO: la veta, el nudo y las grietas de la corteza
+      cx.fillStyle = 'rgba(0,0,0,0.28)';
+      cx.beginPath();
+      cx.rect(e.ax + e.an * 0.12, e.ay + e.g * 0.45, e.an * 0.44, 1);
+      cx.rect(e.ax + e.an * 0.58, e.ay + e.g * 0.72, e.an * 0.26, 1);
+      // ojo con los redondos: `ellipse` tira una recta desde donde quedo el
+      // trazo, asi que cada uno arranca con su moveTo o se sueldan en manchon
+      const nux = e.ax + e.an * (0.2 + 0.2 * r3), nuy = e.ay + e.g * 0.62;
+      cx.moveTo(nux + 2, nuy);
+      cx.ellipse(nux, nuy, 2, 1.5, 0, 0, Math.PI * 2);
+      if (ancho) {
+        cx.rect(e.ax + e.an * (0.3 + 0.3 * r4), e.ay + e.g * 0.28, 1, e.g * 0.4);
+        cx.rect(e.ax + e.an * (0.68 + 0.2 * r5), e.ay + e.g * 0.34, 1, e.g * 0.3);
+      }
       cx.fill();
-      const X = e.ax + e.an * (0.6 + 0.26 * e.azar(e.i * 3.3)), Y = e.ay + e.grueso;
+      // 3. LO VIVO: el musgo del lomo y los hongos que salen por abajo, que es
+      // donde salen de verdad en un tronco caido
+      cx.fillStyle = `rgba(${e.filo},0.45)`;
+      cx.beginPath();
+      const mx = e.ax + e.an * (0.08 + 0.5 * r4);
+      for (let j = 0; j < 3; j++) {
+        const mjx = mx + j * 3, mjr = 1.6 - 0.3 * j;
+        cx.moveTo(mjx - mjr, e.ay + 2.2);
+        cx.ellipse(mjx, e.ay + 2.2, mjr, 1.5, 0, Math.PI, 0);
+      }
+      if (ancho && r5 > 0.4) {
+        // los hongos salen por ABAJO, que es donde salen en un tronco caido
+        const hx = e.ax + e.an * (0.25 + 0.45 * r2), hy = e.ay + e.g + 1;
+        cx.moveTo(hx - 2.6, hy + 2);
+        cx.ellipse(hx, hy + 2, 2.6, 1.8, 0, 0, Math.PI);
+        cx.rect(hx - 0.6, hy, 1.2, 2.2);
+        cx.moveTo(hx + 4 - 1.8, hy + 1.6);
+        cx.ellipse(hx + 4, hy + 1.6, 1.8, 1.2, 0, 0, Math.PI);
+        cx.rect(hx + 3.5, hy, 1, 1.8);
+      }
+      cx.fill();
+      // 4. LO QUE CUELGA: el gajo con sus hojas, y a veces una enredadera
+      const X = e.ax + e.an * (0.6 + 0.26 * e.azar(e.i * 3.3)), Y = e.ay + e.g + 1;
       cx.strokeStyle = `rgba(${e.filo},0.75)`; cx.lineWidth = 1.4;
       cx.beginPath();
       cx.moveTo(X, Y); cx.lineTo(X - 0.8, Y + 7);
       cx.moveTo(X - 0.2, Y + 2.4); cx.lineTo(X + 4.2, Y + 1.4);
       cx.moveTo(X - 0.6, Y + 4.6); cx.lineTo(X - 4.4, Y + 4);
+      if (ancho && r3 > 0.35) {
+        // la enredadera: se descuelga del otro canto y se enrosca al final
+        const vx = e.ax + e.an * (0.1 + 0.12 * r1);
+        cx.moveTo(vx, Y);
+        cx.quadraticCurveTo(vx - 3, Y + 5, vx + 1.5, Y + 9);
+        cx.moveTo(vx + 1.5, Y + 9); cx.lineTo(vx + 4, Y + 7.5);
+      }
       cx.stroke();
     },
     dibujo (cx, e) {
@@ -1053,18 +1125,68 @@ const TIERRA = {
   },
   ciudad: {
     cuerpo: [30, 34, 54], filo: [120, 140, 190],
-    tecla (cx, e) {
-      // viga remachada, y a veces un farolito colgando: lo unico calido que
-      // tiene la ciudad son sus luces, y aca arriba tambien hay una
+    forma (cx, e) {
+      // una losa colgada de sus mensulas, como el balcon de un edificio: lo
+      // que la sostiene se ve, y es eso lo que la hace de la ciudad
+      const m = e.ay + e.g * 0.6, y1 = e.ay + e.g + 2.5;
+      const d = 0.06 * e.azar(e.i * 6.1);
+      cx.beginPath();
+      cx.moveTo(e.ax, e.ay); cx.lineTo(e.ax + e.an, e.ay);
+      cx.lineTo(e.ax + e.an, m);
+      cx.lineTo(e.ax + e.an * (0.8 - d), m);
+      cx.lineTo(e.ax + e.an * (0.75 - d), y1);
+      cx.lineTo(e.ax + e.an * (0.63 - d), y1);
+      cx.lineTo(e.ax + e.an * (0.6 - d), m);
+      cx.lineTo(e.ax + e.an * (0.32 + d), m);
+      cx.lineTo(e.ax + e.an * (0.29 + d), y1);
+      cx.lineTo(e.ax + e.an * (0.17 + d), y1);
+      cx.lineTo(e.ax + e.an * (0.14 + d), m);
+      cx.lineTo(e.ax, m);
+      cx.closePath();
+    },
+    detalle (cx, e) {
+      const r1 = e.azar(e.i * 6.1), r2 = e.azar(e.i * 5.7), r3 = e.azar(e.i * 11.3);
+      const r4 = e.azar(e.i * 17.9), ancho = e.an >= 26;
+      const m = e.ay + e.g * 0.6, y1 = e.ay + e.g + 2.5, d = 0.06 * r1;
+      // 1. LAS MENSULAS EN SOMBRA: cuelgan bajo la losa y ahi no llega la luz.
+      //    Es lo que despega la losa de sus propias patas.
+      cx.fillStyle = 'rgba(0,0,0,0.22)';
+      cx.beginPath();
+      cx.rect(e.ax + e.an * (0.6 - d), m, e.an * 0.2, y1 - m);
+      cx.rect(e.ax + e.an * (0.14 + d), m, e.an * 0.18, y1 - m);
+      // ...y el hormigon manchado: la ciudad de este juego esta vieja
+      if (ancho) {
+        cx.rect(e.ax + e.an * (0.4 + 0.2 * r3), e.ay + e.g * 0.12, e.an * 0.1, 1.2);
+        cx.rect(e.ax + e.an * (0.2 + 0.1 * r4), e.ay + e.g * 0.4, e.an * 0.07, 1);
+      }
+      cx.fill();
+      // 2. LOS REMACHES en fila, y el hierro que asoma del canto roto
       const n = Math.max(2, Math.min(4, Math.round(e.an / 18)));
       cx.fillStyle = `rgba(${e.filo},0.7)`;
       cx.beginPath();
       for (let j = 0; j < n; j++)
-        cx.rect(e.ax + e.an * ((j + 0.5) / n) - 1.2, e.ay + e.grueso * 0.5 - 1.2, 2.4, 2.4);
+        cx.rect(e.ax + e.an * ((j + 0.5) / n) - 1.2, e.ay + e.g * 0.3 - 1.2, 2.4, 2.4);
+      if (ancho) {                       // la chapa numerada de la pieza
+        cx.rect(e.ax + e.an * 0.06, e.ay + e.g * 0.22, 1.4, 2.6);
+        cx.rect(e.ax + e.an * 0.06 + 2.4, e.ay + e.g * 0.22, 1.4, 2.6);
+      }
       cx.fill();
-      if (e.azar(e.i * 5.7) > 0.62) {
-        const X = e.ax + e.an * 0.8, Y = e.ay + e.grueso;
-        cx.strokeStyle = 'rgba(255,205,130,0.5)'; cx.lineWidth = 1;
+      // 3. LO QUE CUELGA: los hierros del canto, el cable entre mensulas y --a
+      //    veces-- el farolito, lo unico calido que tiene esta ciudad
+      cx.strokeStyle = `rgba(${e.filo},0.55)`; cx.lineWidth = 1;
+      cx.beginPath();
+      const hx = e.ax + e.an * 0.02;
+      cx.moveTo(hx, m); cx.lineTo(hx - 3, m + 2.5 + 2 * r2);
+      cx.moveTo(hx + 2, m); cx.lineTo(hx - 1.5, m + 4 + 2 * r3);
+      if (ancho) {                       // el cable, colgando de mensula a mensula
+        const c0 = e.ax + e.an * (0.23 + d), c1 = e.ax + e.an * (0.7 - d);
+        cx.moveTo(c0, y1);
+        cx.quadraticCurveTo((c0 + c1) / 2, y1 + 5 + 2 * r4, c1, y1);
+      }
+      cx.stroke();
+      if (r2 > 0.5) {
+        const X = e.ax + e.an * 0.9, Y = e.ay + e.g * 0.6;
+        cx.strokeStyle = 'rgba(255,205,130,0.5)';
         cx.beginPath(); cx.moveTo(X, Y); cx.lineTo(X, Y + 4); cx.stroke();
         cx.fillStyle = 'rgba(255,205,130,0.9)';
         cx.fillRect(X - 1.5, Y + 4, 3, 3);
@@ -1115,9 +1237,39 @@ const TIERRA = {
   },
   montania: {
     cuerpo: [46, 54, 74], filo: [150, 170, 215],
-    tecla (cx, e) {
-      // repisa de piedra: la nieve se apila DENTRO del lomo --no encima, que
-      // moveria la altura donde se aterriza-- y del canto cuelga un carambano
+    forma (cx, e) {
+      // una cornisa arrancada de la pared: arriba la pisa el pie, abajo la
+      // piedra quebrada en facetas, distintas en cada tecla
+      const n = Math.max(3, Math.min(6, Math.round(e.an / 14)));
+      cx.beginPath();
+      cx.moveTo(e.ax, e.ay); cx.lineTo(e.ax + e.an, e.ay);
+      for (let j = n; j >= 0; j--)
+        cx.lineTo(e.ax + e.an * (j / n), e.ay + e.g * (0.75 + 1.1 * e.azar(e.i * 3.1 + j * 7)));
+      cx.closePath();
+    },
+    detalle (cx, e) {
+      const nf = Math.max(3, Math.min(6, Math.round(e.an / 14)));
+      const r1 = e.azar(e.i * 7.1), r2 = e.azar(e.i * 15.3), r3 = e.azar(e.i * 23.7);
+      const ancho = e.an >= 26;
+      const faceta = j => e.ay + e.g * (0.75 + 1.1 * e.azar(e.i * 3.1 + j * 7));
+      // 1. LA CARA EN SOMBRA. La izquierda, que es de donde NO viene el sol en
+      //    todo este paisaje: sin eso la roca es un recorte plano.
+      cx.fillStyle = 'rgba(0,0,0,0.24)';
+      cx.beginPath();
+      cx.moveTo(e.ax, e.ay + e.g * 0.35);
+      cx.lineTo(e.ax + e.an * 0.5, e.ay + e.g * 0.35);
+      for (let j = Math.floor(nf / 2); j >= 0; j--) cx.lineTo(e.ax + e.an * (j / nf), faceta(j));
+      cx.closePath(); cx.fill();
+      // 2. LAS GRIETAS: la piedra se parte donde la faceta cambia de plano
+      cx.strokeStyle = 'rgba(0,0,0,0.3)'; cx.lineWidth = 1;
+      cx.beginPath();
+      for (let j = 1; j < nf; j += 2) {
+        const gx = e.ax + e.an * (j / nf);
+        cx.moveTo(gx, e.ay + e.g * 0.2); cx.lineTo(gx + 1.5 - 3 * e.azar(e.i + j), faceta(j) - 1);
+      }
+      cx.stroke();
+      // 3. LA NIEVE se apila DENTRO del lomo --no encima, que moveria la
+      //    altura donde se aterriza-- y con ella la veta de mineral
       cx.fillStyle = 'rgba(228,238,255,0.4)';
       const n = Math.max(2, Math.min(5, Math.round(e.an / 12)));
       cx.beginPath();
@@ -1125,12 +1277,33 @@ const TIERRA = {
       for (let j = 0; j <= n; j++)
         cx.lineTo(e.ax + 1.5 + (e.an - 3) * (j / n), e.ay + (j % 2 ? 0.6 : 2));
       cx.lineTo(e.ax + e.an - 1.5, e.ay + 2.2);
-      cx.closePath(); cx.fill();
-      const X = e.ax + e.an * (0.6 + 0.26 * e.azar(e.i * 7.1)), Y = e.ay + e.grueso;
-      cx.fillStyle = 'rgba(228,238,255,0.6)';
+      cx.closePath();
+      // los carambanos cuelgan DE una faceta, no de una altura inventada: la
+      // punta se busca en la misma cuenta con la que se dibujo la panza
+      for (let q = 0; q < (ancho ? 2 : 1); q++) {
+        const j0 = Math.max(1, Math.min(nf - 1,
+          Math.round(nf * (q ? 0.65 + 0.3 * r2 : 0.25 + 0.3 * r1))));
+        const X = e.ax + e.an * (j0 / nf), Y = faceta(j0), lg = 4 + 4 * (q ? r3 : r1);
+        cx.moveTo(X - 2, Y - 1); cx.lineTo(X + 2, Y - 1); cx.lineTo(X, Y + lg);
+        cx.closePath();
+      }
+      cx.fill();
+      if (!ancho) return;
+      // 4. EL LIQUEN Y LAS PIEDRITAS: lo unico que no es piedra ni hielo aca
+      //    arriba, y lo que la cornisa va soltando
+      cx.fillStyle = `rgba(${e.filo},0.45)`;
       cx.beginPath();
-      cx.moveTo(X - 2, Y); cx.lineTo(X + 2, Y); cx.lineTo(X, Y + 7);
-      cx.closePath(); cx.fill();
+      const l1x = e.ax + e.an * (0.55 + 0.3 * r2), l2x = e.ax + e.an * (0.3 + 0.2 * r3);
+      cx.moveTo(l1x + 2.2, e.ay + e.g * 0.5);
+      cx.ellipse(l1x, e.ay + e.g * 0.5, 2.2, 1.4, 0, 0, Math.PI * 2);
+      cx.moveTo(l2x + 1.5, e.ay + e.g * 0.75);
+      cx.ellipse(l2x, e.ay + e.g * 0.75, 1.5, 1, 0, 0, Math.PI * 2);
+      for (let q = 0; q < 2; q++) {
+        const r = e.azar(e.i * 4.4 + q * 19);
+        cx.rect(e.ax + e.an * (0.2 + 0.6 * r), e.ay + e.g * 1.6 + ((e.t / 2600 + r) % 1) * 9,
+          1.4, 1.4);
+      }
+      cx.fill();
     },
     dibujo (cx, e) {
       const paso = 0.24 * e.P.paso;
@@ -1188,19 +1361,66 @@ const TIERRA = {
   },
   desierto: {
     cuerpo: [74, 58, 38], filo: [225, 185, 125],
-    tecla (cx, e) {
-      // losa de arenisca: el estrato adentro, y la arena que el viento le saca
-      // por el canto. Cae despacio y vuelve a empezar, como cae de una duna.
+    forma (cx, e) {
+      // arenisca comida por el viento: el canto de abajo se lava en conchas,
+      // nunca en escuadra
+      const n = Math.max(2, Math.min(4, Math.round(e.an / 22)));
+      const m = e.ay + e.g * 0.55;
+      cx.beginPath();
+      cx.moveTo(e.ax, e.ay); cx.lineTo(e.ax + e.an, e.ay);
+      cx.lineTo(e.ax + e.an, m);
+      for (let j = n - 1; j >= 0; j--)
+        cx.quadraticCurveTo(
+          e.ax + e.an * ((j + 0.5) / n), e.ay + e.g * (1 + 1.1 * e.azar(e.i * 2.3 + j * 5)),
+          e.ax + e.an * (j / n), m);
+      cx.closePath();
+    },
+    detalle (cx, e) {
+      const n = Math.max(2, Math.min(4, Math.round(e.an / 22)));
+      const m = e.ay + e.g * 0.55, ancho = e.an >= 26;
+      const r1 = e.azar(e.i * 8.3), r2 = e.azar(e.i * 12.7), r3 = e.azar(e.i * 19.1);
+      // 1. LAS CONCHAS EN SOMBRA: la erosion se ve porque hay hueco, y un
+      //    hueco sin sombra es un dibujo
+      cx.fillStyle = 'rgba(0,0,0,0.2)';
+      cx.beginPath();
+      cx.moveTo(e.ax, m); cx.lineTo(e.ax + e.an, m);
+      for (let j = n - 1; j >= 0; j--)
+        cx.quadraticCurveTo(
+          e.ax + e.an * ((j + 0.5) / n), e.ay + e.g * (1 + 1.1 * e.azar(e.i * 2.3 + j * 5)),
+          e.ax + e.an * (j / n), m);
+      cx.closePath(); cx.fill();
+      // 2. LOS ESTRATOS y los pozos que el viento le fue cavando: la arenisca
+      //    se lee por capas, nunca por una linea sola
       cx.fillStyle = 'rgba(0,0,0,0.18)';
-      cx.fillRect(e.ax + e.an * 0.2, e.ay + e.grueso * 0.58, e.an * 0.6, 1);
+      cx.beginPath();
+      cx.rect(e.ax + e.an * 0.14, e.ay + e.g * 0.32, e.an * 0.7, 1);
+      if (ancho) {
+        cx.rect(e.ax + e.an * 0.3, e.ay + e.g * 0.14, e.an * 0.5, 0.8);
+        const p1x = e.ax + e.an * (0.25 + 0.4 * r1), p2x = e.ax + e.an * (0.6 + 0.25 * r2);
+        cx.moveTo(p1x + 1.6, e.ay + e.g * 0.46);
+        cx.ellipse(p1x, e.ay + e.g * 0.46, 1.6, 1, 0, 0, Math.PI * 2);
+        cx.moveTo(p2x + 1.2, e.ay + e.g * 0.24);
+        cx.ellipse(p2x, e.ay + e.g * 0.24, 1.2, 0.8, 0, 0, Math.PI * 2);
+      }
+      cx.fill();
+      // 3. LA ARENA que el viento le saca por el canto: cae despacio y vuelve
+      //    a empezar, como cae de una duna. Y el yuyo seco, agarrado al borde.
       cx.fillStyle = `rgba(${e.filo},0.5)`;
       cx.beginPath();
       for (let j = 0; j < 3; j++) {
         const r = e.azar(e.i * 2.9 + j * 13);
-        cx.rect(e.ax + e.an * (0.22 + 0.56 * r), e.ay + e.grueso +
-          ((e.t / 1600 + r) % 1) * 8, 1.6, 1.6);
+        cx.rect(e.ax + e.an * (0.22 + 0.56 * r), e.ay + e.g + ((e.t / 1600 + r) % 1) * 8,
+          1.6, 1.6);
       }
       cx.fill();
+      if (!ancho || r3 < 0.35) return;
+      const yx = e.ax + e.an * (0.1 + 0.75 * r3), yy = e.ay + 1;
+      cx.strokeStyle = `rgba(${e.filo},0.6)`; cx.lineWidth = 1;
+      cx.beginPath();
+      cx.moveTo(yx, yy); cx.lineTo(yx - 1.5, yy - 4.5);
+      cx.moveTo(yx, yy); cx.lineTo(yx + 2.5, yy - 3.5);
+      cx.moveTo(yx + 0.5, yy - 1.5); cx.lineTo(yx + 3.5, yy - 1);
+      cx.stroke();
     },
     dibujo (cx, e) {
       // las dunas son una sola curva suave por plano: lo que las hace dunas es
@@ -1252,11 +1472,22 @@ const TIERRA = {
   },
   tierra: {
     cuerpo: [58, 48, 36], filo: [190, 160, 115],
-    tecla (cx, e) {
-      // canto rodado: los mismos lomos gastados que las piedras de alla abajo
+    forma (cx, e) {
+      // un canto rodado con el lomo gastado plano de tanto pisarlo
+      cx.beginPath();
+      cx.moveTo(e.ax, e.ay); cx.lineTo(e.ax + e.an, e.ay);
+      cx.quadraticCurveTo(e.ax + e.an * 1.03, e.ay + e.g * 1.5,
+        e.ax + e.an * 0.5, e.ay + e.g * (1.3 + 0.6 * e.azar(e.i * 4.4)));
+      cx.quadraticCurveTo(e.ax - e.an * 0.03, e.ay + e.g * 1.4, e.ax, e.ay);
+      cx.closePath();
+    },
+    detalle (cx, e) {
+      // los mismos lomos gastados que las piedras de alla abajo
       cx.fillStyle = `rgba(${e.filo},0.32)`;
       cx.beginPath();
+      cx.moveTo(e.ax + e.an * 0.32 - e.an * 0.15, e.ay + 2);
       cx.ellipse(e.ax + e.an * 0.32, e.ay + 2, e.an * 0.15, 1.7, 0, Math.PI, 0);
+      cx.moveTo(e.ax + e.an * 0.7 - e.an * 0.11, e.ay + 2);
       cx.ellipse(e.ax + e.an * 0.7, e.ay + 2, e.an * 0.11, 1.4, 0, Math.PI, 0);
       cx.fill();
     },
@@ -7277,6 +7508,7 @@ function arrancarNavegador () {
     cx.stroke();
 
     // las teclas: la partitura
+    const pieza = { ax: 0, ay: 0, an: 0, g: 0, i: 0, azar, filo: '', t: 0 };
     for (const k of NOTAS) {
       if (k.silencio || k.x1 < s.x - 3 || k.x0 > s.x + 7) continue;
       const sono = s.tocadas.has(k.i);
@@ -7324,9 +7556,18 @@ function arrancarNavegador () {
         const anK = Math.max(4, (k.x1 - k.x0) * esc);
         const ax = px(k.x0), ay = py(k.y + hh), an = Math.max(3, anK - 3);
         const grueso = k.bajo ? alto + 3 : alto;
+        // LA SILUETA LA PONE EL LUGAR. `pieza` es UNA sola bolsa que se
+        // reescribe nota por nota: armar un objeto por tecla y por cuadro es
+        // basura que despues alguien tiene que juntar, justo mientras se toca.
+        pieza.ax = ax; pieza.ay = ay; pieza.an = an; pieza.g = grueso; pieza.i = k.i;
+        // la sombra es la MISMA silueta corrida dos pixeles: con un ladrillo
+        // debajo, una cornisa quebrada arrastraba la sombra de otra cosa
         cx.fillStyle = 'rgba(0,0,0,0.35)';
-        caja(ax, ay + 2, an, grueso, grueso / 2); cx.fill();
+        if (bio) { pieza.ay = ay + 2; bio.forma(cx, pieza); cx.fill(); pieza.ay = ay; }
+        else { caja(ax, ay + 2, an, grueso, grueso / 2); cx.fill(); }
         if (k.porCaida && !sono) {
+          // la tecla fantasma se queda en barra: es un AVISO, no un lugar --
+          // darle cuerpo de tronco seria prometer un piso que no esta
           caja(ax, ay, an, grueso, grueso / 2);
           cx.fillStyle = `rgba(${C.teclaRGB},0.10)`; cx.fill();
           cx.setLineDash([3, 3]);
@@ -7334,19 +7575,23 @@ function arrancarNavegador () {
           cx.stroke(); cx.setLineDash([]);
         } else {
           cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
-          caja(ax, ay, an, grueso, grueso / 2); cx.fill();
+          if (bio) { bio.forma(cx, pieza); cx.fill(); }
+          else { caja(ax, ay, an, grueso, grueso / 2); cx.fill(); }
           // el filo: una linea mas clara sobre el lomo. Es lo que convierte una
           // barra plana en algo con volumen, y cuesta una llamada.
           cx.fillStyle = limpia ? 'rgba(255,252,240,0.55)' : 'rgba(255,255,255,0.22)';
           cx.fillRect(ax + 1.5, ay + 0.5, Math.max(1, an - 3), 1.5);
-          // ...y la PIEZA DEL LUGAR encima de eso: la madera del bosque, el
-          // remache de la ciudad, la nieve de la montaña, la arena del
-          // desierto. Va sin el halo de la nota limpia --una sombra difusa por
-          // remache cuesta mas que todo el resto junto-- y solo en las tablas
-          // anchas, que son las unicas donde algo se llega a ver.
-          if (bio && bio.tecla && an >= 14) {
+          // ...y encima el DETALLE del lugar: la veta y el gajo del bosque, el
+          // remache y el farolito de la ciudad, la nieve y el carambano de la
+          // montaña, el estrato y la arena del desierto. Va sin el halo de la
+          // nota limpia --una sombra difusa por remache cuesta mas que todo el
+          // resto junto-- y solo en las tablas anchas, las unicas donde algo
+          // se llega a ver.
+          if (bio && an >= 14) {
             const halo = cx.shadowBlur; cx.shadowBlur = 0;
-            bio.tecla(cx, { ax, ay, an, grueso, filo: bio.filo.join(','), i: k.i, azar, t: ahoraP });
+            pieza.filo = bio.filoTxt || (bio.filoTxt = bio.filo.join(','));
+            pieza.t = ahoraP;
+            bio.detalle(cx, pieza);
             cx.shadowBlur = halo;
           }
         }
