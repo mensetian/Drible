@@ -982,9 +982,18 @@ export const terrenoEn = x => (TERRENOS.find(z => x >= z.x0 && x < z.x1) || {}).
 // encarga de teñirlos con el cielo. `dibujo` agrega el relieve sobre el suelo
 // que ya se pinto, y se llama una vez por PLANO: el mismo lugar visto tres
 // veces, cada vez mas grande, mas oscuro y mas nitido.
+// LA LUZ TAMBIEN ES DEL LUGAR. Cada tierra lleva tres colores y no dos:
+// `cuerpo` es de que esta hecha, `filo` como la toca el sol... y `luz` de que
+// color brilla cuando se enciende. No es lo mismo: la madera con musgo da un
+// verde de bicho de luz, el hielo devuelve un blanco azul, la arena caliente
+// uno dorado, el cristal uno violeta. Un halo igual para todos era la manera
+// mas rapida de tirar abajo todo el trabajo de que cada tecla sea de su sitio.
+// El ambar de la nota LIMPIA no se toca: ese color es del jugador --es el de
+// su esfera-- y significa "esto lo hiciste bien". El sitio pone la forma del
+// brillo y su firma; el estado pone el color. Cada uno dice una cosa sola.
 const TIERRA = {
   bosque: {
-    cuerpo: [24, 54, 40], filo: [130, 190, 150],
+    cuerpo: [24, 54, 40], filo: [130, 190, 150], luz: [150, 255, 185],
     // LA TECLA ES DE ACA, Y NO SOLO DE COLOR. Una barra igual en todos lados
     // era una barra flotando: la misma pieza sobre el bosque, la ciudad o la
     // nieve, teñida y nada mas. Ahora cada tierra traza SU silueta --y cada
@@ -1174,6 +1183,38 @@ const TIERRA = {
     // La luz viene de arriba, del mismo cielo con aurora que ilumina el bosque
     // del horizonte: lomo claro, panza casi negra. Esa es la razon de que se
     // vea redondo, y no la cantidad de cosas que tenga puestas.
+    // COMO BRILLA CADA LUGAR. El halo grande ya sale de la silueta; esto es la
+    // FIRMA -- lo que hace este material cuando le pega la luz. Es la parte que
+    // no se puede sacar de una cuenta: hay que decidir que hace la madera, que
+    // hace el neon y que hace el hielo, y son cosas distintas.
+    brillo (cx, e) {
+      // en el bosque no brilla la madera: brilla LO VIVO. El musgo se enciende
+      // --bioluminiscencia, la misma que ya tienen las luciernagas de al lado--
+      // y suelta esporas que suben y se apagan. La luz sale de donde ya habia
+      // algo verde, no de un aro alrededor de la tabla.
+      const r3 = e.azar(e.i * 9.7), r4 = e.azar(e.i * 13.3);
+      const mw = e.an * (0.3 + 0.16 * r4), mx = e.ax + e.an * (0.1 + 0.4 * r3);
+      const nb = e.an >= 26 ? 6 : 4;
+      cx.fillStyle = `rgba(${e.col},${0.2 + 0.3 * e.p})`;
+      cx.beginPath();
+      cx.moveTo(mx, e.ay + 1.2);
+      for (let j = 0; j < nb; j++) {
+        const rj = e.azar(e.i * 3.9 + j * 7);
+        const x0 = mx + mw * (j / nb), x1 = mx + mw * ((j + 1) / nb);
+        cx.quadraticCurveTo((x0 + x1) / 2, e.ay - 1.4 - 1.8 * rj, x1, e.ay + 1.2);
+      }
+      cx.lineTo(mx + mw, e.ay + e.g * 0.3);
+      cx.lineTo(mx, e.ay + e.g * 0.3);
+      cx.closePath(); cx.fill();
+      cx.fillStyle = `rgba(${e.col},${0.35 + 0.45 * e.p})`;
+      cx.beginPath();
+      for (let j = 0; j < 4; j++) {
+        const rj = e.azar(e.i * 6.3 + j * 29), q = (e.t / 1600 + rj) % 1;
+        const t = 1.8 * (1 - q * 0.6);
+        cx.rect(mx + mw * rj + Math.sin(q * 5 + rj * 9) * 3, e.ay - 1 - q * 13, t, t);
+      }
+      cx.fill();
+    },
     detalle (cx, e) {
       const r1 = e.azar(e.i * 1.7), r2 = e.azar(e.i * 5.1), r3 = e.azar(e.i * 9.7);
       const r4 = e.azar(e.i * 13.3), r5 = e.azar(e.i * 21.1);
@@ -1389,7 +1430,7 @@ const TIERRA = {
     }
   },
   ciudad: {
-    cuerpo: [30, 34, 54], filo: [120, 140, 190],
+    cuerpo: [30, 34, 54], filo: [120, 140, 190], luz: [140, 220, 255],
     forma (cx, e) {
       // una losa colgada de sus mensulas, como el balcon de un edificio: lo
       // que la sostiene se ve, y es eso lo que la hace de la ciudad
@@ -1422,6 +1463,21 @@ const TIERRA = {
         cx.moveTo(P.X, P.Y + e.alto); cx.lineTo(P.X, P.Y + e.alto + 3.5);
       }
       cx.stroke();
+    },
+    brillo (cx, e) {
+      // en la ciudad se enciende un TUBO: el filo se pone duro y PARPADEA
+      // --esta ciudad esta vieja, y un neon viejo titila-- y el hormigon de
+      // las mensulas le devuelve la luz en bandas. Nada difuso: aca la luz
+      // tiene borde, igual que todo lo demas del lugar.
+      const fal = e.azar(e.i + Math.floor(e.t / 110)) > 0.9 ? 0.35 : 1;
+      const a = (0.32 + 0.4 * e.p) * fal;
+      cx.fillStyle = `rgba(${e.col},${a})`;
+      cx.fillRect(e.ax + 1, e.ay - 1.4, e.an - 2, 1.4);
+      for (let j = 1; j <= 3; j++) {
+        cx.fillStyle = `rgba(${e.col},${a * 0.17 / j})`;
+        cx.fillRect(e.ax + e.an * 0.06 * j, e.ay + e.g * 0.72 + j * 2.4,
+          e.an * (1 - 0.12 * j), 1.6);
+      }
     },
     detalle (cx, e) {
       const r1 = e.azar(e.i * 6.1), r2 = e.azar(e.i * 5.7), r3 = e.azar(e.i * 11.3);
@@ -1515,7 +1571,7 @@ const TIERRA = {
     }
   },
   montania: {
-    cuerpo: [46, 54, 74], filo: [150, 170, 215],
+    cuerpo: [46, 54, 74], filo: [150, 170, 215], luz: [215, 240, 255],
     forma (cx, e) {
       // una cornisa arrancada de la pared: arriba la pisa el pie, abajo la
       // piedra quebrada en facetas, distintas en cada tecla
@@ -1541,6 +1597,29 @@ const TIERRA = {
           cx.lineTo(P.X, P.Y + e.alto + 4 + 3 * r);
           cx.closePath();
         }
+      }
+      cx.fill();
+    },
+    brillo (cx, e) {
+      // el hielo no se ilumina: REFRACTA. Un destello de cuatro puntas sobre la
+      // nieve del lomo --con direccion, que es lo que distingue un brillo de
+      // una nube-- y el polvo que el viento arranca de la cornisa y se lleva.
+      const r1 = e.azar(e.i * 7.1);
+      const X = e.ax + e.an * (0.25 + 0.5 * r1), Y = e.ay + 1.4;
+      const L = 4 + 8 * e.p, l = 1.4 + 1.6 * e.p;
+      cx.fillStyle = `rgba(${e.col},${0.35 + 0.45 * e.p})`;
+      cx.beginPath();
+      cx.moveTo(X - L, Y); cx.lineTo(X, Y - l); cx.lineTo(X + L, Y); cx.lineTo(X, Y + l);
+      cx.closePath();
+      cx.moveTo(X, Y - L * 0.62); cx.lineTo(X + l * 0.8, Y);
+      cx.lineTo(X, Y + L * 0.62); cx.lineTo(X - l * 0.8, Y);
+      cx.closePath();
+      cx.fill();
+      cx.fillStyle = `rgba(228,238,255,${0.28 + 0.4 * e.p})`;
+      cx.beginPath();
+      for (let j = 0; j < 3; j++) {
+        const rj = e.azar(e.i * 5.3 + j * 11), q = (e.t / 1800 + rj) % 1;
+        cx.rect(e.ax + e.an * rj + q * 7, e.ay - q * 11, 1.4, 1.4);
       }
       cx.fill();
     },
@@ -1657,7 +1736,7 @@ const TIERRA = {
     }
   },
   desierto: {
-    cuerpo: [74, 58, 38], filo: [225, 185, 125],
+    cuerpo: [74, 58, 38], filo: [225, 185, 125], luz: [255, 210, 140],
     forma (cx, e) {
       // arenisca comida por el viento: el canto de abajo se lava en conchas,
       // nunca en escuadra
@@ -1683,6 +1762,36 @@ const TIERRA = {
         const f = (j + 0.5) / e.n, r = e.azar(e.i * 4.7 + j * 19), P = e.pt(f);
         cx.rect(P.X - 4 - 3 * r, P.Y - 0.5, 8 + 6 * r, 1.2);
         cx.rect(P.X + 2 * r, P.Y + e.alto + ((e.t / 1500 + r) % 1) * 8, 1.4, 1.4);
+      }
+      cx.fill();
+    },
+    brillo (cx, e) {
+      // sobre la arena caliente el aire TIEMBLA, y el aire caliente no rodea:
+      // SUBE. Tres hilos que ondulan encima de la piedra, cada uno a su ritmo
+      // --si fueran al mismo serian una reja-- y los granos que el calor se
+      // lleva con ellos.
+      // ...y son TRAMOS cortos, cada uno en su lugar. De punta a punta eran
+      // tres alambres tendidos sobre la piedra: el aire no tiembla parejo, y
+      // una linea larga y regular deja de leerse como aire.
+      cx.strokeStyle = `rgba(${e.col},${0.12 + 0.2 * e.p})`; cx.lineWidth = 1;
+      cx.beginPath();
+      for (let j = 0; j < 3; j++) {
+        const rj = e.azar(e.i * 9.1 + j * 23);
+        const w = e.an * (0.22 + 0.16 * rj), x0 = e.ax + (e.an - w) * rj;
+        const dy = e.ay - 2 - j * 3.2, fa = e.t / 620 + j * 2.1 + e.i;
+        for (let q = 0; q <= 6; q++) {
+          const X = x0 + w * (q / 6);
+          const Y = dy + Math.sin(q * 1.3 + fa) * (0.9 + 0.5 * j);
+          if (q) cx.lineTo(X, Y); else cx.moveTo(X, Y);
+        }
+      }
+      cx.stroke();
+      cx.fillStyle = `rgba(${e.col},${0.3 + 0.4 * e.p})`;
+      cx.beginPath();
+      for (let j = 0; j < 3; j++) {
+        const rj = e.azar(e.i * 8.3 + j * 13), q = (e.t / 1500 + rj) % 1;
+        const t = 1.5 * (1 - q * 0.5);
+        cx.rect(e.ax + e.an * rj + Math.sin(q * 6 + rj * 9) * 2, e.ay - q * 12, t, t);
       }
       cx.fill();
     },
@@ -1791,7 +1900,7 @@ const TIERRA = {
   // Ninguna de las dos lleva `dibujo`: no hay TERRENOS que las nombre, asi que
   // el que pinta el suelo no las va a buscar nunca.
   mar: {
-    cuerpo: [30, 80, 130], filo: [150, 225, 255],
+    cuerpo: [30, 80, 130], filo: [150, 225, 255], luz: [130, 245, 255],
     forma (cx, e) {
       // un madero que flota: las puntas comidas por el agua y la linea de
       // flotacion marcada, que es lo que dice "esto esta APOYADO en algo"
@@ -1818,6 +1927,23 @@ const TIERRA = {
         cx.rect(P.X - 0.6, P.Y + e.alto + ((e.t / 1000 + r) % 1) * 8, 1.3, 2);
       }
       cx.fill();
+    },
+    brillo (cx, e) {
+      // sobre el agua la luz vuelve DESDE ABAJO, y vuelve rota: bandas que
+      // ondulan y se van acortando al alejarse. Eso es lo que hace una luz
+      // sobre el mar, y es lo contrario de un aro alrededor del objeto.
+      cx.fillStyle = `rgba(${e.col},${0.26 + 0.34 * e.p})`;
+      cx.beginPath();
+      for (let j = 1; j <= 4; j++) {
+        const fa = e.t / 620 + j * 1.7 + e.i;
+        const w = e.an * (0.5 - 0.1 * j), cm = e.ax + e.an * 0.5;
+        cx.rect(cm - w / 2 + Math.sin(fa) * 3.5, e.ay + e.g + 2 + j * 3.2, w, 1.4);
+      }
+      cx.fill();
+      // ...y la linea de flotacion se enciende: es justo donde el madero toca
+      // el agua, o sea de donde sale ese reflejo
+      cx.fillStyle = `rgba(${e.col},${0.25 + 0.35 * e.p})`;
+      cx.fillRect(e.ax + 1, e.ay + e.g * 0.62, e.an - 2, 1.2);
     },
     detalle (cx, e) {
       const r1 = e.azar(e.i * 3.7), r2 = e.azar(e.i * 8.9), r3 = e.azar(e.i * 14.1);
@@ -1867,7 +1993,7 @@ const TIERRA = {
     }
   },
   nebulosa: {
-    cuerpo: [60, 60, 120], filo: [175, 205, 255],
+    cuerpo: [60, 60, 120], filo: [175, 205, 255], luz: [190, 165, 255],
     forma (cx, e) {
       // un CRISTAL: el mismo material en el que se convierte la voz en esta
       // seccion. Prisma alargado, cantos en bisel y una quilla abajo -- nada
@@ -1900,6 +2026,21 @@ const TIERRA = {
         cx.rect(P.X + Math.cos(fa) * 5, P.Y + e.alto * 0.5 + Math.sin(fa * 1.2) * 6, 2.2, 2.2);
       }
       cx.fill();
+    },
+    brillo (cx, e) {
+      // en NEBULOSA la cancion es su propio fantasma, y la tecla brilla igual:
+      // no irradia, RESUENA. Dos ecos de su misma silueta que se abren y se
+      // apagan, uno atras del otro. Es el unico halo del juego que se mueve
+      // solo, y aca corresponde -- la seccion entera es eso, un eco.
+      const gax = e.ax, gay = e.ay, gan = e.an, gg = e.g;
+      cx.lineWidth = 1;
+      for (let j = 0; j < 2; j++) {
+        const q = (e.t / 1100 + j * 0.5) % 1, d = q * 9;
+        e.ax = gax - d; e.an = gan + d * 2; e.ay = gay - d * 0.6; e.g = gg + d * 1.2;
+        cx.strokeStyle = `rgba(${e.col},${(0.45 + 0.3 * e.p) * (1 - q) * (1 - q)})`;
+        this.forma(cx, e); cx.stroke();
+      }
+      e.ax = gax; e.ay = gay; e.an = gan; e.g = gg;
     },
     detalle (cx, e) {
       const r1 = e.azar(e.i * 4.1), r2 = e.azar(e.i * 9.3), ancho = e.an >= 26;
@@ -1944,7 +2085,7 @@ const TIERRA = {
     }
   },
   tierra: {
-    cuerpo: [58, 48, 36], filo: [190, 160, 115],
+    cuerpo: [58, 48, 36], filo: [190, 160, 115], luz: [215, 190, 155],
     forma (cx, e) {
       // un canto rodado con el lomo gastado plano de tanto pisarlo
       cx.beginPath();
@@ -1961,6 +2102,19 @@ const TIERRA = {
       for (let j = 0; j < e.n; j++) {
         const P = e.pt((j + 0.5) / e.n), r = e.azar(e.i * 3.3 + j * 7);
         cx.rect(P.X - 4 - 2 * r, P.Y - 0.5, 8 + 4 * r, 1.2);
+      }
+      cx.fill();
+    },
+    brillo (cx, e) {
+      // tierra pelada: lo unico que hace la luz aca es levantar POLVO. Corto,
+      // seco y se cae enseguida. Este es el lugar sin nada, y el brillo
+      // tambien tiene que decir eso -- no todos los sitios merecen una fiesta.
+      cx.fillStyle = `rgba(${e.col},${0.3 + 0.35 * e.p})`;
+      cx.beginPath();
+      for (let j = 0; j < 4; j++) {
+        const rj = e.azar(e.i * 3.3 + j * 7), q = (e.t / 1100 + rj) % 1;
+        const t = 1.6 * (1 - q * 0.7);
+        cx.rect(e.ax + e.an * rj + Math.sin(q * 4 + rj * 9) * 2.5, e.ay - q * 7, t, t);
       }
       cx.fill();
     },
@@ -7962,7 +8116,7 @@ function arrancarNavegador () {
     // que alguien tiene que juntar despues, y ese alguien junta justo mientras
     // se esta tocando. La usan la salida, cada tecla y cada riel.
     const pieza = { ax: 0, ay: 0, an: 0, g: 0, i: 0, azar, filo: '', t: 0,
-      alto: 0, n: 0, pt: null, linea: null };
+      alto: 0, n: 0, pt: null, linea: null, col: '', p: 0 };
     // la plataforma de salida: se empieza arriba, a la altura de la primera
     // nota. Y es del lugar donde empieza el viaje --el muelle de troncos del
     // bosque-- porque es lo PRIMERO que se ve del juego: una tabla blanca ahi
@@ -8032,7 +8186,15 @@ function arrancarNavegador () {
         ? `rgba(${mezcla(k.bajo ? C.impulsoRGB : C.teclaRGB, bio.filo.join(','), 0.6)},${k.bajo ? 1 : 0.55})`
         : (k.bajo ? C.impulso : C.tecla);
       cx.fillStyle = limpia ? C.esfera : sono ? C.sucia : cBase;
-      if (limpia || aqui) { cx.shadowColor = limpia ? C.esfera : cBase; cx.shadowBlur = 12; }
+      // EL HALO DEJA DE SER UN BORRON. `shadowBlur` difumina todo lo que se
+      // pinte DESPUES, y despues venia el filo: un fillRect del ancho entero.
+      // Asi que lo que brillaba detras de la tecla era ese rectangulo -- la
+      // barra vieja, difuminada, asomando por detras de la silueta nueva. No
+      // era una impresion: era literalmente la tecla de antes.
+      // Al riel se lo dejamos, que es una sola tabla larga y ahi el difuminado
+      // dice lo justo. La tecla arma el suyo mas abajo, con SU forma.
+      const luce = limpia || aqui;
+      if (k.riel && luce) { cx.shadowColor = limpia ? C.esfera : cBase; cx.shadowBlur = 12; }
       if (k.riel) {
         // la tabla del riel sigue la RAMPA: plana, y curvandose hacia arriba
         // en el ultimo tramo. Se ve de donde sale el envion.
@@ -8065,9 +8227,65 @@ function arrancarNavegador () {
         // reescribe nota por nota: armar un objeto por tecla y por cuadro es
         // basura que despues alguien tiene que juntar, justo mientras se toca.
         pieza.ax = ax; pieza.ay = ay; pieza.an = an; pieza.g = grueso; pieza.i = k.i;
+        // EL HALO SALE DE LA SILUETA. Un resplandor blando sobre la forma que
+        // traza el lugar, y encima dos anillos de esa MISMA forma abriendose:
+        // la luz sale del borde real de la pieza, asi que un tronco irradia
+        // como tronco --con su panza ondulada y su canto aserrado-- y un
+        // cristal como cristal. Sigue costando menos que antes: aquello eran
+        // tres o cuatro difuminados por tecla, esto es uno.
+        // Y hay un reparto de tareas: el ESTADO pone el color --ambar si salio
+        // limpia, que el ambar es el de tu esfera y quiere decir "esto lo
+        // hiciste bien"-- y el LUGAR pone la forma, el tono cuando todavia hay
+        // que tocarla, y la firma de como brilla ese material. Nadie tiene que
+        // aprender un codigo nuevo por cambiar de paisaje, y aun asi cada
+        // paisaje brilla a su manera.
+        let gcol = '';
+        const lat = 0.62 + 0.38 * Math.sin(ahoraP / 240 + k.i);
+        if (luce && bio && !(k.porCaida && !sono)) {
+          gcol = limpia ? C.esferaRGB : k.bajo
+            ? (bio.glo2 || (bio.glo2 = mezcla(bio.luz.join(','), C.impulsoRGB, 0.25)))
+            : (bio.glo || (bio.glo = mezcla(bio.luz.join(','), C.teclaRGB, 0.25)));
+          // el resplandor blando: UNA sola vez, y sobre la silueta buena. El
+          // difuminado del canvas es caro y antes se pagaba tres o cuatro
+          // veces por tecla -- y encima una de esas veces sobre el rectangulo
+          // del filo, que es de donde salia el fantasma de la barra vieja.
+          // ...y va SIN agrandar: la silueta nitida queda entera debajo del
+          // cuerpo, que se pinta encima, asi que de esta pasada solo se ve el
+          // difuminado. Agrandandola un pelo se colaba un borde duro alrededor
+          // de la tecla y el resultado era un contorno de neon, no un halo.
+          // ...y el resplandor CAE: se corre un par de pixeles hacia abajo en
+          // vez de repartirse parejo. Centrado, el difuminado se acumulaba
+          // sobre el lomo --que es recto y de punta a punta, porque ahi se
+          // aterriza-- y encendia una barra blanca de ciento veinte pixeles:
+          // un tubo fluorescente, justo lo que no queremos. Corrido, el plano
+          // de apoyo queda limpio y la luz se derrama por la panza y los
+          // cantos, que es donde cada lugar tiene su forma.
+          cx.shadowColor = `rgb(${gcol})`;
+          cx.shadowBlur = 14 + 10 * lat;
+          cx.shadowOffsetY = 3;
+          cx.fillStyle = `rgba(${gcol},${limpia ? 0.62 : 0.44})`;
+          bio.forma(cx, pieza); cx.fill();
+          bio.forma(cx, pieza); cx.fill();
+          cx.shadowBlur = 0; cx.shadowOffsetY = 0;
+          // ...y encima dos anillos nitidos de la MISMA silueta, que son los
+          // que le dan borde al resplandor. Sin ellos la luz es una nube y
+          // podria ser de cualquier pieza; con ellos se ve de que forma sale.
+          // ...y los anillos crecen para ABAJO y a los costados, nunca hacia
+          // arriba: el lomo es una recta de punta a punta, asi que un anillo
+          // que asome por ahi no dibuja una silueta -- dibuja otra barra.
+          for (let d = 2; d >= 1; d--) {
+            pieza.ax = ax - d * 2.6; pieza.an = an + d * 5.2;
+            pieza.g = grueso + d * 3.4;
+            cx.fillStyle = `rgba(${gcol},${(limpia ? 0.15 : 0.11) * lat / d})`;
+            bio.forma(cx, pieza); cx.fill();
+          }
+          pieza.ax = ax; pieza.an = an; pieza.ay = ay; pieza.g = grueso;
+        }
         // la sombra es la MISMA silueta corrida dos pixeles: con un ladrillo
-        // debajo, una cornisa quebrada arrastraba la sombra de otra cosa
-        cx.fillStyle = 'rgba(0,0,0,0.35)';
+        // debajo, una cornisa quebrada arrastraba la sombra de otra cosa. Y va
+        // mas suave cuando la tecla esta encendida -- un cuerpo con luz propia
+        // no puede tirar la misma sombra que uno apagado.
+        cx.fillStyle = luce ? 'rgba(0,0,0,0.16)' : 'rgba(0,0,0,0.35)';
         if (bio) { pieza.ay = ay + 2; bio.forma(cx, pieza); cx.fill(); pieza.ay = ay; }
         else { caja(ax, ay + 2, an, grueso, grueso / 2); cx.fill(); }
         if (k.porCaida && !sono) {
@@ -8098,6 +8316,18 @@ function arrancarNavegador () {
             pieza.t = ahoraP;
             bio.detalle(cx, pieza);
             cx.shadowBlur = halo;
+          }
+          // ...y si esta encendida, LA FIRMA DE COMO BRILLA ESTE MATERIAL: el
+          // musgo del bosque prendido, el tubo de neon de la ciudad con su
+          // reflejo en el hormigon, el destello de cuatro puntas del hielo, el
+          // aire temblando sobre la arena, el reflejo roto en el agua, el eco
+          // del cristal. Va encima de todo, que es donde va la luz.
+          if (luce && bio && bio.brillo) {
+            const halo2 = cx.shadowBlur; cx.shadowBlur = 0;
+            pieza.filo = bio.filoTxt || (bio.filoTxt = bio.filo.join(','));
+            pieza.col = gcol; pieza.p = lat; pieza.t = ahoraP;
+            bio.brillo(cx, pieza);
+            cx.shadowBlur = halo2;
           }
         }
         if (k.bajo) {                    // la patita del bajo
